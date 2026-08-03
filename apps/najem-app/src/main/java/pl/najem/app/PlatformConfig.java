@@ -1,0 +1,36 @@
+package pl.najem.app;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
+import pl.najem.contracts.events.IntegrationEventHandler;
+import pl.najem.contracts.events.TenancyActivatedEvent;
+import pl.najem.eventstore.EventStore;
+import pl.najem.eventstore.EventTypeRegistry;
+import pl.najem.eventstore.JdbcEventStore;
+import pl.najem.eventstore.OutboxDispatcher;
+
+import java.util.List;
+
+@Configuration
+public class PlatformConfig {
+
+    @Bean
+    EventTypeRegistry eventTypeRegistry() {
+        EventTypeRegistry registry = new EventTypeRegistry();
+        registry.register(TenancyActivatedEvent.class);
+        return registry;
+    }
+
+    @Bean
+    EventStore eventStore(JdbcTemplate jdbc, ObjectMapper mapper, EventTypeRegistry registry) {
+        return new JdbcEventStore(jdbc, mapper, registry);
+    }
+
+    @Bean
+    OutboxDispatcher outboxDispatcher(JdbcTemplate jdbc, ObjectMapper mapper, EventTypeRegistry registry,
+                                      List<IntegrationEventHandler<?>> handlers) {
+        return new OutboxDispatcher(jdbc, mapper, registry, handlers);
+    }
+}
