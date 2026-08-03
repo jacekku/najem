@@ -4,6 +4,7 @@ subprojects {
     apply(plugin = "java")
     repositories { mavenCentral() }
     the<JavaPluginExtension>().toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    tasks.withType<JavaCompile> { options.compilerArgs.add("-parameters") }
     tasks.withType<Test> {
         useJUnitPlatform()
         // colima ships Docker 29 (min API 1.40); docker-java defaults to 1.32
