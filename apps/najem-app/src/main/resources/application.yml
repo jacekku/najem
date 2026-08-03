@@ -4,7 +4,7 @@ spring:
     username: najem
     password: najem
   flyway:
-    locations: "classpath:db/eventstore,classpath:db/pm,classpath:db/acc"
+    locations: "classpath:db/eventstore,classpath:db/pm,classpath:db/acc,classpath:db/contacts,classpath:db/um"
     fail-on-missing-locations: false
 
 najem:
