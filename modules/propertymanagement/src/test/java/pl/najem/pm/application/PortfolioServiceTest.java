@@ -13,9 +13,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
-import pl.najem.pm.domain.UnitAdded;
+import pl.najem.pm.domain.Owner;
+import pl.najem.pm.domain.UnitEvents;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,12 +46,44 @@ class PortfolioServiceTest {
 
     @Test
     void createsPropertyAndAddsUnitWithProjectionRow() {
-        var propertyId = service.createProperty("Testowa 1, Kraków");
+        var workspaceId = UUID.randomUUID();
+        var propertyId = service.createProperty(workspaceId, "Testowa 1, Kraków", owners());
         var unitId = service.addUnit(propertyId, "M1", new BigDecimal("2500"));
 
-        assertThat(store.load(unitId).events())
-            .containsExactly(new UnitAdded(unitId, propertyId, "M1", new BigDecimal("2500")));
+        assertThat(store.load(unitId).events()).containsExactly(
+            new UnitEvents.UnitAddedToProperty(workspaceId, unitId, propertyId, "M1", new BigDecimal("2500")));
         Integer rows = jdbc.queryForObject("select count(*) from pm_unit where unit_id = ?", Integer.class, unitId);
         assertThat(rows).isEqualTo(1);
+    }
+
+    @Test
+    void createdPropertyOwnsItsWorkspaceAndUnitsInheritIt() {
+        var workspaceId = UUID.randomUUID();
+
+        var propertyId = service.createProperty(workspaceId, "Testowa 1, Kraków", owners());
+        var unitId = service.addUnit(propertyId, "M1", new BigDecimal("2500"));
+
+        assertThat(service.workspaceOf(propertyId)).isEqualTo(workspaceId);
+        UUID unitWorkspace = jdbc.queryForObject(
+            "select workspace_id from pm_unit where unit_id = ?", UUID.class, unitId);
+        assertThat(unitWorkspace).isEqualTo(workspaceId);
+    }
+
+    @Test
+    void twoPropertiesInDifferentWorkspacesDoNotShareUnits() {
+        var workspaceA = UUID.randomUUID();
+        var workspaceB = UUID.randomUUID();
+        var unitA = service.addUnit(service.createProperty(workspaceA, "A 1", owners()), "M1",
+            new BigDecimal("2500"));
+        service.addUnit(service.createProperty(workspaceB, "B 1", owners()), "M1", new BigDecimal("2500"));
+
+        var unitsInA = jdbc.queryForList("select unit_id from pm_unit where workspace_id = ?",
+            UUID.class, workspaceA);
+
+        assertThat(unitsInA).containsExactly(unitA);
+    }
+
+    private static List<Owner> owners() {
+        return List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")));
     }
 }

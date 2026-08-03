@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.contracts.events.TenancyActivatedEvent;
@@ -15,13 +16,12 @@ import java.util.UUID;
 @Transactional
 public class TenancyService {
 
-    /** Interim single-tenant workspace until PM propagates workspace from Property (ruling seq 21). */
-    public static final UUID DEV_WORKSPACE_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-
     private final EventStore store;
+    private final JdbcTemplate jdbc;
 
-    public TenancyService(EventStore store) {
+    public TenancyService(EventStore store, JdbcTemplate jdbc) {
         this.store = store;
+        this.jdbc = jdbc;
     }
 
     public UUID reserve(UUID unitId, LocalDate startDate, BigDecimal monthlyRent, String paymentReference) {
@@ -34,9 +34,11 @@ public class TenancyService {
     public void activate(UUID tenancyId, LocalDate on) {
         var stream = store.load(tenancyId);
         var tenancy = Tenancy.from(stream.events());
-        var newEvents = tenancy.activate(on);
-        store.append(tenancyId, "Tenancy", stream.version(), newEvents,
-            List.of(new TenancyActivatedEvent(DEV_WORKSPACE_ID, tenancyId, tenancy.unitId(),
+        // The workspace comes from the unit the tenancy sits on, never from a constant.
+        UUID workspaceId = jdbc.queryForObject(
+            "select workspace_id from pm_unit where unit_id = ?", UUID.class, tenancy.unitId());
+        store.append(tenancyId, "Tenancy", stream.version(), tenancy.activate(on),
+            List.of(new TenancyActivatedEvent(workspaceId, tenancyId, tenancy.unitId(),
                 tenancy.startDate(), tenancy.monthlyRent(), tenancy.paymentReference())));
     }
 }
