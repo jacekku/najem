@@ -3,9 +3,11 @@ package pl.najem.contacts.application;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.najem.contacts.domain.ContactDetailsCorrected;
 import pl.najem.contacts.domain.ContactRegistered;
 import pl.najem.eventstore.EventStore;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,5 +38,16 @@ public class ContactService {
             contact.details().email(), contact.details().phone(),
             contact.lawfulBasis(), contact.infoClauseServedAt(), contact.retainUntil());
         return contactId;
+    }
+
+    public void correctDetails(UUID workspaceId, UUID contactId, ContactDetails details, LocalDate correctedOn) {
+        var stream = store.load(contactId);
+        store.append(contactId, "Contact", stream.version(),
+            List.of(new ContactDetailsCorrected(workspaceId, contactId, correctedOn)), List.of());
+        jdbc.update("""
+            update contacts_person set given_name = ?, surname = ?, email = ?, phone = ?
+            where workspace_id = ? and contact_id = ?
+            """,
+            details.givenName(), details.surname(), details.email(), details.phone(), workspaceId, contactId);
     }
 }

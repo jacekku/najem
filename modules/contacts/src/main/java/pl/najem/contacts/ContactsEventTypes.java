@@ -1,6 +1,7 @@
 package pl.najem.contacts;
 
 import org.springframework.stereotype.Component;
+import pl.najem.contacts.domain.ContactDetailsCorrected;
 import pl.najem.contacts.domain.ContactRegistered;
 import pl.najem.eventstore.EventTypeRegistry;
 
@@ -13,5 +14,6 @@ public class ContactsEventTypes {
 
     public static void register(EventTypeRegistry registry) {
         registry.register(ContactRegistered.class);
+        registry.register(ContactDetailsCorrected.class);
     }
 }
