@@ -15,6 +15,9 @@ import java.util.UUID;
 @Transactional
 public class TenancyService {
 
+    /** Interim single-tenant workspace until PM propagates workspace from Property (ruling seq 21). */
+    public static final UUID DEV_WORKSPACE_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+
     private final EventStore store;
 
     public TenancyService(EventStore store) {
@@ -33,7 +36,7 @@ public class TenancyService {
         var tenancy = Tenancy.from(stream.events());
         var newEvents = tenancy.activate(on);
         store.append(tenancyId, "Tenancy", stream.version(), newEvents,
-            List.of(new TenancyActivatedEvent(tenancyId, tenancy.unitId(), tenancy.startDate(),
-                tenancy.monthlyRent(), tenancy.paymentReference())));
+            List.of(new TenancyActivatedEvent(DEV_WORKSPACE_ID, tenancyId, tenancy.unitId(),
+                tenancy.startDate(), tenancy.monthlyRent(), tenancy.paymentReference())));
     }
 }

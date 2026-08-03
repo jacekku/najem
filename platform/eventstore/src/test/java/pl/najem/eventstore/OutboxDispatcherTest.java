@@ -60,7 +60,7 @@ class OutboxDispatcherTest {
 
     @Test
     void deliversOutboxEventToHandlerExactlyOnce() {
-        var event = new TenancyActivatedEvent(UUID.randomUUID(), UUID.randomUUID(),
+        var event = new TenancyActivatedEvent(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
             LocalDate.of(2026, 9, 1), new BigDecimal("2500"), "NAJEM/M1/2026");
         store.append(UUID.randomUUID(), "Tenancy", 0, List.of(), List.of(event));
 

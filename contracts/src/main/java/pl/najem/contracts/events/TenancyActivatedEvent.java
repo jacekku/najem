@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record TenancyActivatedEvent(
+        UUID workspaceId,
         UUID tenancyId,
         UUID unitId,
         LocalDate startDate,
