@@ -23,18 +23,20 @@ public class LedgerService {
         this.jdbc = jdbc;
     }
 
-    public UUID postRentCharge(UUID tenancyId, BigDecimal amount, LocalDate dueDate, String paymentReference) {
+    public UUID postRentCharge(UUID workspaceId, UUID tenancyId, BigDecimal amount, LocalDate dueDate,
+                               String paymentReference) {
         UUID chargeId = UUID.randomUUID();
         var stream = store.load(tenancyId);
         store.append(tenancyId, "TenancyLedger", stream.version(),
             List.of(new ChargePosted(chargeId, tenancyId, "rent", amount, dueDate)), List.of());
-        jdbc.update(
-            "insert into acc_charge(charge_id, tenancy_id, component, amount, due_date, payment_reference) values (?,?,?,?,?,?)",
-            chargeId, tenancyId, "rent", amount, dueDate, paymentReference);
         jdbc.update("""
-            insert into acc_tenancy_status(tenancy_id, status) values (?, 'awaiting')
+            insert into acc_charge(charge_id, workspace_id, tenancy_id, component, amount, due_date, payment_reference)
+            values (?,?,?,?,?,?,?)
+            """, chargeId, workspaceId, tenancyId, "rent", amount, dueDate, paymentReference);
+        jdbc.update("""
+            insert into acc_tenancy_status(tenancy_id, workspace_id, status) values (?, ?, 'awaiting')
             on conflict (tenancy_id) do update set status = 'awaiting'
-            """, tenancyId);
+            """, tenancyId, workspaceId);
         return chargeId;
     }
 }

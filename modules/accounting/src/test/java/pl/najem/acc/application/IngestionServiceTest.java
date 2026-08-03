@@ -11,6 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
+import pl.najem.acc.WorkspaceContext;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 
@@ -47,9 +48,9 @@ class IngestionServiceTest {
     @Test
     void exactReferenceAndAmountMatchProducesSuggestion() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(tenancyId, new BigDecimal("2500"), LocalDate.of(2026, 9, 10), "NAJEM/T1/2026");
+        ledger.postRentCharge(WorkspaceContext.DEV_WORKSPACE_ID, tenancyId, new BigDecimal("2500"), LocalDate.of(2026, 9, 10), "NAJEM/T1/2026");
 
-        ingestion.ingest(new BankLine("tx-m1", new BigDecimal("2500"), "NAJEM/T1/2026",
+        ingestion.ingest(WorkspaceContext.DEV_WORKSPACE_ID, new BankLine("tx-m1", new BigDecimal("2500"), "NAJEM/T1/2026",
             LocalDate.of(2026, 9, 3)));
 
         assertThat(jdbc.queryForObject(
@@ -62,8 +63,8 @@ class IngestionServiceTest {
     void sameExternalIdIsIngestedOnce() {
         var line = new BankLine("tx-dup", new BigDecimal("100"), "NO/MATCH", LocalDate.of(2026, 9, 3));
 
-        ingestion.ingest(line);
-        ingestion.ingest(line);
+        ingestion.ingest(WorkspaceContext.DEV_WORKSPACE_ID, line);
+        ingestion.ingest(WorkspaceContext.DEV_WORKSPACE_ID, line);
 
         assertThat(jdbc.queryForObject(
             "select count(*) from acc_payment where external_id = 'tx-dup'", Integer.class)).isEqualTo(1);
@@ -71,7 +72,7 @@ class IngestionServiceTest {
 
     @Test
     void nonMatchingLineStaysUnmatched() {
-        ingestion.ingest(new BankLine("tx-um", new BigDecimal("999"), "GIBBERISH",
+        ingestion.ingest(WorkspaceContext.DEV_WORKSPACE_ID, new BankLine("tx-um", new BigDecimal("999"), "GIBBERISH",
             LocalDate.of(2026, 9, 3)));
 
         assertThat(jdbc.queryForObject(

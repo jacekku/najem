@@ -22,7 +22,7 @@ public class TenancyActivatedHandler implements IntegrationEventHandler<TenancyA
 
     @Override
     public void handle(TenancyActivatedEvent event) {
-        ledger.postRentCharge(event.tenancyId(), event.monthlyRent(), event.startDate(),
-            event.paymentReference());
+        ledger.postRentCharge(event.workspaceId(), event.tenancyId(), event.monthlyRent(),
+            event.startDate(), event.paymentReference());
     }
 }

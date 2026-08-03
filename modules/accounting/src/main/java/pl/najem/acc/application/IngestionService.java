@@ -24,15 +24,16 @@ public class IngestionService {
         this.jdbc = jdbc;
     }
 
-    public void fetchAndIngest() {
+    public void fetchAndIngest(UUID workspaceId) {
         for (BankLine line : bank.fetchSince(LocalDate.now().minusDays(30))) {
-            ingest(line);
+            ingest(workspaceId, line);
         }
     }
 
-    public void ingest(BankLine line) {
+    public void ingest(UUID workspaceId, BankLine line) {
         Integer existing = jdbc.queryForObject(
-            "select count(*) from acc_payment where external_id = ?", Integer.class, line.externalId());
+            "select count(*) from acc_payment where workspace_id = ? and external_id = ?",
+            Integer.class, workspaceId, line.externalId());
         if (existing != null && existing > 0) {
             return;
         }
@@ -40,21 +41,22 @@ public class IngestionService {
         store.append(paymentId, "Payment", 0,
             List.of(new PaymentIngested(paymentId, line.externalId(), line.amount(),
                 line.title(), line.bookingDate())), List.of());
-        jdbc.update(
-            "insert into acc_payment(payment_id, external_id, amount, title, booking_date, status) values (?,?,?,?,?,'unmatched')",
-            paymentId, line.externalId(), line.amount(), line.title(), line.bookingDate());
-        suggestExactMatch(paymentId, line);
+        jdbc.update("""
+            insert into acc_payment(payment_id, workspace_id, external_id, amount, title, booking_date, status)
+            values (?,?,?,?,?,?,'unmatched')
+            """, paymentId, workspaceId, line.externalId(), line.amount(), line.title(), line.bookingDate());
+        suggestExactMatch(workspaceId, paymentId, line);
     }
 
-    private void suggestExactMatch(UUID paymentId, BankLine line) {
+    private void suggestExactMatch(UUID workspaceId, UUID paymentId, BankLine line) {
         var chargeIds = jdbc.queryForList("""
             select charge_id from acc_charge
-            where payment_reference = ? and amount = ? and not allocated
+            where workspace_id = ? and payment_reference = ? and amount = ? and not allocated
             order by due_date limit 1
-            """, UUID.class, line.title(), line.amount());
+            """, UUID.class, workspaceId, line.title(), line.amount());
         if (!chargeIds.isEmpty()) {
-            jdbc.update("insert into acc_suggestion(payment_id, charge_id) values (?,?)",
-                paymentId, chargeIds.getFirst());
+            jdbc.update("insert into acc_suggestion(payment_id, workspace_id, charge_id) values (?,?,?)",
+                paymentId, workspaceId, chargeIds.getFirst());
             jdbc.update("update acc_payment set status = 'suggested' where payment_id = ?", paymentId);
         }
     }

@@ -22,13 +22,24 @@ public class ReconciliationService {
         this.jdbc = jdbc;
     }
 
-    public void confirm(UUID paymentId) {
-        UUID chargeId = jdbc.queryForObject(
-            "select charge_id from acc_suggestion where payment_id = ?", UUID.class, paymentId);
+    /**
+     * Confirms a suggested match. A payment belonging to another workspace is invisible rather than
+     * forbidden — the query scopes the boundary, so there is nothing to confirm and nothing happens.
+     */
+    public void confirm(UUID workspaceId, UUID paymentId) {
+        var suggested = jdbc.queryForList(
+            "select charge_id from acc_suggestion where workspace_id = ? and payment_id = ?",
+            UUID.class, workspaceId, paymentId);
+        if (suggested.isEmpty()) {
+            return;
+        }
+        UUID chargeId = suggested.getFirst();
         BigDecimal amount = jdbc.queryForObject(
-            "select amount from acc_payment where payment_id = ?", BigDecimal.class, paymentId);
+            "select amount from acc_payment where workspace_id = ? and payment_id = ?",
+            BigDecimal.class, workspaceId, paymentId);
         UUID tenancyId = jdbc.queryForObject(
-            "select tenancy_id from acc_charge where charge_id = ?", UUID.class, chargeId);
+            "select tenancy_id from acc_charge where workspace_id = ? and charge_id = ?",
+            UUID.class, workspaceId, chargeId);
 
         var stream = store.load(paymentId);
         store.append(paymentId, "Payment", stream.version(),
