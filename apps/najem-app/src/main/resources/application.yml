@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/najem
+    username: najem
+    password: najem
+  flyway:
+    locations: "classpath:db/eventstore,classpath:db/pm,classpath:db/acc"
+    fail-on-missing-locations: false
+
+najem:
+  bank:
+    base-url: "http://localhost:8081"
+    iban: "PL61109010140000071219812874"
