@@ -42,6 +42,39 @@ curl -s -X POST localhost:8080/api/acc/payments/$PAY/confirm
 curl -s localhost:8080/api/acc/board     # -> "green"
 ```
 
+## User management
+
+`docker compose up -d` also starts Keycloak on <http://localhost:8180> (admin console: `admin` / `admin`).
+It imports the `najem` realm from `docker/keycloak/najem-realm.json` with `registrationAllowed: false` —
+NAJEM is **invite-only**, so Keycloak's own signup page is off and accepting an invitation is the only
+code path that creates a user.
+
+Keycloak is the identity provider and nothing more: it owns credentials, login and tokens, while roles
+and workspace membership are NAJEM domain data in the event store. A workspace is an agency — the hard
+multi-tenancy boundary.
+
+```sh
+# 1. create a workspace (unsecured local run)
+WS=$(curl -s -X POST localhost:8080/api/um/workspaces \
+  -H 'Content-Type: application/json' -d '{"name":"Agencja Krakowska"}' | jq -r .workspaceId)
+
+# 2. invite a manager — the one-time token is returned here and never stored in plaintext
+TOKEN=$(curl -s -X POST localhost:8080/api/um/workspaces/$WS/invitations \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"manager@example.com","role":"MANAGER","expiresOn":"2026-09-01"}' | jq -r .token)
+
+# 3. accept it — the only way a user comes into being
+curl -s -X POST localhost:8080/api/um/invitations/accept \
+  -H 'Content-Type: application/json' -d "{\"token\":\"$TOKEN\"}"
+```
+
+Authentication is off by default so the walking skeleton and module tests run without an identity
+provider. Turn it on by setting the issuer:
+
+```sh
+SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://localhost:8180/realms/najem
+```
+
 ## Test
 
 ```sh
