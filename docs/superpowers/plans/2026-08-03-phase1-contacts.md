@@ -401,7 +401,7 @@ class ContactServiceTest {
             "contract", LocalDate.of(2026, 8, 3), null));
 
         var payloads = jdbc.queryForList(
-            "select payload::text from event where stream_id = ?", String.class, contactId);
+            "select payload::text from events where stream_id = ?", String.class, contactId);
 
         assertThat(payloads).isNotEmpty();
         assertThat(payloads).noneSatisfy(payload ->
@@ -410,7 +410,7 @@ class ContactServiceTest {
 }
 ```
 
-> If the event-store table or payload column is not named `event` / `payload`, read `platform/eventstore/src/main/resources/db/eventstore/V1__eventstore.sql` and use the real names. Do not change the event store — it is frozen.
+> If the event-store table or payload column is not named `events` / `payload`, read `platform/eventstore/src/main/resources/db/eventstore/V1__eventstore.sql` and use the real names. Do not change the event store — it is frozen.
 
 - [ ] **Step 2: Run test to verify it fails**
 
