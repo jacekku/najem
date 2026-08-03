@@ -8,6 +8,8 @@
 
 **Multi-tenancy (decided, 2026-08-03):** **Workspace = agency = the hard tenancy boundary.** One workspace holds multiple properties and owners. Every module scopes data by `workspace_id` from day one; integration events carry `workspaceId` as their first field; cross-workspace queries don't exist in module code. User provisioning is **invite-only** (no self-signup). Access enforcement (Keycloak claims → workspace membership) lives in UserManagement + composition root.
 
+**Identity (decided, 2026-08-03):** **Keycloak is IdP-only** — it owns users, credentials, login, and tokens, nothing else. Roles and workspace membership are NAJEM domain data in the event store (no Keycloak realm roles/groups); tokens prove identity, authorization resolves from UserManagement's own projection.
+
 **Domain sources of truth:** `docs/event-storming/property-management-domain-model.md` (v1.1), `docs/event-storming/accounting-domain-model.md` (v1.0), `docs/event-storming/research/accounting-synthesis.md`.
 
 ## Phases
