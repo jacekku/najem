@@ -1,0 +1,31 @@
+# NAJEM Implementation Roadmap
+
+**Stack (decided):** Java 21 + Spring Boot 3.3 (hexagonal, per `java-hexagonal-tdd`), modular monolith (Gradle multi-module; module = bounded context), hand-rolled event store on Postgres (jsonb payloads, transactional outbox), monorepo. FakeBank is a separate Spring Boot app in the same repo.
+
+**Event delivery (decided):** transactional **outbox** for durability, but delivery = the outbox dispatcher **directly calling handler Java methods in the consuming module** (Spring beans implementing a shared handler interface from `contracts`) — **no queues, no brokers**. Modules still never compile-depend on each other; wiring happens at the composition root.
+
+**Frontend (decided):** **HTMX** + server-rendered fragments (Thymeleaf) served by the monolith — no SPA.
+
+**Domain sources of truth:** `docs/event-storming/property-management-domain-model.md` (v1.1), `docs/event-storming/accounting-domain-model.md` (v1.0), `docs/event-storming/research/accounting-synthesis.md`.
+
+## Phases
+
+| Phase | Content | Parallelism | Plan |
+|---|---|---|---|
+| **0** | Monorepo scaffold, CI, docker-compose, `contracts` module (integration events, IDs), `platform:eventstore` (append/load + optimistic locking + outbox), **walking skeleton**: property → unit → tenancy → activate → charge → FakeBank statement → ingest → match → allocate → board green | Single agent (foundations must not fork) | `2026-08-03-phase0-setup-walking-skeleton.md` (ready) |
+| **1** | Flesh out modules on the validated bones: **PM** (full event set §9, checklists, repairs, processes), **Accounting + Tenancy Accounting ACL** (components, credit notes, deposit lifecycle, matching ladder, trust equation), **FakeBank** (statement realism: MT940 export, scenarios), **Contacts** (PII lookaside, interests, retention), **UserManagement** (Keycloak, workspaces) | **5 parallel agents**, one per module; contracts frozen — changes to `contracts/` require cross-agent sign-off | One plan per module, written at phase start |
+| **2** | **Reporting** (Timeline projections, arrears board full colors), **integrations** (real MT940 upload adapter; aggregator adapter behind same port), **frontend** (may start mid-Phase-1 against contracts: Unit Board, reconciliation screen, boards) | 2–3 parallel agents | Per-track plans |
+| **3** | e2e hardening (grow the skeleton's suite — one scenario per landed feature), performance passes, gap closure from hotspot logs | 1–2 agents | Checklist-driven |
+
+## Rules that keep parallel agents honest
+
+1. **Contract freeze:** `contracts/` is the only shared surface between modules (besides `platform/`). Any change to it = stop-the-line, all affected agents informed.
+2. **Module isolation:** modules depend on `contracts` + `platform` only, NEVER on each other (enforced via Gradle dependency constraints). Cross-module talk = integration events through the outbox.
+3. **TDD everywhere** (`superpowers:test-driven-development`); behavioral tests (`behavioural-testing`) — test through ports, not internals.
+4. **e2e is continuous:** each phase appends scenarios to `e2e/`; never a big-bang phase.
+5. **No PII in events** (PII lookaside, decided); **no LLM mentions in commits; sign as the repo user.**
+6. Deferred by domain decision (do NOT build): owner statements/tax packs/payouts, management-fee tracking, arrears-chasing workflow, prorating, soft close, aggregator choice (needs FakeBank first + sandbox trial).
+
+## Walking-skeleton scope guard (Phase 0)
+
+Deliberately minimal: single rent component, exact-reference matching only, manual confirmation, statuses `awaiting`/`green` only, no Keycloak, no S3, no deposit, no media. Everything else lands in Phase 1 on top of these bones.
