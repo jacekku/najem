@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":contracts"))
     implementation(project(":platform:eventstore"))
     implementation(project(":modules:propertymanagement"))
+    implementation(project(":modules:accounting"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.flywaydb:flyway-core")
