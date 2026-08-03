@@ -13,28 +13,27 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 @RestController
 @RequestMapping("/api/accounts/{iban}/transactions")
 public class AccountsController {
 
-    private final Map<String, List<BankTransactionDto>> accounts = new ConcurrentHashMap<>();
+    private final TransactionStore store;
+
+    public AccountsController(TransactionStore store) {
+        this.store = store;
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public void seed(@PathVariable String iban, @RequestBody BankTransactionDto transaction) {
-        accounts.computeIfAbsent(iban, k -> new CopyOnWriteArrayList<>()).add(transaction);
+        store.add(iban, transaction);
     }
 
     @GetMapping
     public List<BankTransactionDto> list(@PathVariable String iban,
                                          @RequestParam(required = false)
                                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate since) {
-        return accounts.getOrDefault(iban, List.of()).stream()
-            .filter(tx -> since == null || !tx.bookingDate().isBefore(since))
-            .toList();
+        return store.find(iban, since);
     }
 }
