@@ -21,7 +21,9 @@ public class ScenarioCatalog {
     private static final String PLN = "PLN";
 
     private static final Set<String> NAMES = Set.of(
-        "on-time", "late", "partial", "partial-then-topup", "overpay");
+        "on-time", "late", "partial", "partial-then-topup", "overpay",
+        "wrong-reference", "no-reference", "duplicate", "reversal", "lump-sum",
+        "third-party-payer", "outgoing-debit", "foreign-currency");
 
     public Set<String> names() {
         return NAMES;
@@ -43,6 +45,29 @@ public class ScenarioCatalog {
             }
             case "overpay" -> List.of(
                 credit(request, 0, percentOf(request.amount(), 120), request.reference(), 0, 0));
+            case "wrong-reference" -> List.of(
+                credit(request, 0, request.amount(), mangle(request.reference()), 0, 0));
+            case "no-reference" -> List.of(
+                credit(request, 0, request.amount(), "", 0, 0));
+            case "duplicate" -> List.of(
+                credit(request, 0, request.amount(), request.reference(), 0, 0),
+                credit(request, 1, request.amount(), request.reference(), 0, 0));
+            case "reversal" -> List.of(
+                credit(request, 0, request.amount(), request.reference(), 0, 0),
+                line(request, 1, request.amount(), "ZWROT " + request.reference(), 3, 3,
+                    DEBIT, PLN, tenantName(request.reference()), syntheticIban(request.reference())));
+            case "lump-sum" -> List.of(
+                credit(request, 0, request.amount().multiply(BigDecimal.TWO),
+                    request.reference() + " " + request.reference() + "/2", 0, 0));
+            case "third-party-payer" -> List.of(
+                line(request, 0, request.amount(), "", 0, 0, CREDIT, PLN,
+                    "ANNA KOWALSKA", syntheticIban("payer:" + request.reference())));
+            case "outgoing-debit" -> List.of(
+                line(request, 0, new BigDecimal("287.43"), "OPLATA ZA MEDIA", 1, 1,
+                    DEBIT, PLN, "PGNIG OBROT DETALICZNY", syntheticIban("utility")));
+            case "foreign-currency" -> List.of(
+                line(request, 0, request.amount(), request.reference(), 0, 0, CREDIT, "EUR",
+                    tenantName(request.reference()), syntheticIban(request.reference())));
             default -> throw new UnknownScenarioException(request.name());
         };
     }
@@ -88,6 +113,11 @@ public class ScenarioCatalog {
 
     private static String sanitise(String value) {
         return value.replaceAll("[^A-Za-z0-9-]", "-");
+    }
+
+    /** A reference as a careless payer would type it: separators lost, case lost. */
+    private static String mangle(String reference) {
+        return reference.replace("/", " ").toLowerCase();
     }
 
     /** Bank-side reference, deliberately unrelated to the tenant's title reference. */

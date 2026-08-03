@@ -97,4 +97,112 @@ class ScenarioCatalogTest {
             .isInstanceOf(UnknownScenarioException.class)
             .hasMessageContaining("no-such-scenario");
     }
+
+    @Test
+    void wrongReferenceKeepsTheAmountButManglesTheTitle() {
+        BankTransactionDto line = generate("wrong-reference").getFirst();
+
+        assertThat(line.amount()).isEqualByComparingTo(AMOUNT);
+        assertThat(line.title()).isEqualTo("najem m1 2026").isNotEqualTo(REFERENCE);
+    }
+
+    @Test
+    void noReferenceLeavesTheTitleEmpty() {
+        BankTransactionDto line = generate("no-reference").getFirst();
+
+        assertThat(line.title()).isEmpty();
+        assertThat(line.amount()).isEqualByComparingTo(AMOUNT);
+        assertThat(line.counterpartyIban()).isNotBlank();
+    }
+
+    @Test
+    void duplicateSeedsTheSamePaymentTwiceUnderDistinctBankIdentifiers() {
+        List<BankTransactionDto> lines = generate("duplicate");
+
+        assertThat(lines).hasSize(2);
+        assertThat(lines.get(0).amount()).isEqualByComparingTo(lines.get(1).amount());
+        assertThat(lines.get(0).title()).isEqualTo(lines.get(1).title());
+        assertThat(lines.get(0).bookingDate()).isEqualTo(lines.get(1).bookingDate());
+        assertThat(lines.get(0).id()).isNotEqualTo(lines.get(1).id());
+        assertThat(lines.get(0).bankReference()).isNotEqualTo(lines.get(1).bankReference());
+    }
+
+    @Test
+    void reversalCreditsThenTakesTheMoneyBack() {
+        List<BankTransactionDto> lines = generate("reversal");
+
+        assertThat(lines).hasSize(2);
+        assertThat(lines.get(0).creditDebitIndicator()).isEqualTo("CRDT");
+        assertThat(lines.get(1).creditDebitIndicator()).isEqualTo("DBIT");
+        assertThat(lines.get(1).amount())
+            .as("the debit is positive; direction lives in the indicator alone")
+            .isEqualByComparingTo(lines.get(0).amount());
+        assertThat(lines.get(1).bookingDate()).isEqualTo(DUE.plusDays(3));
+        assertThat(lines.get(1).title()).isEqualTo("ZWROT " + REFERENCE);
+    }
+
+    @Test
+    void lumpSumCoversTwoReferencesInOneTransfer() {
+        BankTransactionDto line = generate("lump-sum").getFirst();
+
+        assertThat(line.amount()).isEqualByComparingTo("5000.00");
+        assertThat(line.title()).isEqualTo(REFERENCE + " " + REFERENCE + "/2");
+    }
+
+    @Test
+    void thirdPartyPayerUsesADifferentAccountAndNamesADifferentPerson() {
+        BankTransactionDto line = generate("third-party-payer").getFirst();
+
+        assertThat(line.amount()).isEqualByComparingTo(AMOUNT);
+        assertThat(line.title()).isEmpty();
+        assertThat(line.counterpartyName()).isEqualTo("ANNA KOWALSKA");
+        assertThat(line.counterpartyIban())
+            .as("the payer is not the tenant, so the account must differ")
+            .isNotEqualTo(generate("on-time").getFirst().counterpartyIban());
+    }
+
+    @Test
+    void thirdPartyPayerKeepsTheSameAccountAcrossMonths() {
+        LocalDate nextMonth = DUE.plusMonths(1);
+
+        String september = generate("third-party-payer").getFirst().counterpartyIban();
+        String october = catalog.generate(
+                new ScenarioRequest("third-party-payer", IBAN, REFERENCE, AMOUNT, nextMonth))
+            .getFirst().counterpartyIban();
+
+        assertThat(october).isEqualTo(september);
+    }
+
+    @Test
+    void outgoingDebitIsAUtilityPaymentThatIsNotRent() {
+        BankTransactionDto line = generate("outgoing-debit").getFirst();
+
+        assertThat(line.creditDebitIndicator()).isEqualTo("DBIT");
+        assertThat(line.amount()).isEqualByComparingTo("287.43");
+        assertThat(line.title()).isEqualTo("OPLATA ZA MEDIA");
+        assertThat(line.counterpartyName()).isEqualTo("PGNIG OBROT DETALICZNY");
+        assertThat(line.bookingDate()).isEqualTo(DUE.plusDays(1));
+    }
+
+    @Test
+    void foreignCurrencyCreditsInEuro() {
+        BankTransactionDto line = generate("foreign-currency").getFirst();
+
+        assertThat(line.currency()).isEqualTo("EUR");
+        assertThat(line.creditDebitIndicator()).isEqualTo("CRDT");
+        assertThat(line.title()).isEqualTo(REFERENCE);
+    }
+
+    @Test
+    void everyAdvertisedScenarioGenerates() {
+        assertThat(catalog.names()).hasSize(13);
+        assertThat(catalog.names()).allSatisfy(name -> assertThat(generate(name)).isNotEmpty());
+    }
+
+    @Test
+    void everyLineCarriesAPositiveAmount() {
+        assertThat(catalog.names()).allSatisfy(name ->
+            assertThat(generate(name)).allSatisfy(line ->
+                assertThat(line.amount()).isPositive()));
+    }
 }
