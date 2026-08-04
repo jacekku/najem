@@ -17,6 +17,12 @@ body {
     border-bottom: 1px solid var(--rule);
 }
 
+.masthead__stale {
+    margin-left: 1rem;
+    color: #8a4b12;
+    font-size: 0.85em;
+}
+
 .masthead__brand {
     font-weight: 600;
     letter-spacing: 0.04em;

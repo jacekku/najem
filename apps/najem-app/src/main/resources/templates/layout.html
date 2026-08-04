@@ -19,6 +19,14 @@
 <body>
 <header class="masthead">
     <a class="masthead__brand" th:href="@{/}">NAJEM</a>
+    <!--/*
+      Boards here are eventually consistent. A stalled or lagging projector renders as a short or
+      empty list, which is indistinguishable from a correct one — so a manager who has just created
+      something and cannot see it has no way to tell "not yet" from "it didn't work". Saying so is
+      the condition najem-pm attached to accepting an eventually consistent board (seq 110).
+    */-->
+    <span class="masthead__stale" th:if="${projectionsBehind}"
+          title="Widok nadąża za zapisami z opóźnieniem — odśwież za chwilę">aktualizacja…</span>
 </header>
 <main th:replace="${content}">
     <p>Screen content renders here.</p>
