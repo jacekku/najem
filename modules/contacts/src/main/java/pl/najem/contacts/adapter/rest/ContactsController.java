@@ -49,9 +49,9 @@ public class ContactsController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, UUID> register(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public Map<String, UUID> register(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                                       @RequestBody RegisterContactRequest request) {
-        var contactId = contacts.register(new NewContact(workspace(workspaceId),
+        var contactId = contacts.register(new NewContact(workspaceId,
             new ContactDetails(request.givenName(), request.surname(), request.email(), request.phone()),
             request.lawfulBasis(), request.infoClauseServedAt(), request.retainUntil()));
         return Map.of("contactId", contactId);
@@ -72,19 +72,19 @@ public class ContactsController {
 
     @PutMapping("/{contactId}/details")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void correct(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public void correct(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                         @PathVariable UUID contactId, @RequestBody ContactDetailsRequest request) {
-        contacts.correctDetails(workspace(workspaceId), contactId,
+        contacts.correctDetails(workspaceId, contactId,
             new ContactDetails(request.givenName(), request.surname(), request.email(), request.phone()),
             LocalDate.now());
     }
 
     @DeleteMapping("/{contactId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void erase(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public void erase(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                       @PathVariable UUID contactId,
                       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate on) {
-        contacts.erase(workspace(workspaceId), contactId, on == null ? LocalDate.now() : on);
+        contacts.erase(workspaceId, contactId, on == null ? LocalDate.now() : on);
     }
 
     @ExceptionHandler(RetentionHoldActiveException.class)
@@ -92,7 +92,15 @@ public class ContactsController {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
-    /** Until Keycloak claims land, an absent header means the single dev workspace. */
+    /**
+     * Until Keycloak claims land, an absent header means the single dev workspace — on READS ONLY.
+     * <p>
+     * Every mutating endpoint requires the header instead, so a client that drops it gets a 400.
+     * The asymmetry is deliberate: a read with no header shows you the wrong (empty) data and you
+     * notice immediately, whereas a write with no header puts real data into a workspace nobody
+     * named and returns a success. Erasing a contact, or releasing the retention hold that blocks
+     * an erasure, must never be able to land somewhere the caller did not ask for.
+     */
     static UUID workspace(UUID fromHeader) {
         return fromHeader == null ? WorkspaceContext.DEV_WORKSPACE_ID : fromHeader;
     }

@@ -38,20 +38,20 @@ public class InterestsController {
 
     @PostMapping("/{contactId}/interests")
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, UUID> register(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public Map<String, UUID> register(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                                       @PathVariable UUID contactId,
                                       @RequestBody RegisterInterestRequest request) {
-        return Map.of("interestId", interests.register(workspace(workspaceId), contactId,
+        return Map.of("interestId", interests.register(workspaceId, contactId,
             request.unitId(), request.willingToPay(), request.desiredStart()));
     }
 
     @DeleteMapping("/interests/{interestId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void withdraw(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public void withdraw(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                          @PathVariable UUID interestId,
                          @RequestParam(required = false)
                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate on) {
-        interests.withdraw(workspace(workspaceId), interestId, on == null ? LocalDate.now() : on);
+        interests.withdraw(workspaceId, interestId, on == null ? LocalDate.now() : on);
     }
 
     @GetMapping("/units/{unitId}/interests")

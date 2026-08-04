@@ -32,6 +32,17 @@ class ContactLifecycleTest {
 
     static ConfigurableApplicationContext app;
 
+    /**
+     * The dev workspace, sent explicitly on every write. The DEV_WORKSPACE_ID fallback is now
+     * reads-only: a write with no header is refused rather than landing in a workspace nobody
+     * named. {@link #aWriteWithoutAWorkspaceIsRefused()} pins that.
+     */
+    private static final String DEV_WORKSPACE = "00000000-0000-0000-0000-000000000001";
+
+    private static io.restassured.specification.RequestSpecification writing() {
+        return given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON);
+    }
+
     @BeforeAll
     static void start() {
         app = new SpringApplicationBuilder(NajemApplication.class).run(
@@ -51,7 +62,7 @@ class ContactLifecycleTest {
 
     @Test
     void leadIsCapturedLinkedToUnitsAndErasedOnRequest() {
-        String contactId = given().contentType(ContentType.JSON)
+        String contactId = writing()
             .body(Map.of("givenName", "Anna", "surname", "Kowalska",
                 "email", "anna@example.com", "phone", "+48600100200",
                 "lawfulBasis", "legitimate-interest",
@@ -64,10 +75,10 @@ class ContactLifecycleTest {
 
         String unit12 = UUID.randomUUID().toString();
         String unit14 = UUID.randomUUID().toString();
-        given().contentType(ContentType.JSON)
+        writing()
             .body(Map.of("unitId", unit12, "willingToPay", "2400", "desiredStart", "2026-10-01"))
             .post("/api/contacts/" + contactId + "/interests").then().statusCode(201);
-        given().contentType(ContentType.JSON)
+        writing()
             .body(Map.of("unitId", unit14, "willingToPay", "2400", "desiredStart", "2026-10-01"))
             .post("/api/contacts/" + contactId + "/interests").then().statusCode(201);
 
@@ -85,18 +96,18 @@ class ContactLifecycleTest {
             .contains(contactId);
 
         // An accounting-style retention hold blocks erasure.
-        given().contentType(ContentType.JSON).body(Map.of("reason", "ledger-referenced"))
+        writing().body(Map.of("reason", "ledger-referenced"))
             .post("/api/contacts/" + contactId + "/retention-holds").then().statusCode(204);
-        given().delete("/api/contacts/" + contactId + "?on=2026-08-05").then().statusCode(409);
+        writing().delete("/api/contacts/" + contactId + "?on=2026-08-05").then().statusCode(409);
         given().get("/api/contacts/" + contactId).then().statusCode(200);
         assertThat(given().get("/api/contacts/erasure-due?asOf=2026-08-05")
             .then().statusCode(200).extract().jsonPath().getList("", String.class))
             .doesNotContain(contactId);
 
         // Once released, erasure removes the personal data for good.
-        given().delete("/api/contacts/" + contactId + "/retention-holds/ledger-referenced?on=2026-08-05")
+        writing().delete("/api/contacts/" + contactId + "/retention-holds/ledger-referenced?on=2026-08-05")
             .then().statusCode(204);
-        given().delete("/api/contacts/" + contactId + "?on=2026-08-05").then().statusCode(204);
+        writing().delete("/api/contacts/" + contactId + "?on=2026-08-05").then().statusCode(204);
 
         given().get("/api/contacts/" + contactId).then().statusCode(404);
         assertThat(given().get("/api/contacts/units/" + unit12 + "/interests")
@@ -104,5 +115,26 @@ class ContactLifecycleTest {
         assertThat(given().get("/api/contacts?email=anna@example.com")
             .then().statusCode(200).extract().jsonPath().getList("", String.class))
             .doesNotContain(contactId);
+    }
+
+    /**
+     * A write that names no workspace is refused, not defaulted.
+     * <p>
+     * The releasing case is the one that decides it: a retention hold is what stops an erasure, so
+     * a release aimed at nowhere would leave the real hold standing while the operator believes
+     * they lifted it — a silent failure whose only symptom is data that quietly refuses to be
+     * erased. Reads keep the dev fallback; nothing is lost by showing a caller an empty list.
+     */
+    @Test
+    void aWriteWithoutAWorkspaceIsRefused() {
+        given().contentType(ContentType.JSON)
+            .body(Map.of("givenName", "Nobody", "surname", "Nowhere", "lawfulBasis", "consent"))
+            .post("/api/contacts").then().statusCode(400);
+
+        given().delete("/api/contacts/" + UUID.randomUUID() + "/retention-holds/ledger-referenced")
+            .then().statusCode(400);
+
+        // Reads are unaffected: no header still means the dev workspace.
+        given().get("/api/contacts/erasure-due?asOf=2026-08-05").then().statusCode(200);
     }
 }

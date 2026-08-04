@@ -35,18 +35,18 @@ public class RetentionController {
 
     @PostMapping("/{contactId}/retention-holds")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void setHold(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public void setHold(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                         @PathVariable UUID contactId, @RequestBody HoldRequest request) {
-        retention.setHold(workspace(workspaceId), contactId, request.reason(), LocalDate.now());
+        retention.setHold(workspaceId, contactId, request.reason(), LocalDate.now());
     }
 
     @DeleteMapping("/{contactId}/retention-holds/{reason}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void releaseHold(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public void releaseHold(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                             @PathVariable UUID contactId, @PathVariable String reason,
                             @RequestParam(required = false)
                             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate on) {
-        retention.releaseHold(workspace(workspaceId), contactId, reason, on == null ? LocalDate.now() : on);
+        retention.releaseHold(workspaceId, contactId, reason, on == null ? LocalDate.now() : on);
     }
 
     @GetMapping("/erasure-due")
