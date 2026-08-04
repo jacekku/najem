@@ -16,6 +16,14 @@ import pl.najem.reporting.application.ProjectionStatus;
  * <p>najem-pm made this the condition for accepting an eventually consistent board (najem-build
  * seq 110) and they were right to make it a condition. This is the screen half of it.
  *
+ * <p><b>Half-covered, deliberately, and the other half is not in this package.</b> A projection
+ * gets a checkpoint row only once it has applied something, so one that has <em>never run</em> is
+ * absent from {@code ProjectionStatus.all()} rather than reported as behind. This class can see
+ * the case where the whole list is empty and treats it as behind; it cannot see one projection
+ * missing out of four, because it does not know how many there ought to be. That needs the
+ * expected set, which the runner in Reporting holds — filed at najem-build seq 409. Until then
+ * this is a floor on staleness, not a proof of freshness.
+ *
  * <p>Scoped to this package, like {@link WebErrorAdvice}: it must not attach itself to any
  * module's API responses.
  */
@@ -35,6 +43,13 @@ public class ProjectionFreshnessAdvice {
      */
     @ModelAttribute("projectionsBehind")
     public boolean projectionsBehind() {
-        return projections.all().stream().anyMatch(status -> !status.caughtUp());
+        var statuses = projections.all();
+        // No rows at all is NOT "everything is current" — it is "nothing has ever been projected",
+        // which is the worst state this banner exists for and the one where the naive
+        // `anyMatch` is silent, because anyMatch over an empty list is false. A projection only
+        // gets a checkpoint row once it applies something, so a fresh database or a runner that
+        // never started produces exactly this. No evidence of lag is not evidence of no lag.
+        // (@najem-reviewer, najem-build seq 409.)
+        return statuses.isEmpty() || statuses.stream().anyMatch(status -> !status.caughtUp());
     }
 }
