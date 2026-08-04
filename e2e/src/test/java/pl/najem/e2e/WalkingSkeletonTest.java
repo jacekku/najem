@@ -39,7 +39,13 @@ class WalkingSkeletonTest {
             .run("--server.port=0",
                 "--spring.autoconfigure.exclude="
                     + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
-                    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration");
+                    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration,"
+                    // najem-app puts spring-security on the shared e2e classpath (UserManagement's
+                    // resource server), which would otherwise auto-secure FakeBank's endpoints too
+                    // and 401 the seed call. FakeBank has no accounts and no security of its own.
+                    + "org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration,"
+                    + "org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration,"
+                    + "org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration");
         bankPort = Integer.parseInt(bank.getEnvironment().getProperty("local.server.port"));
         app = new SpringApplicationBuilder(NajemApplication.class).run(
             "--server.port=0",

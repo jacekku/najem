@@ -8,6 +8,7 @@ dependencies {
     implementation(project(":platform:eventstore"))
     implementation(project(":modules:propertymanagement"))
     implementation(project(":modules:accounting"))
+    implementation(project(":modules:usermanagement"))
     implementation(project(":modules:contacts"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")

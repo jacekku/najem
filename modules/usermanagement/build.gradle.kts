@@ -12,6 +12,7 @@ dependencies {
     implementation("org.springframework.security:spring-security-config")
     implementation("org.springframework.security:spring-security-web")
 
+    testImplementation("org.mockito:mockito-core")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.flywaydb:flyway-core")

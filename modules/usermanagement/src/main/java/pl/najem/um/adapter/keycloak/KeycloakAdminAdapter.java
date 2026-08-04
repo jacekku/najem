@@ -1,10 +1,7 @@
 package pl.najem.um.adapter.keycloak;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.client.RestClient;
 import pl.najem.um.application.KeycloakAdminPort;
@@ -18,8 +15,6 @@ import java.util.UUID;
  * Talks to the Keycloak admin REST API using the direct-grant admin login. Owns its wire DTOs
  * (convention 4) and never reads or writes roles or groups (decision D1).
  */
-@Component
-@ConditionalOnProperty("najem.keycloak.base-url")
 public class KeycloakAdminAdapter implements KeycloakAdminPort {
 
     /** Wire DTOs — Keycloak's shapes, not the domain's. */
@@ -31,10 +26,7 @@ public class KeycloakAdminAdapter implements KeycloakAdminPort {
     private final String username;
     private final String password;
 
-    public KeycloakAdminAdapter(@Value("${najem.keycloak.base-url}") String baseUrl,
-                                @Value("${najem.keycloak.realm:najem}") String realm,
-                                @Value("${najem.keycloak.admin-username:admin}") String username,
-                                @Value("${najem.keycloak.admin-password:admin}") String password) {
+    public KeycloakAdminAdapter(String baseUrl, String realm, String username, String password) {
         this.http = RestClient.builder().baseUrl(baseUrl).build();
         this.realm = realm;
         this.username = username;

@@ -2,6 +2,7 @@ plugins { `java-library` }
 
 dependencies {
     testImplementation(project(":apps:najem-app"))
+    testImplementation(project(":modules:usermanagement"))
     testImplementation(project(":apps:fakebank"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-starter-web")

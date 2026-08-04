@@ -45,4 +45,9 @@ public class WorkspaceAccess {
     public boolean canAccess(UUID keycloakSubject, UUID workspaceId) {
         return roleIn(keycloakSubject, workspaceId).isPresent();
     }
+
+    public Optional<UUID> subjectOf(UUID userId) {
+        return jdbc.query("select keycloak_subject from um_user where user_id = ?",
+            (rs, i) -> rs.getObject(1, UUID.class), userId).stream().findFirst();
+    }
 }
