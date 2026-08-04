@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Raport zaległości — NAJEM', ~{::main})}">
+<body>
+<main>
+    <h1>Zaległości</h1>
+
+    <p class="empty" th:if="${rows.isEmpty()}">
+        Brak najmów do pokazania.
+    </p>
+
+    <!--/*
+      GOLDEN is deliberately absent from this legend. Accounting cannot emit it yet — the rule that
+      would produce it rides an unmerged contract change — and a legend entry that can never fire
+      reads as a claim about the agency's book rather than about the software.
+      (najem-accounting seq 329, najem-pm seq 342.)
+    */-->
+    <ul class="legend" th:unless="${rows.isEmpty()}">
+        <li><span class="colour colour--GREEN"></span> Nic nie zalega</li>
+        <li><span class="colour colour--YELLOW"></span> Niezapłacone, termin jeszcze nie minął</li>
+        <li><span class="colour colour--RED"></span> Po terminie</li>
+        <li><span class="colour colour--BRIGHT_RED"></span>
+            <strong title="Zaległość obejmuje cały okres płatności — biegnie termin z art. 11 ustawy o ochronie praw lokatorów">
+                Cały okres bez zapłaty — biegnie termin z art. 11</strong>
+        </li>
+    </ul>
+
+    <table class="board" th:unless="${rows.isEmpty()}">
+        <thead>
+        <tr>
+            <th>Najem</th>
+            <th>Status</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="row : ${rows}">
+            <td>
+                <a th:href="@{/tenancies/{id}/timeline(id=${row.tenancyId()})}"
+                   th:text="${row.tenancyId()}">—</a>
+            </td>
+            <!--/*
+              The colour comes from accounting verbatim. Whether a tenancy is in arrears, and how
+              badly, is their rule — one of them carries a statutory consequence, so recomputing it
+              here from amounts and dates would be a second implementation of a legal test.
+            */-->
+            <td>
+                <span class="colour" th:classappend="'colour--' + ${row.colour().name()}"></span>
+                <span th:switch="${row.colour().name()}">
+                    <span th:case="'GOLDEN'">Zapłacone do końca najmu</span>
+                    <span th:case="'GREEN'">Nic nie zalega</span>
+                    <span th:case="'YELLOW'">Termin jeszcze nie minął</span>
+                    <span th:case="'RED'">Po terminie</span>
+                    <span th:case="'BRIGHT_RED'"
+                          title="Zaległość obejmuje cały okres płatności — biegnie termin z art. 11">
+                        Cały okres bez zapłaty</span>
+                    <span th:case="*" th:text="${row.colour().name()}">—</span>
+                </span>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</main>
+</body>
+</html>

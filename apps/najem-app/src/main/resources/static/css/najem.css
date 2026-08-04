@@ -121,6 +121,49 @@ main {
     font-size: 0.85em;
 }
 
+/* Accounting's colours, rendered as accounting names them. BRIGHT_RED is the one with legal
+   weight — a whole rent period elapsed unpaid — so it is the only one that also carries words. */
+.colour {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+    vertical-align: baseline;
+}
+
+.colour--GOLDEN {
+    background: #d4af37;
+    box-shadow: 0 0 0 1px #8a6d1f;
+}
+
+.colour--GREEN {
+    background: #1f6b3a;
+}
+
+/* Distinct from GOLDEN on purpose: they are adjacent on the scale and mean opposite things —
+   paid through the end of the tenancy, versus something unpaid that is not yet due. */
+.colour--YELLOW {
+    background: #e8b100;
+}
+
+.colour--RED {
+    background: #b3261e;
+}
+
+.colour--BRIGHT_RED {
+    background: #ff1a1a;
+    box-shadow: 0 0 0 2px #b3261e;
+}
+
+.legend {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1rem;
+    color: #6b6660;
+    font-size: 0.9em;
+}
+
 .warnings {
     list-style: none;
     padding: 0;

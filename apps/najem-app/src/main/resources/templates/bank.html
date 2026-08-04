@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Bank — NAJEM', ~{::main})}">
+<body>
+<main>
+    <h1>Bank</h1>
+
+    <section>
+        <h2>Propozycje dopasowania</h2>
+
+        <p class="empty" th:if="${suggestions.isEmpty()}">
+            Drabinka nie ma nic do zaproponowania.
+        </p>
+
+        <!--/*
+          The tier is rendered as the tier, never collapsed into a confidence of our own: a tier-1
+          certainty and a tier-2 "the reference appeared somewhere in the title" must not look
+          alike, or a manager either trusts all of them or checks all of them.
+
+          And the evidence is shown BEFORE the click, not after. quotedReference is what the payer
+          typed; expectedReference is what the charge asked for. At tier 1 they are equal — at
+          tier 2 the difference IS the judgement being handed over, so both are on screen.
+        */-->
+        <table class="board" th:unless="${suggestions.isEmpty()}">
+            <thead>
+            <tr>
+                <th>Poziom</th>
+                <th>Wpłata</th>
+                <th>Należność</th>
+                <th>Tytuł podany</th>
+                <th>Tytuł oczekiwany</th>
+                <th>Wpłacający</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="s : ${suggestions}">
+                <td>
+                    <span class="tier" th:classappend="'tier--' + ${s.tier()}"
+                          th:switch="${s.tier()}">
+                        <span th:case="1" title="Zgodny numer płatności">1 · pewne</span>
+                        <span th:case="2" title="Numer znaleziony w tytule przelewu">2 · w tytule</span>
+                        <span th:case="3" title="Rozpoznany wpłacający">3 · po wpłacającym</span>
+                        <span th:case="4" title="Wskazane ręcznie">4 · ręcznie</span>
+                        <span th:case="*" th:text="${s.tier()}">—</span>
+                    </span>
+                </td>
+                <td class="amount">
+                    <span th:text="${#numbers.formatDecimal(s.paidAmount(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                    <!--/*
+                      Part payment is accounting's answer, not a comparison done here: tiers 2 and
+                      above do not constrain the amount, so a suggestion can settle a fraction of
+                      the charge, and getting that wrong is a money error rather than a display one.
+                    */-->
+                    <span class="part" th:if="${s.isPartPayment()}"
+                          title="Wpłata nie pokrywa całej należności">część</span>
+                </td>
+                <td class="amount">
+                    <span th:text="${#numbers.formatDecimal(s.chargedAmount(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                    <span class="muted"
+                          th:text="'pozostaje ' + ${#numbers.formatDecimal(s.outstanding(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                </td>
+                <td><code th:text="${s.quotedReference()}">—</code></td>
+                <td><code th:text="${s.expectedReference()}">—</code></td>
+                <td th:text="${s.payerName()}">—</td>
+                <td>
+                    <form th:action="@{/bank/payments/{id}/confirm(id=${s.paymentId()})}" method="post">
+                        <button type="submit">Potwierdź</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h2>Nierozliczone wpłaty</h2>
+
+        <p class="empty" th:if="${suspense.isEmpty()}">
+            Wszystko trafiło na swoje miejsce.
+        </p>
+
+        <table class="board" th:unless="${suspense.isEmpty()}">
+            <thead>
+            <tr>
+                <th>Kwota</th>
+                <th>Tytuł</th>
+                <th>Wpłacający</th>
+                <th>Zaksięgowano</th>
+                <th>Czeka</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${suspense}">
+                <!--/*
+                  `amount` is what is still unresolved — for a partly allocated payment that is the
+                  remainder, not the whole transfer. Showing the transfer would overstate what is
+                  waiting for a decision.
+                */-->
+                <td class="amount"
+                    th:text="${#numbers.formatDecimal(e.amount(), 1, 'WHITESPACE', 2, 'COMMA')} + ' ' + ${e.currency()}">—</td>
+                <td th:text="${e.title()}">—</td>
+                <td th:text="${e.counterpartyName()}">—</td>
+                <td th:text="${e.bookingDate()}">—</td>
+                <td th:text="${e.daysWaiting()} + ' dni'">—</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h2>Do sprawdzenia</h2>
+
+        <p class="empty" th:if="${warnings.isEmpty()}">
+            Brak nowych ostrzeżeń.
+        </p>
+
+        <!--/*
+          A warning never blocked a posting — this is an expert system, not a gate. So "seen" is
+          the only action, and it must not read as approval of anything.
+        */-->
+        <ul class="warnings" th:unless="${warnings.isEmpty()}">
+            <li th:each="w : ${warnings}">
+                <span class="warnings__kind" th:text="${w.kind().name()}">—</span>
+                <span th:text="${w.detail()}">—</span>
+                <form th:action="@{/bank/warnings/{id}/seen(id=${w.warningId()})}" method="post">
+                    <button type="submit">Odnotowane</button>
+                </form>
+            </li>
+        </ul>
+    </section>
+</main>
+</body>
+</html>
