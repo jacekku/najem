@@ -21,6 +21,34 @@ public record ScenarioRequest(String name, String iban, String reference,
                               BigDecimal amount, LocalDate anchorDate, String secondReference) {
 
     /**
+     * Every component but {@code secondReference} is required.
+     *
+     * <p>Checked here rather than in the controller so a request cannot exist in an unusable state:
+     * JSON naming a field {@code scenario} or {@code dueDate} — the names a reasonable person
+     * guesses — binds to nothing and leaves a component null, and the null then surfaces somewhere
+     * far from the mistake. It reached callers as a 500, which says the server is broken when the
+     * request was.
+     *
+     * <p>{@code secondReference} is deliberately absent from this check: it is null for every
+     * scenario but one, and {@link ScenarioCatalog} refuses by name for that one.
+     */
+    public ScenarioRequest {
+        require(name, "name");
+        require(iban, "iban");
+        require(reference, "reference");
+        require(amount, "amount");
+        require(anchorDate, "anchorDate");
+    }
+
+    private static void require(Object value, String field) {
+        if (value == null || (value instanceof String text && text.isBlank())) {
+            throw new IllegalArgumentException(
+                "Field '" + field + "' is required. Expected fields: "
+                    + "name, iban, reference, amount, anchorDate [, secondReference]");
+        }
+    }
+
+    /**
      * The shape this record began as, for the twelve scenarios that concern one tenancy. Kept as a
      * constructor rather than a factory so the widening is purely additive — every existing caller
      * compiles unchanged.
