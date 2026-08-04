@@ -89,10 +89,17 @@ public class BankUiController {
     /**
      * Books one transfer by hand.
      *
-     * <p>The id is minted here rather than asked for: it is the bank's own reference, a payer does
-     * not choose it, and accounting's dedup key is built from it — letting a person type one would
-     * make it possible to book the same transfer twice on purpose and hard to do so by accident,
-     * which is exactly backwards.
+     * <p>The id is minted here rather than asked for: it is the bank's own reference and a payer
+     * does not choose one. Letting a person type it would make booking the same transfer twice easy
+     * by accident and possible on purpose, which is backwards.
+     *
+     * <p><strong>It is not what accounting deduplicates on.</strong> An earlier version of this
+     * comment said it was; that was wrong, and wrong in the direction that matters, because it
+     * would let a reader believe the duplication risk here is already handled. {@code Mt940Import}
+     * builds {@code external_id} from {@code account / statementNumber / position-in-list} and says
+     * in its own javadoc that it is <em>deliberately</em> independent of the bank's reference —
+     * some banks fill that field with {@code NONREF} on every line. So an id minted here is good
+     * practice on its own merits and buys nothing downstream until accounting keys on it.
      */
     @PostMapping("/accounts/{iban}/transactions")
     public String book(@PathVariable String iban,
