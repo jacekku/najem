@@ -62,7 +62,10 @@ class StatementRendererTest {
         List<Mt940Statement> statements = renderer.render("PL61", mixed);
 
         assertThat(statements).hasSize(2);
-        assertThat(statements).extracting(Mt940Statement::currency).containsExactly("EUR", "PLN");
+        // First appearance, not alphabet: the PLN scenario is seeded first, so PLN is statement 1
+        // even though EUR sorts before it. Ordering by name would mean a later EUR transaction
+        // took the number PLN already had -- see aNewCurrencyDoesNotRenumberTheStatementsThatCameBefore.
+        assertThat(statements).extracting(Mt940Statement::currency).containsExactly("PLN", "EUR");
         assertThat(statements).extracting(Mt940Statement::statementNumber).containsExactly("1/1", "2/1");
     }
 
@@ -77,5 +80,37 @@ class StatementRendererTest {
 
         assertThat(lines).hasSize(2);
         assertThat(lines.get(0).bankReference()).isNotEqualTo(lines.get(1).bankReference());
+    }
+
+    /**
+     * Adding a transaction in a new currency must not renumber the statements that already exist.
+     *
+     * <p>Accounting builds its deduplication key from {@code statement.statementNumber()}, so a
+     * statement that changes number re-keys every payment on it: the same transfers are ingested a
+     * second time as new payments, and per-workspace uniqueness on that key means they collide with
+     * nothing and nobody is told. Alphabetical ordering made this reachable — a EUR line added to a
+     * PLN account took the number PLN had — and the booking form's currency field is what put it in
+     * a person's hands.
+     *
+     * <p>First appearance, not alphabet: appending can only ever add a number at the end.
+     */
+    @Test
+    void aNewCurrencyDoesNotRenumberTheStatementsThatCameBefore() {
+        List<BankTransactionDto> pln = List.of(
+            new BankTransactionDto("a", new BigDecimal("2500.00"), "NAJEM", LocalDate.of(2026, 9, 10),
+                null, null, "BNP1", LocalDate.of(2026, 9, 10), "CRDT", "PLN"));
+
+        String plnNumberBefore = renderer.render("PL61", pln).getFirst().statementNumber();
+
+        List<BankTransactionDto> plusEur = new java.util.ArrayList<>(pln);
+        plusEur.add(new BankTransactionDto("b", new BigDecimal("600.00"), "RENT", LocalDate.of(2026, 9, 11),
+            null, null, "BNP2", LocalDate.of(2026, 9, 11), "CRDT", "EUR"));
+
+        Mt940Statement plnAfter = renderer.render("PL61", plusEur).stream()
+            .filter(statement -> statement.currency().equals("PLN")).findFirst().orElseThrow();
+
+        assertThat(plnAfter.statementNumber())
+            .as("PLN keeps its number, so accounting's external_id for those lines is unchanged")
+            .isEqualTo(plnNumberBefore);
     }
 }

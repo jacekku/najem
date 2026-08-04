@@ -8,14 +8,28 @@ import pl.najem.mt940.Mt940Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
+import java.util.LinkedHashMap;
 
 /**
  * Renders seeded transactions as MT940 statements.
  *
- * <p>One statement per currency, currencies in alphabetical order: MT940 states the currency once,
- * on the balance fields, so transactions in two currencies cannot share a statement. The ordering is
- * what keeps the export deterministic.
+ * <p>One statement per currency: MT940 states the currency once, on the balance fields, so
+ * transactions in two currencies cannot share a statement.
+ *
+ * <p><strong>Currencies are ordered by first appearance, not alphabetically</strong>, and that is
+ * load-bearing rather than cosmetic. Accounting derives its deduplication key from
+ * {@code statement.statementNumber()}, so a statement that changes number re-keys every payment on
+ * it — the same transfers ingest a second time as new payments, and per-workspace uniqueness on
+ * that key means the duplicates collide with nothing and nobody is told.
+ *
+ * <p>Alphabetical ordering made that reachable: a EUR line added to an account holding PLN took the
+ * number PLN had, silently re-keying every PLN payment already ingested. First appearance cannot do
+ * that, because appending only ever adds a number at the end.
+ *
+ * <p>It is equally deterministic — the same transactions in the same order always produce the same
+ * numbering, which is what the export needs. It does <em>not</em> survive a caller that reorders or
+ * front-truncates the list (the {@code since} filter can), and the durable fix for that is
+ * accounting keying on something the transaction owns rather than on where it landed.
  */
 @Component
 public class StatementRenderer {
@@ -33,7 +47,7 @@ public class StatementRenderer {
      */
     public List<Mt940Statement> render(String iban, List<BankTransactionDto> transactions,
                                        java.util.function.Function<String, java.math.BigDecimal> openingBalanceOf) {
-        Map<String, List<Mt940Line>> byCurrency = new TreeMap<>();
+        Map<String, List<Mt940Line>> byCurrency = new LinkedHashMap<>();
         for (BankTransactionDto transaction : transactions) {
             byCurrency.computeIfAbsent(currencyOf(transaction), currency -> new ArrayList<>())
                 .add(line(transaction));
