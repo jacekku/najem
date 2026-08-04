@@ -71,6 +71,12 @@ public class Tenancy {
         if (c.tenantContactIds().isEmpty()) {
             throw new IllegalArgumentException("A tenancy needs at least one tenant contact");
         }
+        // Rule 7, fail closed. legalForm decides the statutory deposit cap AND whether the
+        // notarial declaration gates auto-activation, so a default would silently pick the
+        // weakest of both controls on a tenancy that looks entirely valid.
+        if (c.legalForm() == null) {
+            throw new IllegalArgumentException("A tenancy needs an explicit legal form");
+        }
         return List.of(new TenancyEvents.TenancyReserved(c.workspaceId(), c.tenancyId(), c.unitId(),
             List.copyOf(c.tenantContactIds()), List.copyOf(c.guarantorContactIds()),
             c.startDate(), c.term().endDate(), c.legalForm(), c.monthly(), c.rentDay(),
@@ -121,6 +127,11 @@ public class Tenancy {
     }
 
     public List<Object> recordHandoverProtocol(HandoverProtocol protocol) {
+        // Rule 7, fail closed. The phase decides whether the move-out protocol is published to
+        // Accounting; a defaulted one starts no deposit-settlement clock and says nothing.
+        if (protocol.type() == null) {
+            throw new IllegalArgumentException("A handover protocol needs an explicit phase");
+        }
         return List.of(new TenancyEvents.HandoverProtocolRecorded(workspaceId, id, protocol));
     }
 

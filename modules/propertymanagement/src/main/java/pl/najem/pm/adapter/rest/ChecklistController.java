@@ -55,8 +55,14 @@ public class ChecklistController {
             request.signedDocRef(), request.date()));
     }
 
+    /**
+     * No default. A missing phase on a handover used to mean "move-in", so a move-out protocol
+     * sent without one was recorded as the wrong document and never reached Accounting.
+     */
     private static ChecklistPhase phaseOf(String wireName) {
-        return wireName == null ? ChecklistPhase.PRE_ACTIVATION
-            : ChecklistPhase.valueOf(wireName.toUpperCase().replace('-', '_'));
+        if (wireName == null) {
+            throw new IllegalArgumentException("phase is required");
+        }
+        return ChecklistPhase.valueOf(wireName.toUpperCase().replace('-', '_'));
     }
 }

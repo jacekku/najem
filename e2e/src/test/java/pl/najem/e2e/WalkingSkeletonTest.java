@@ -24,6 +24,12 @@ import static org.awaitility.Awaitility.await;
 @Testcontainers
 class WalkingSkeletonTest {
 
+    /**
+     * PM's property creation is a write, so it names its workspace explicitly (rule 7). Units
+     * and tenancies inherit the workspace from the property rather than taking a header.
+     */
+    private static final String DEV_WORKSPACE = "00000000-0000-0000-0000-000000000001";
+
     static final String IBAN = "PL61109010140000071219812874";
 
     @Container
@@ -66,7 +72,7 @@ class WalkingSkeletonTest {
 
     @Test
     void tenantPaysAndBoardTurnsGreen() {
-        String propertyId = given().contentType(ContentType.JSON)
+        String propertyId = given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)
             .body(Map.of("address", "Testowa 1, Kraków"))
             .post("/api/pm/properties").then().statusCode(200).extract().path("propertyId");
         String unitId = given().contentType(ContentType.JSON)

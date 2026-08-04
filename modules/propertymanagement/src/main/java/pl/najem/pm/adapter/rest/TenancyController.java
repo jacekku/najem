@@ -168,8 +168,12 @@ public class TenancyController {
             request.depositAmount(), request.paymentReference());
     }
 
+    /** No default: see Tenancy.reserve. A missing legal form is a 400, not a zwykły tenancy. */
     private static LegalForm legalFormOf(String wireName) {
-        return wireName == null ? LegalForm.ZWYKLY : LegalForm.valueOf(wireName.toUpperCase());
+        if (wireName == null) {
+            throw new IllegalArgumentException("legalForm is required");
+        }
+        return LegalForm.valueOf(wireName.toUpperCase());
     }
 
     private static BigDecimal orZero(BigDecimal amount) {

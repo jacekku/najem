@@ -180,4 +180,38 @@ class TenancyTest {
             new MonthlyAmount(new BigDecimal("2500"), null),
             10, deposit, "NAJEM/12/2026/A-KOW");
     }
+
+    /**
+     * Rule 7 (fail closed): legalForm decides both the statutory deposit cap and whether the
+     * notarial declaration gates auto-activation. Defaulting a missing one to ZWYKLY silently
+     * picks the WEAKEST controls -- the 12x cap instead of 6x, and no declaration required -- so
+     * an omitted field would disable two legal checks and look like a valid tenancy.
+     */
+    @Test
+    void amissingLegalFormIsRejectedRatherThanDefaulted() {
+        assertThatThrownBy(() -> Tenancy.reserve(new ReserveTenancy(UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), List.of(UUID.randomUUID()), List.of(),
+                LocalDate.of(2026, 9, 1), new Term.Indefinite(), null,
+                new MonthlyAmount(new BigDecimal("2500"), null), 10, null, "NAJEM/A")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("legal form");
+    }
+
+    /**
+     * Rule 7 again: the phase decides whether MoveOutProtocolRecordedEvent is published. A
+     * move-out protocol silently recorded as move-in never starts Accounting's deposit-settlement
+     * clock, and nothing anywhere reports that it did not.
+     */
+    @Test
+    void ahandoverProtocolWithNoPhaseIsRejectedRatherThanDefaulted() {
+        var history = new java.util.ArrayList<>(Tenancy.reserve(new ReserveTenancy(tenancyId,
+            workspaceId, UUID.randomUUID(), List.of(UUID.randomUUID()), List.of(),
+            LocalDate.of(2026, 9, 1), new Term.Indefinite(), LegalForm.ZWYKLY,
+            new MonthlyAmount(new BigDecimal("2500"), null), 10, null, "NAJEM/A")));
+
+        assertThatThrownBy(() -> Tenancy.from(history).recordHandoverProtocol(
+                new HandoverProtocol(null, List.of(), "", List.of(), null, LocalDate.of(2026, 9, 1))))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("phase");
+    }
 }

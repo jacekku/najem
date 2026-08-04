@@ -37,12 +37,12 @@ public class PortfolioController {
 
     @PostMapping("/properties")
     public Map<String, UUID> createProperty(
-            @RequestHeader(name = WorkspaceHeader.NAME, required = false) UUID workspaceHeader,
+            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
             @RequestBody CreatePropertyRequest request) {
         List<Owner> owners = request.owners() == null ? List.of()
             : request.owners().stream().map(o -> new Owner(o.contactId(), o.sharePercent())).toList();
         return Map.of("propertyId", portfolio.createProperty(
-            WorkspaceHeader.resolve(workspaceHeader), request.address(), owners));
+            workspaceId, request.address(), owners));
     }
 
     @PostMapping("/properties/{propertyId}/units")

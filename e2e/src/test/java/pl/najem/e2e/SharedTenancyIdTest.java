@@ -32,6 +32,12 @@ import static org.awaitility.Awaitility.await;
 @Testcontainers
 class SharedTenancyIdTest {
 
+    /**
+     * PM's property creation is a write, so it names its workspace explicitly (rule 7). Units
+     * and tenancies inherit the workspace from the property rather than taking a header.
+     */
+    private static final String DEV_WORKSPACE = "00000000-0000-0000-0000-000000000001";
+
     @Container
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
@@ -55,7 +61,7 @@ class SharedTenancyIdTest {
 
     @Test
     void pmKeepsWorkingOnATenancyAccountingHasCharged() {
-        String propertyId = given().contentType(ContentType.JSON)
+        String propertyId = given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)
             .body(Map.of("address", "Zbiegła 4, Wrocław"))
             .post("/api/pm/properties").then().statusCode(200).extract().path("propertyId");
         String unitId = given().contentType(ContentType.JSON)
