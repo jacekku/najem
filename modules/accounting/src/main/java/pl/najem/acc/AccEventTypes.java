@@ -6,6 +6,7 @@ import pl.najem.acc.domain.ChargePosted;
 import pl.najem.acc.domain.CreditNoteIssued;
 import pl.najem.acc.domain.PaymentAllocated;
 import pl.najem.acc.domain.PaymentIngested;
+import pl.najem.acc.domain.PaymentMarkedNonTenant;
 import pl.najem.eventstore.EventTypeRegistry;
 
 @Component
@@ -21,5 +22,6 @@ public class AccEventTypes {
         registry.register(CreditNoteIssued.class);
         registry.register(PaymentIngested.class);
         registry.register(PaymentAllocated.class);
+        registry.register(PaymentMarkedNonTenant.class);
     }
 }
