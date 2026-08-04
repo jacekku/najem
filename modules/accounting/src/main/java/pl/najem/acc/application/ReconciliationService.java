@@ -66,9 +66,11 @@ public class ReconciliationService {
      * a human looked at it. That is what tier 3 matches on next month, so it is learned here rather
      * than at ingestion, where the ledger was only guessing.
      *
-     * <p>An account that starts paying for a different tenancy is taken at its newer word, because
-     * the manager just confirmed it — but the manager is told, since a silent reassignment would
-     * suggest the wrong tenancy every month afterwards and look like the ledger's own opinion.
+     * <p>An account may pay for several tenancies — a parent guaranteeing two children's flats is
+     * ordinary — so every association is kept rather than the newest overwriting the last. When an
+     * account first becomes ambiguous the manager is told once, because that is the moment tier 3
+     * stops being able to identify a tenancy from it. A first association is how tier 3 learns
+     * anything and is not news.
      */
     private void rememberPayerAccount(UUID workspaceId, UUID paymentId, UUID tenancyId) {
         var payerAccounts = jdbc.queryForList("""
@@ -80,20 +82,23 @@ public class ReconciliationService {
         }
         String iban = payerAccounts.getFirst();
         var known = jdbc.queryForList("""
-            select tenancy_id from acc_payer_account where workspace_id = ? and counterparty_iban = ?
-            """, UUID.class, workspaceId, iban);
-        if (!known.isEmpty() && !known.getFirst().equals(tenancyId)) {
-            warnings.raise(workspaceId, tenancyId, List.of(Warning.of(WarningKind.PAYER_ACCOUNT_REASSIGNED,
-                "konto " + iban + " płaciło dotąd za najem " + known.getFirst()
-                    + "; od teraz podpowiadamy najem " + tenancyId)));
+            select tenancy_id from acc_payer_account
+            where workspace_id = ? and counterparty_iban = ? and tenancy_id <> ?
+            """, UUID.class, workspaceId, iban, tenancyId);
+        boolean alreadyKnownHere = jdbc.queryForObject("""
+            select count(*) from acc_payer_account
+            where workspace_id = ? and counterparty_iban = ? and tenancy_id = ?
+            """, Integer.class, workspaceId, iban, tenancyId) > 0;
+        if (!known.isEmpty() && !alreadyKnownHere) {
+            warnings.raise(workspaceId, tenancyId, List.of(Warning.of(WarningKind.PAYER_ACCOUNT_AMBIGUOUS,
+                "konto " + iban + " płaci za więcej niż jeden najem (" + known.getFirst() + ", "
+                    + tenancyId + "); nie podpowiadamy już najmu na podstawie samego konta")));
         }
         jdbc.update("""
             insert into acc_payer_account(workspace_id, counterparty_iban, tenancy_id, learned_from, learned_on)
             values (?,?,?,?,?)
-            on conflict (workspace_id, counterparty_iban)
-            do update set tenancy_id = excluded.tenancy_id,
-                          learned_from = excluded.learned_from,
-                          learned_on = excluded.learned_on
+            on conflict (workspace_id, counterparty_iban, tenancy_id)
+            do update set learned_from = excluded.learned_from, learned_on = excluded.learned_on
             """, workspaceId, iban, tenancyId, paymentId, LocalDate.now());
     }
 }

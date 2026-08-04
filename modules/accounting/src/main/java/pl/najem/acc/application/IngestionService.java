@@ -114,6 +114,11 @@ public class IngestionService {
      *
      * <p>The amount is deliberately not constrained: a part payment is still that tenant's money.
      * A reference that normalises to nothing matches no charge rather than every charge.
+     *
+     * <p>The <em>longest</em> matching reference wins, not the oldest charge. A short reference is a
+     * substring of a longer one, so a payer naming {@code NAJEM/M1/2027/09} also literally names
+     * {@code NAJEM/M1}; oldest-first would suggest a small January charge against a full September
+     * payment, and the tier badge would read as mild uncertainty rather than as the wrong month.
      */
     private Optional<UUID> referenceMatch(UUID workspaceId, BankLine line) {
         String title = normalise(line.title());
@@ -125,7 +130,9 @@ public class IngestionService {
             where workspace_id = ? and not allocated and active
               and regexp_replace(upper(payment_reference), '[^A-Z0-9]', '', 'g') <> ''
               and position(regexp_replace(upper(payment_reference), '[^A-Z0-9]', '', 'g') in ?) > 0
-            order by due_date limit 1
+            order by length(regexp_replace(upper(payment_reference), '[^A-Z0-9]', '', 'g')) desc,
+                     due_date
+            limit 1
             """, UUID.class, workspaceId, title));
     }
 
@@ -136,6 +143,10 @@ public class IngestionService {
      * <p>A free-text MT940 {@code :86:} carries no counterparty at all, which is an ordinary bank
      * sending less: with nothing to look up there is nothing to suggest, and the null must not
      * become a key that matches every other line which also arrived without one.
+     *
+     * <p>An account that pays for more than one tenancy — a guarantor with two children's flats —
+     * cannot identify one from the account alone, so this rung declines and the line goes to a
+     * human. Guessing would be wrong half the time and would look like the ledger's own opinion.
      */
     private Optional<UUID> rememberedPayerMatch(UUID workspaceId, BankLine line) {
         if (line.counterpartyIban() == null || line.counterpartyIban().isBlank()) {
@@ -145,7 +156,7 @@ public class IngestionService {
             select tenancy_id from acc_payer_account
             where workspace_id = ? and counterparty_iban = ?
             """, UUID.class, workspaceId, line.counterpartyIban());
-        if (tenancies.isEmpty()) {
+        if (tenancies.size() != 1) {
             return Optional.empty();
         }
         return first(jdbc.queryForList("""

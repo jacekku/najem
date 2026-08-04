@@ -7,8 +7,8 @@ public enum WarningKind {
     COLLAPSE_RULE("collapseRule"),
     /** The contractual breakdown does not sum to the agreed monthly total; the breakdown was charged. */
     BREAKDOWN_MISMATCH("breakdownMismatch"),
-    /** An account that paid for one tenancy has been confirmed against another; tier 3 now follows the newer one. */
-    PAYER_ACCOUNT_REASSIGNED("payerAccountReassigned");
+    /** An account now pays for more than one tenancy, so it can no longer identify one: tier 3 declines. */
+    PAYER_ACCOUNT_AMBIGUOUS("payerAccountAmbiguous");
 
     private final String wireName;
 

@@ -122,6 +122,24 @@ class MatchingLadderTest {
         assertThat(suggestedChargeOf("tx-ml4")).isEqualTo(exact);
     }
 
+    /**
+     * A short reference is a substring of a longer one, so a payer naming September also, literally,
+     * names January. The most specific claim wins — otherwise a full month's rent gets suggested
+     * against a small old charge, and the tier badge reads as "slightly less certain" rather than
+     * "possibly the wrong charge entirely". Found by najem-integrations reviewing tiers 2-4.
+     */
+    @Test
+    void tierTwoPrefersTheLongestReferenceThePayerNamed() {
+        var tenancyId = UUID.randomUUID();
+        ledger.postRentCharge(WS, tenancyId, new BigDecimal("500"), DUE, "NAJEM/MS1");
+        var named = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2500"), DUE.plusMonths(8),
+            "NAJEM/MS1/2027/09");
+
+        laddered.ingest(WS, credit("tx-ms1", "2500", "przelew najem ms1 2027 09", null));
+
+        assertThat(suggestedChargeOf("tx-ms1")).isEqualTo(named);
+    }
+
     /** Tier 4: an unrecognised payer with no reference is the manual queue, not a guess. */
     @Test
     void anUnknownPayerWithoutAReferenceReachesTheManualQueue() {
@@ -187,30 +205,79 @@ class MatchingLadderTest {
     }
 
     /**
-     * An account that starts paying for a different tenancy is either a family member helping out or
-     * a match about to go to the wrong tenant. The ledger takes the newer fact and tells someone —
-     * a silent reassignment would suggest the wrong tenancy every month afterwards.
+     * A parent guaranteeing two children's flats pays for both from one account — the ordinary case,
+     * not the exotic one. Both associations are remembered: forgetting the first would make tier 3
+     * confidently suggest the second flat's charge for the first flat's payment.
      */
     @Test
-    void anAccountPayingForANewTenancyRaisesAWarning() {
-        var first = UUID.randomUUID();
-        var second = UUID.randomUUID();
-        var shared = "PL83101010230000261395100000";
-        ledger.postRentCharge(WS, first, new BigDecimal("2800"), DUE, "NAJEM/ML9/2027");
-        laddered.ingest(WS, credit("tx-ml9", "2800", "NAJEM/ML9/2027", shared));
-        reconciliation.confirm(WS, paymentOf("tx-ml9"));
+    void anAccountMayPayForMoreThanOneTenancy() {
+        var flatA = UUID.randomUUID();
+        var flatB = UUID.randomUUID();
+        var guarantor = "PL83101010230000261395100000";
+        confirmedPaymentFrom(guarantor, flatA, "2800", "NAJEM/ML9A/2027", "tx-ml9a");
+        confirmedPaymentFrom(guarantor, flatB, "2900", "NAJEM/ML9B/2027", "tx-ml9b");
 
-        ledger.postRentCharge(WS, second, new BigDecimal("2900"), DUE, "NAJEM/ML9B/2027");
-        laddered.ingest(WS, credit("tx-ml9b", "2900", "NAJEM/ML9B/2027", shared));
-        reconciliation.confirm(WS, paymentOf("tx-ml9b"));
-
-        assertThat(warnings.unseen(WS)).anySatisfy(w -> {
-            assertThat(w.kind()).isEqualTo(WarningKind.PAYER_ACCOUNT_REASSIGNED);
-            assertThat(w.tenancyId()).isEqualTo(second);
-        });
-        assertThat(jdbc.queryForObject("""
+        assertThat(jdbc.queryForList("""
             select tenancy_id from acc_payer_account where workspace_id = ? and counterparty_iban = ?
-            """, UUID.class, WS, shared)).isEqualTo(second);
+            """, UUID.class, WS, guarantor)).containsExactlyInAnyOrder(flatA, flatB);
+    }
+
+    /**
+     * With two tenancies behind one account there is no honest answer from the account alone, so
+     * tier 3 declines and the line goes to a human. Guessing would be wrong half the time and would
+     * look like the ledger's own opinion.
+     */
+    @Test
+    void tierThreeDeclinesToGuessBetweenTwoTenancies() {
+        var flatA = UUID.randomUUID();
+        var flatB = UUID.randomUUID();
+        var guarantor = "PL83101010230000261395100001";
+        confirmedPaymentFrom(guarantor, flatA, "3100", "NAJEM/MG1A/2027", "tx-mg1a");
+        confirmedPaymentFrom(guarantor, flatB, "3200", "NAJEM/MG1B/2027", "tx-mg1b");
+        ledger.postRentCharge(WS, flatA, new BigDecimal("3100"), DUE.plusMonths(1), "NAJEM/MG1C/2027");
+
+        laddered.ingest(WS, credit("tx-mg1c", "3100", "", guarantor));
+
+        assertThat(statusOf("tx-mg1c")).isEqualTo("unmatched");
+    }
+
+    /**
+     * The manager is told once, when the account stops being able to identify a tenancy on its own —
+     * not every month. That is the moment tier 3 goes quiet for it, and the moment worth knowing.
+     */
+    @Test
+    void anAccountBecomingAmbiguousWarnsOnceRatherThanEveryMonth() {
+        var flatA = UUID.randomUUID();
+        var flatB = UUID.randomUUID();
+        var guarantor = "PL83101010230000261395100002";
+        confirmedPaymentFrom(guarantor, flatA, "3300", "NAJEM/MG2A/2027", "tx-mg2a");
+        confirmedPaymentFrom(guarantor, flatB, "3400", "NAJEM/MG2B/2027", "tx-mg2b");
+        confirmedPaymentFrom(guarantor, flatB, "3400", "NAJEM/MG2C/2027", "tx-mg2c");
+
+        var raised = warnings.unseen(WS).stream()
+            .filter(w -> w.kind() == WarningKind.PAYER_ACCOUNT_AMBIGUOUS)
+            .filter(w -> w.detail().contains(guarantor))
+            .toList();
+        assertThat(raised).singleElement()
+            .satisfies(w -> assertThat(w.detail()).contains(flatA.toString()).contains(flatB.toString()));
+    }
+
+    /** A first association is how tier 3 learns anything. It is not news. */
+    @Test
+    void learningAnAccountForTheFirstTimeWarnsAboutNothing() {
+        var tenancyId = UUID.randomUUID();
+        var account = "PL83101010230000261395100003";
+        confirmedPaymentFrom(account, tenancyId, "3500", "NAJEM/MG3/2027", "tx-mg3");
+
+        assertThat(warnings.unseen(WS)).noneSatisfy(w ->
+            assertThat(w.detail()).contains(account));
+    }
+
+    private static void confirmedPaymentFrom(String payerIban, UUID tenancyId, String amount,
+                                             String reference, String externalId) {
+        ledger.postRentCharge(WS, tenancyId, new BigDecimal(amount), DUE, reference);
+        laddered.ingest(WS, credit(externalId, amount, reference, payerIban));
+        reconciliation.confirm(WS, paymentOf(externalId));
     }
 
     /** Automation is built and off: the ladder suggests, and only a manager moves money. */
