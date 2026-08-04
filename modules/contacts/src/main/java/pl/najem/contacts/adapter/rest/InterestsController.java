@@ -16,6 +16,7 @@ import pl.najem.contacts.application.Interest;
 import pl.najem.contacts.application.InterestService;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -31,9 +32,11 @@ public class InterestsController {
     }
 
     private final InterestService interests;
+    private final Clock clock;
 
-    public InterestsController(InterestService interests) {
+    public InterestsController(InterestService interests, Clock clock) {
         this.interests = interests;
+        this.clock = clock;
     }
 
     @PostMapping("/{contactId}/interests")
@@ -51,7 +54,7 @@ public class InterestsController {
                          @PathVariable UUID interestId,
                          @RequestParam(required = false)
                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate on) {
-        interests.withdraw(workspaceId, interestId, on == null ? LocalDate.now() : on);
+        interests.withdraw(workspaceId, interestId, on == null ? LocalDate.now(clock) : on);
     }
 
     @GetMapping("/units/{unitId}/interests")

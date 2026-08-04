@@ -47,10 +47,10 @@ class RetentionServiceTest {
         var registry = new EventTypeRegistry();
         ContactsEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        retention = new RetentionService(store, jdbc);
-        contacts = new ContactService(store, jdbc, retention);
-        interests = new InterestService(store, jdbc);
         directory = new ContactDirectory(jdbc);
+        retention = new RetentionService(store, jdbc, directory);
+        contacts = new ContactService(store, jdbc, retention, directory);
+        interests = new InterestService(store, jdbc, directory);
     }
 
     private static UUID aContactRetainedUntil(LocalDate retainUntil) {

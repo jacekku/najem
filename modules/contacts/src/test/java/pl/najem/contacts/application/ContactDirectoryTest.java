@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
 class ContactDirectoryTest {
@@ -43,7 +44,8 @@ class ContactDirectoryTest {
         var registry = new EventTypeRegistry();
         ContactsEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        service = new ContactService(store, jdbc, new RetentionService(store, jdbc));
+        var contactDirectory = new ContactDirectory(jdbc);
+        service = new ContactService(store, jdbc, new RetentionService(store, jdbc, contactDirectory), contactDirectory);
         directory = new ContactDirectory(jdbc);
     }
 
@@ -101,15 +103,29 @@ class ContactDirectoryTest {
             .noneSatisfy(payload -> assertThat(payload).containsAnyOf("Anna", "Kowalska", "anna@example.com"));
     }
 
+    /**
+     * The data-unchanged property this test was written for is unchanged; what changed is that the
+     * command now REFUSES rather than quietly succeeding.
+     * <p>
+     * It used to pass because the scoped {@code update} matched no row — the write was safe while
+     * the {@code ContactDetailsCorrected} event above it was appended to the victim's stream
+     * regardless. So the assertion held for a reason narrower than it appeared: it observed the
+     * projection and not the stream. Asserting the throw as well is what makes it cover both.
+     */
     @Test
     void doesNotCorrectAContactBelongingToAnotherWorkspace() {
         var contactId = anna(OTHER_AGENCY);
+        var eventsBefore = store.load(contactId, "Contact").events().size();
 
-        service.correctDetails(AGENCY, contactId,
+        assertThatThrownBy(() -> service.correctDetails(AGENCY, contactId,
             new ContactDetails("Wrong", "Person", "wrong@example.com", "+48000000000"),
-            LocalDate.of(2026, 8, 4));
+            LocalDate.of(2026, 8, 4)))
+            .isInstanceOf(NoSuchContactException.class);
 
         assertThat(directory.find(OTHER_AGENCY, contactId))
             .contains(new ContactDetails("Anna", "Kowalska", "anna@example.com", "+48600100200"));
+        assertThat(store.load(contactId, "Contact").events())
+            .as("the refused command must not have appended to the victim's stream")
+            .hasSize(eventsBefore);
     }
 }

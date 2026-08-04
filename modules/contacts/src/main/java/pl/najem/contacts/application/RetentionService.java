@@ -17,10 +17,12 @@ public class RetentionService {
 
     private final EventStore store;
     private final JdbcTemplate jdbc;
+    private final ContactDirectory directory;
 
-    public RetentionService(EventStore store, JdbcTemplate jdbc) {
+    public RetentionService(EventStore store, JdbcTemplate jdbc, ContactDirectory directory) {
         this.store = store;
         this.jdbc = jdbc;
+        this.directory = directory;
     }
 
     /** A hold set by a manager by hand: it answers to nobody but the manager. */
@@ -36,6 +38,7 @@ public class RetentionService {
      * changed roster will send the same hold repeatedly, and that is normal traffic, not an error.
      */
     public void setHold(UUID workspaceId, UUID contactId, String reason, String sourceRef, LocalDate setOn) {
+        directory.requireIn(workspaceId, contactId);
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new RetentionHoldSet(workspaceId, contactId, reason, sourceRef, setOn)), List.of());
@@ -53,6 +56,7 @@ public class RetentionService {
 
     /** Releases only {@code sourceRef}'s hold. Another source's hold on the same reason survives. */
     public void releaseHold(UUID workspaceId, UUID contactId, String reason, String sourceRef, LocalDate releasedOn) {
+        directory.requireIn(workspaceId, contactId);
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new RetentionHoldReleased(workspaceId, contactId, reason, sourceRef, releasedOn)), List.of());
@@ -74,13 +78,28 @@ public class RetentionService {
         return !activeHolds(workspaceId, contactId).isEmpty();
     }
 
-    /** Reports only — erasure stays a deliberate act while hotspot #15 (retention duration) is open. */
+    /**
+     * Reports only — erasure stays a deliberate act while hotspot #15 (retention duration) is open.
+     * <p>
+     * The {@code h.workspace_id = p.workspace_id} join predicate is redundant TODAY, and is stated
+     * anyway. {@link ContactDirectory#requireIn} now refuses to raise a hold on another workspace's
+     * contact, so no row can exist for which it changes the answer — a mutation removing it will
+     * survive, and that is expected rather than a gap in the tests.
+     * <p>
+     * It is here because this query and {@link #hasActiveHold} are two statements of one rule, and
+     * without it they said different things: a hold raised by anybody removed the contact from this
+     * report while leaving the erasure gate open. That disagreement failed toward <em>keeping</em>
+     * personal data past its retention date and telling the operator there was nothing to erase.
+     * Making the two agree is worth a line the guard already makes unreachable.
+     */
     public List<UUID> dueForErasure(UUID workspaceId, LocalDate asOf) {
         return jdbc.queryForList("""
             select p.contact_id from contacts_person p
             where p.workspace_id = ? and p.retain_until is not null and p.retain_until <= ?
               and not exists (select 1 from contacts_retention_hold h
-                              where h.contact_id = p.contact_id and h.released_on is null)
+                              where h.contact_id = p.contact_id
+                                and h.workspace_id = p.workspace_id
+                                and h.released_on is null)
             order by p.retain_until
             """, UUID.class, workspaceId, asOf);
     }

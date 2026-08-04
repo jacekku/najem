@@ -43,8 +43,9 @@ class InterestServiceTest {
         var registry = new EventTypeRegistry();
         ContactsEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        contacts = new ContactService(store, jdbc, new RetentionService(store, jdbc));
-        interests = new InterestService(store, jdbc);
+        var contactDirectory = new ContactDirectory(jdbc);
+        contacts = new ContactService(store, jdbc, new RetentionService(store, jdbc, contactDirectory), contactDirectory);
+        interests = new InterestService(store, jdbc, contactDirectory);
     }
 
     private static UUID aContactIn(UUID workspaceId) {

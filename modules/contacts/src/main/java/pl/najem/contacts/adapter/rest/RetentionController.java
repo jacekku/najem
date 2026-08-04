@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.contacts.application.RetentionService;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -28,16 +29,22 @@ public class RetentionController {
     }
 
     private final RetentionService retention;
+    private final Clock clock;
 
-    public RetentionController(RetentionService retention) {
+    public RetentionController(RetentionService retention, Clock clock) {
         this.retention = retention;
+        this.clock = clock;
+    }
+
+    private LocalDate today() {
+        return LocalDate.now(clock);
     }
 
     @PostMapping("/{contactId}/retention-holds")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void setHold(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                         @PathVariable UUID contactId, @RequestBody HoldRequest request) {
-        retention.setHold(workspaceId, contactId, request.reason(), LocalDate.now());
+        retention.setHold(workspaceId, contactId, request.reason(), today());
     }
 
     @DeleteMapping("/{contactId}/retention-holds/{reason}")
@@ -46,13 +53,13 @@ public class RetentionController {
                             @PathVariable UUID contactId, @PathVariable String reason,
                             @RequestParam(required = false)
                             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate on) {
-        retention.releaseHold(workspaceId, contactId, reason, on == null ? LocalDate.now() : on);
+        retention.releaseHold(workspaceId, contactId, reason, on == null ? today() : on);
     }
 
     @GetMapping("/erasure-due")
     public List<UUID> dueForErasure(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
                                     @RequestParam(required = false)
                                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
-        return retention.dueForErasure(workspace(workspaceId), asOf == null ? LocalDate.now() : asOf);
+        return retention.dueForErasure(workspace(workspaceId), asOf == null ? today() : asOf);
     }
 }

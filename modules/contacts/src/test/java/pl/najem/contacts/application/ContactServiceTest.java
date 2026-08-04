@@ -41,7 +41,8 @@ class ContactServiceTest {
         var registry = new EventTypeRegistry();
         ContactsEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        service = new ContactService(store, jdbc, new RetentionService(store, jdbc));
+        var contactDirectory = new ContactDirectory(jdbc);
+        service = new ContactService(store, jdbc, new RetentionService(store, jdbc, contactDirectory), contactDirectory);
     }
 
     @Test

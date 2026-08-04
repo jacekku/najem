@@ -19,11 +19,14 @@ public class ContactService {
     private final EventStore store;
     private final JdbcTemplate jdbc;
     private final RetentionService retention;
+    private final ContactDirectory directory;
 
-    public ContactService(EventStore store, JdbcTemplate jdbc, RetentionService retention) {
+    public ContactService(EventStore store, JdbcTemplate jdbc, RetentionService retention,
+                          ContactDirectory directory) {
         this.store = store;
         this.jdbc = jdbc;
         this.retention = retention;
+        this.directory = directory;
     }
 
     public UUID register(NewContact contact) {
@@ -44,6 +47,7 @@ public class ContactService {
     }
 
     public void correctDetails(UUID workspaceId, UUID contactId, ContactDetails details, LocalDate correctedOn) {
+        directory.requireIn(workspaceId, contactId);
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new ContactDetailsCorrected(workspaceId, contactId, correctedOn)), List.of());

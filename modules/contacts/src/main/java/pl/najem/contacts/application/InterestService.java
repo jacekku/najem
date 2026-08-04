@@ -18,14 +18,17 @@ public class InterestService {
 
     private final EventStore store;
     private final JdbcTemplate jdbc;
+    private final ContactDirectory directory;
 
-    public InterestService(EventStore store, JdbcTemplate jdbc) {
+    public InterestService(EventStore store, JdbcTemplate jdbc, ContactDirectory directory) {
         this.store = store;
         this.jdbc = jdbc;
+        this.directory = directory;
     }
 
     public UUID register(UUID workspaceId, UUID contactId, UUID unitId,
                          BigDecimal willingToPay, LocalDate desiredStart) {
+        directory.requireIn(workspaceId, contactId);
         UUID interestId = UUID.randomUUID();
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
