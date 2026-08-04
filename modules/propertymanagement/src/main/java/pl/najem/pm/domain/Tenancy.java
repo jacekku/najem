@@ -3,7 +3,13 @@ package pl.najem.pm.domain;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -30,6 +36,10 @@ public class Tenancy {
     private BigDecimal depositAmount;
     private String paymentReference;
     private State state;
+    private final Map<String, ChecklistPhase> checklistItems = new LinkedHashMap<>();
+    private final Set<String> completedItems = new HashSet<>();
+    private final Map<ChecklistPhase, HandoverProtocol> handoverProtocols =
+        new EnumMap<>(ChecklistPhase.class);
 
     private Tenancy() {
     }
@@ -66,6 +76,33 @@ public class Tenancy {
                 "Only a reserved tenancy can be activated (state: " + state + ")");
         }
         return List.of(new TenancyEvents.TenancyActivated(workspaceId, id, on));
+    }
+
+    public List<Object> addChecklistItem(String key, ChecklistPhase phase) {
+        return List.of(new TenancyEvents.ChecklistItemAdded(workspaceId, id, key, phase));
+    }
+
+    /** A mistyped key must fail loudly, not silently complete nothing. */
+    public List<Object> completeChecklistItem(String key) {
+        if (!checklistItems.containsKey(key)) {
+            throw new IllegalArgumentException("No checklist item '" + key + "' on tenancy " + id);
+        }
+        return List.of(new TenancyEvents.ChecklistItemCompleted(workspaceId, id, key));
+    }
+
+    /** An empty checklist is complete — MVP ships no predefined items; managers add their own. */
+    public boolean checklistComplete(ChecklistPhase phase) {
+        return checklistItems.entrySet().stream()
+            .filter(entry -> entry.getValue() == phase)
+            .allMatch(entry -> completedItems.contains(entry.getKey()));
+    }
+
+    public List<Object> recordHandoverProtocol(HandoverProtocol protocol) {
+        return List.of(new TenancyEvents.HandoverProtocolRecorded(workspaceId, id, protocol));
+    }
+
+    public Optional<HandoverProtocol> handoverProtocol(ChecklistPhase phase) {
+        return Optional.ofNullable(handoverProtocols.get(phase));
     }
 
     /**
@@ -125,6 +162,10 @@ public class Tenancy {
             case TenancyEvents.TenantRemovedFromTenancy e -> tenantContactIds.remove(e.contactId());
             case TenancyEvents.TenancyReservationCancelled e -> state = State.CANCELLED;
             case TenancyEvents.TenancyActivated e -> state = State.ACTIVE;
+            case TenancyEvents.ChecklistItemAdded e -> checklistItems.put(e.key(), e.phase());
+            case TenancyEvents.ChecklistItemCompleted e -> completedItems.add(e.key());
+            case TenancyEvents.HandoverProtocolRecorded e ->
+                handoverProtocols.put(e.protocol().type(), e.protocol());
             default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
         }
     }

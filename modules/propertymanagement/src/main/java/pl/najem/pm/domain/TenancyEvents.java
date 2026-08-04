@@ -29,4 +29,15 @@ public final class TenancyEvents {
 
     public record TenancyActivated(UUID workspaceId, UUID tenancyId, LocalDate activatedOn) {
     }
+
+    public record ChecklistItemAdded(UUID workspaceId, UUID tenancyId, String key,
+                                     ChecklistPhase phase) {
+    }
+
+    public record ChecklistItemCompleted(UUID workspaceId, UUID tenancyId, String key) {
+    }
+
+    public record HandoverProtocolRecorded(UUID workspaceId, UUID tenancyId,
+                                           HandoverProtocol protocol) {
+    }
 }
