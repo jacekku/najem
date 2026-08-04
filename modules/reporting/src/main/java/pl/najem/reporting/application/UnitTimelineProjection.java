@@ -145,14 +145,19 @@ public class UnitTimelineProjection implements Projection {
     }
 
     /**
-     * Accepts both spellings on purpose. The stored event carries Jackson's default enum rendering
-     * ({@code ERROR_ANNULLED}) while {@code EndReason.wireName()} — the form PM calls the published
-     * contract — is {@code error-annulled}, and only the integration event uses it. Matching either
-     * means a change on one path cannot silently turn every annulment back into an ending.
+     * The one spelling the stored event actually carries — Jackson's default enum rendering.
+     * <p>
+     * Deliberately NOT tolerant of {@code EndReason.wireName()}'s {@code error-annulled}, which
+     * appears only on the integration event. Accepting both would resolve the ambiguity by
+     * tolerating it: the day PM makes {@code wireName()} real on the stored event, a tolerant
+     * reader keeps working and nobody learns the contract moved. The loud failure lives in
+     * {@code AnnulledTenancyTest} instead, where it fires at build time rather than turning every
+     * annulment silently back into an ending in production.
      */
+    private static final String ANNULLED = "ERROR_ANNULLED";
+
     private static boolean isAnnulment(JsonNode p) {
-        var reason = p.path("reasonType").asText("");
-        return "ERROR_ANNULLED".equals(reason) || "error-annulled".equals(reason);
+        return ANNULLED.equals(p.path("reasonType").asText(""));
     }
 
     /**

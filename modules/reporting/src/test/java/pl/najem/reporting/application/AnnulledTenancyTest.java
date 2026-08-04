@@ -193,19 +193,30 @@ class AnnulledTenancyTest {
     }
 
     /**
-     * Pins which spelling the STORED event actually carries. Reporting reads the stored payload,
-     * where Jackson renders the enum as {@code ERROR_ANNULLED}; {@code EndReason.wireName()} —
-     * the form PM documents as the published contract — appears only on the integration event.
-     * If this assertion ever flips, the projection still works because it accepts both, and this
-     * test is where the change becomes visible instead of silently turning annulments into endings.
+     * The tripwire for the annulment spelling, and the reason the projection is not tolerant of two.
+     * <p>
+     * Reporting reads the stored payload, where Jackson renders the enum as {@code ERROR_ANNULLED}.
+     * {@code EndReason.wireName()} — the form PM's javadoc calls the published contract — is
+     * {@code error-annulled} and appears only on the integration event. A reader accepting both
+     * would keep working if that ever changed, and nobody would learn the contract had moved.
+     * <p>
+     * So this asserts the exact string. If PM makes {@code wireName()} real on the stored event,
+     * <b>this test fails and names what to change</b> — at build time, in the module that depends
+     * on it, instead of every annulment silently becoming an ending in production.
      */
     @Test
-    void recordsWhichSpellingOfTheReasonTheStoredEventCarries() {
+    void pinsTheExactSpellingOfTheAnnulmentReasonOnTheStoredEvent() {
         var reason = jdbc.queryForObject("""
             select payload ->> 'reasonType' from events
             where event_type = 'TenancyEnded' and payload ->> 'tenancyId' = ?
             """, String.class, annulledTenancy.toString());
 
-        assertThat(reason).isIn("ERROR_ANNULLED", "error-annulled");
+        assertThat(reason)
+            .as("""
+                The stored TenancyEnded no longer spells the annulment reason 'ERROR_ANNULLED'. \
+                Reporting excludes annulled tenancies from occupancy by matching this exact string, \
+                so a change here turns every annulment into an ordinary ending. Talk to @najem-pm, \
+                then update UnitTimelineProjection.ANNULLED.""")
+            .isEqualTo("ERROR_ANNULLED");
     }
 }
