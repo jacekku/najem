@@ -21,10 +21,12 @@ public class LedgerService {
 
     private final EventStore store;
     private final JdbcTemplate jdbc;
+    private final WarningService warnings;
 
-    public LedgerService(EventStore store, JdbcTemplate jdbc) {
+    public LedgerService(EventStore store, JdbcTemplate jdbc, WarningService warnings) {
         this.store = store;
         this.jdbc = jdbc;
+        this.warnings = warnings;
     }
 
     public UUID postRentCharge(UUID workspaceId, UUID tenancyId, BigDecimal amount, LocalDate dueDate,
@@ -63,7 +65,9 @@ public class LedgerService {
             insert into acc_tenancy_status(tenancy_id, workspace_id, status) values (?, ?, 'awaiting')
             on conflict (tenancy_id) do update set status = 'awaiting'
             """, tenancyId, workspaceId);
-        return new PostedCharges(List.copyOf(chargeIds), breakdown.warnings());
+        var raised = breakdown.warnings();
+        warnings.raise(workspaceId, tenancyId, raised);
+        return new PostedCharges(List.copyOf(chargeIds), raised);
     }
 
     /**

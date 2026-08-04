@@ -44,7 +44,7 @@ class ReconciliationServiceTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = new LedgerService(store, jdbc);
+        ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService(since -> List.of(), store, jdbc);
         reconciliation = new ReconciliationService(store, jdbc);
     }

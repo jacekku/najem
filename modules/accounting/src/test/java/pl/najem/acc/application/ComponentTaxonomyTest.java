@@ -48,7 +48,7 @@ class ComponentTaxonomyTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = new LedgerService(store, jdbc);
+        ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
     }
 
     @Test
@@ -60,7 +60,7 @@ class ComponentTaxonomyTest {
 
         assertThat(componentsOf(tenancyId)).containsExactly("rent");
         assertThat(amountOf(tenancyId, "rent")).isEqualByComparingTo("3000");
-        assertThat(posted.warnings()).anySatisfy(w -> assertThat(w).contains("no contractual split"));
+        assertThat(posted.warnings()).anySatisfy(w -> assertThat(w.detail()).contains("no contractual split"));
     }
 
     @Test
@@ -75,7 +75,7 @@ class ComponentTaxonomyTest {
         assertThat(componentsOf(tenancyId)).containsExactlyInAnyOrder("rent", "adminFee", "mediaAdvance");
         assertThat(amountOf(tenancyId, "rent")).isEqualByComparingTo("2400");
         assertThat(amountOf(tenancyId, "mediaAdvance")).isEqualByComparingTo("300");
-        assertThat(posted.warnings()).noneSatisfy(w -> assertThat(w).contains("no contractual split"));
+        assertThat(posted.warnings()).noneSatisfy(w -> assertThat(w.detail()).contains("no contractual split"));
     }
 
     /**
@@ -93,7 +93,7 @@ class ComponentTaxonomyTest {
             DUE, "NAJEM/CT3/2026");
 
         assertThat(componentsOf(tenancyId)).containsExactlyInAnyOrder("rent", "mediaAdvance");
-        assertThat(posted.warnings()).noneSatisfy(w -> assertThat(w).contains("no contractual split"));
+        assertThat(posted.warnings()).noneSatisfy(w -> assertThat(w.detail()).contains("no contractual split"));
     }
 
     @Test
@@ -105,7 +105,7 @@ class ComponentTaxonomyTest {
                 new BigDecimal("300"), new BigDecimal("200")),
             DUE, "NAJEM/CT4/2026");
 
-        assertThat(posted.warnings()).anySatisfy(w -> assertThat(w).contains("does not sum"));
+        assertThat(posted.warnings()).anySatisfy(w -> assertThat(w.detail()).contains("does not sum"));
         assertThat(totalOf(tenancyId)).isEqualByComparingTo("2900");
     }
 

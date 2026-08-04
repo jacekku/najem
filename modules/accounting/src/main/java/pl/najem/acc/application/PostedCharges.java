@@ -7,5 +7,5 @@ import java.util.UUID;
  * What was charged, and what the manager should know about it. Warnings never block the posting —
  * this is an expert system: it flags, the manager decides.
  */
-public record PostedCharges(List<UUID> chargeIds, List<String> warnings) {
+public record PostedCharges(List<UUID> chargeIds, List<Warning> warnings) {
 }

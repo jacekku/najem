@@ -13,6 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.WorkspaceContext;
 import pl.najem.acc.application.LedgerService;
+import pl.najem.acc.application.WarningService;
 import pl.najem.contracts.events.TenancyActivatedEvent;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -49,7 +50,7 @@ class TenancyActivatedHandlerTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        handler = new TenancyActivatedHandler(new LedgerService(store, jdbc));
+        handler = new TenancyActivatedHandler(new LedgerService(store, jdbc, new WarningService(jdbc)));
     }
 
     @Test

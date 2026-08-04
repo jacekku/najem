@@ -1,6 +1,7 @@
 package pl.najem.acc.application;
 
 import pl.najem.acc.domain.Component;
+import pl.najem.acc.domain.WarningKind;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -42,21 +43,24 @@ public record MonthlyBreakdown(BigDecimal monthlyTotal, boolean componentSplitIn
         return List.copyOf(lines);
     }
 
-    public List<String> warnings() {
-        var warnings = new ArrayList<String>();
+    public List<Warning> warnings() {
+        var warnings = new ArrayList<Warning>();
         if (!componentSplitInContract) {
-            warnings.add("no contractual split: the entire amount enters the ryczałt base "
-                + "and the deposit valorization base");
+            warnings.add(Warning.of(WarningKind.COLLAPSE_RULE,
+                "no contractual split: the entire amount enters the ryczałt base "
+                    + "and the deposit valorization base"));
         } else if (splitIsEmpty()) {
-            warnings.add("no contractual split: a split was declared but no components were given, "
-                + "so the whole amount was charged as rent");
+            warnings.add(Warning.of(WarningKind.COLLAPSE_RULE,
+                "no contractual split: a split was declared but no components were given, "
+                    + "so the whole amount was charged as rent"));
         } else {
             var sum = chargeLines().stream()
                 .map(ChargeLine::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (sum.compareTo(monthlyTotal) != 0) {
-                warnings.add("the contractual breakdown (" + sum + ") does not sum to the agreed "
-                    + "monthly total (" + monthlyTotal + "); the breakdown was charged");
+                warnings.add(Warning.of(WarningKind.BREAKDOWN_MISMATCH,
+                    "the contractual breakdown (" + sum + ") does not sum to the agreed monthly total ("
+                        + monthlyTotal + "); the breakdown was charged"));
             }
         }
         return List.copyOf(warnings);
