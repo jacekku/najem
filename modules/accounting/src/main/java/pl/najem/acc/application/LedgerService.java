@@ -3,13 +3,16 @@ package pl.najem.acc.application;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.najem.acc.domain.ChargeDeactivated;
 import pl.najem.acc.domain.ChargePosted;
+import pl.najem.acc.domain.CreditNoteIssued;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -61,6 +64,68 @@ public class LedgerService {
             on conflict (tenancy_id) do update set status = 'awaiting'
             """, tenancyId, workspaceId);
         return new PostedCharges(List.copyOf(chargeIds), breakdown.warnings());
+    }
+
+    /**
+     * Withdraws an unpaid charge. The row survives as inactive with a reversal underneath — the
+     * ledger does not delete facts it has asserted.
+     */
+    public void deactivateCharge(UUID workspaceId, UUID chargeId, String reason) {
+        var charge = chargeIn(workspaceId, chargeId);
+        if ((Boolean) charge.get("allocated")) {
+            throw new ChargeAlreadyPaidException(
+                "charge " + chargeId + " is paid and cannot be deactivated; issue a credit note instead");
+        }
+        UUID tenancyId = (UUID) charge.get("tenancy_id");
+        var stream = store.load(tenancyId);
+        store.append(tenancyId, "TenancyLedger", stream.version(),
+            List.of(new ChargeDeactivated(chargeId, tenancyId, reason)), List.of());
+        jdbc.update("update acc_charge set active = false where charge_id = ?", chargeId);
+    }
+
+    /**
+     * Corrects an already-paid charge. The charge stands and a credit note is issued against it —
+     * the tenant is entitled to the document, and the pair is the audit trail.
+     */
+    public UUID issueCreditNote(UUID workspaceId, UUID chargeId, BigDecimal amount, String reason) {
+        var charge = chargeIn(workspaceId, chargeId);
+        if (!(Boolean) charge.get("allocated")) {
+            throw new ChargeNotPaidException(
+                "charge " + chargeId + " is unpaid; deactivate it instead of issuing a credit note");
+        }
+        var charged = (BigDecimal) charge.get("amount");
+        if (amount.signum() <= 0 || amount.compareTo(charged) > 0) {
+            throw new IllegalArgumentException(
+                "credit note of " + amount + " does not fit the charge of " + charged);
+        }
+        UUID tenancyId = (UUID) charge.get("tenancy_id");
+        UUID creditNoteId = UUID.randomUUID();
+        LocalDate issuedOn = (LocalDate) charge.get("due_date");
+        var stream = store.load(tenancyId);
+        store.append(tenancyId, "TenancyLedger", stream.version(),
+            List.of(new CreditNoteIssued(creditNoteId, chargeId, tenancyId, amount, reason, issuedOn)),
+            List.of());
+        jdbc.update("""
+            insert into acc_credit_note(credit_note_id, workspace_id, charge_id, tenancy_id, amount, reason, issued_on)
+            values (?,?,?,?,?,?,?)
+            """, creditNoteId, workspaceId, chargeId, tenancyId, amount, reason, issuedOn);
+        return creditNoteId;
+    }
+
+    /** A charge outside the caller's workspace does not exist, rather than being forbidden. */
+    private Map<String, Object> chargeIn(UUID workspaceId, UUID chargeId) {
+        var rows = jdbc.queryForList("""
+            select tenancy_id, amount, due_date, allocated from acc_charge
+            where workspace_id = ? and charge_id = ?
+            """, workspaceId, chargeId);
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException("no charge " + chargeId + " in workspace " + workspaceId);
+        }
+        var row = rows.getFirst();
+        return Map.of("tenancy_id", row.get("tenancy_id"),
+            "amount", row.get("amount"),
+            "due_date", ((java.sql.Date) row.get("due_date")).toLocalDate(),
+            "allocated", row.get("allocated"));
     }
 
     /**

@@ -51,7 +51,7 @@ public class IngestionService {
     private void suggestExactMatch(UUID workspaceId, UUID paymentId, BankLine line) {
         var chargeIds = jdbc.queryForList("""
             select charge_id from acc_charge
-            where workspace_id = ? and payment_reference = ? and amount = ? and not allocated
+            where workspace_id = ? and payment_reference = ? and amount = ? and not allocated and active
             order by due_date limit 1
             """, UUID.class, workspaceId, line.title(), line.amount());
         if (!chargeIds.isEmpty()) {

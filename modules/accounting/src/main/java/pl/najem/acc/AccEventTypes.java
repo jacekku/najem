@@ -1,7 +1,9 @@
 package pl.najem.acc;
 
 import org.springframework.stereotype.Component;
+import pl.najem.acc.domain.ChargeDeactivated;
 import pl.najem.acc.domain.ChargePosted;
+import pl.najem.acc.domain.CreditNoteIssued;
 import pl.najem.acc.domain.PaymentAllocated;
 import pl.najem.acc.domain.PaymentIngested;
 import pl.najem.eventstore.EventTypeRegistry;
@@ -15,6 +17,8 @@ public class AccEventTypes {
 
     public static void register(EventTypeRegistry registry) {
         registry.register(ChargePosted.class);
+        registry.register(ChargeDeactivated.class);
+        registry.register(CreditNoteIssued.class);
         registry.register(PaymentIngested.class);
         registry.register(PaymentAllocated.class);
     }
