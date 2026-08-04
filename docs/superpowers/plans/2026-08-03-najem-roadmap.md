@@ -18,8 +18,15 @@
 |---|---|---|---|
 | **0** | Monorepo scaffold, CI, docker-compose, `contracts` module (integration events, IDs), `platform:eventstore` (append/load + optimistic locking + outbox), **walking skeleton**: property → unit → tenancy → activate → charge → FakeBank statement → ingest → match → allocate → board green | Single agent (foundations must not fork) | `2026-08-03-phase0-setup-walking-skeleton.md` (ready) |
 | **1** | Flesh out modules on the validated bones: **PM** (full event set §9, checklists, repairs, processes), **Accounting + Tenancy Accounting ACL** (components, credit notes, deposit lifecycle, matching ladder, trust equation), **FakeBank** (deterministic scenario/fixture engine — named reproducible scenarios, no randomness; MT940 export DEFERRED to Phase 2, landing together with its parser), **Contacts** (PII lookaside, interests, retention), **UserManagement** (Keycloak, workspaces) | **5 parallel agents**, one per module; contracts frozen — changes to `contracts/` require cross-agent sign-off | One plan per module, written at phase start |
-| **2** | **Reporting** (Timeline projections, arrears board full colors), **integrations** (real MT940 upload adapter; aggregator adapter behind same port), **frontend** (may start mid-Phase-1 against contracts: Unit Board, reconciliation screen, boards) | 2–3 parallel agents | Per-track plans |
+| **2** | **Reporting** (Timeline projections — arrears COLOUR stays accounting-owned at /api/acc/board; Reporting composes, never recomputes it), **integrations** (real MT940 upload adapter; aggregator adapter behind same port), **frontend** (may start mid-Phase-1 against contracts: Unit Board, reconciliation screen, boards) | 2–3 parallel agents | `2026-08-04-phase2-reporting.md` (ready; EARLY START granted — read-side only) |
 | **3** | e2e hardening (grow the skeleton's suite — one scenario per landed feature), performance passes, gap closure from hotspot logs | 1–2 agents | Checklist-driven |
+
+## Sanctioned exception: Reporting reads streams directly (2026-08-04)
+
+Reporting is a **privileged conformist read-side**: it reads the shared `events` table directly (as `event_type` + JsonNode payload — never another module's record classes, no Gradle dependency on any module), per the domain model's context map ("all events → Reporting projections"). Guardrails:
+- **Stream allowlist, default-private:** Reporting may read only streams a module has declared readable. Initial allowlist — PM: `Property`, `Unit`, `Tenancy` · Accounting: `TenancyLedger`, `Payment` · Contacts: all (its events carry no PII by design) · UserManagement: `Workspace`, `User` ONLY (invitation/membership streams are private — adjacent to PII lookaside).
+- Every consumed stream gets a **tripwire test** in Reporting that drives the owning module's real service and fails by name when a depended-on field disappears.
+- A module changing a readable stream's payload should expect a Reporting tripwire failure, not a compile error — coordinate on the topic, don't treat it as breakage.
 
 ## Rules that keep parallel agents honest
 
