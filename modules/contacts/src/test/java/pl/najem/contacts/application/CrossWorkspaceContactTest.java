@@ -219,6 +219,38 @@ class CrossWorkspaceContactTest {
             .isEqualTo(LocalDate.of(2027, 9, 1));
     }
 
+    /**
+     * Withdrawing an interest that is not yours refuses with the module's own not-found type, not
+     * with a leaked Spring data-access exception.
+     * <p>
+     * The lookup was always workspace-scoped, so this was never a boundary hole — it was a
+     * <b>500 where a 404 belongs</b>. That matters for two reasons beyond tidiness: a caller cannot
+     * distinguish a bad id from the server being broken, and anything alerting on 5xx fires on
+     * ordinary traffic until people stop reading the alert.
+     */
+    @Test
+    void refusesToWithdrawAnInterestBelongingToAnotherWorkspace() {
+        var contactId = aContactOfTheOwner(LocalDate.of(2027, 8, 3));
+        var unitId = UUID.randomUUID();
+        var interestId = interests.register(OWNER, contactId, unitId,
+            new BigDecimal("2400"), LocalDate.of(2026, 10, 1));
+
+        assertThatThrownBy(() -> interests.withdraw(INTRUDER, interestId, LocalDate.of(2026, 11, 1)))
+            .isInstanceOf(NoSuchInterestException.class)
+            .isNotInstanceOf(org.springframework.dao.DataAccessException.class);
+
+        assertThat(interests.forUnit(OWNER, unitId))
+            .as("the owner's interest is untouched by the refused withdrawal")
+            .hasSize(1);
+    }
+
+    /** An id that names nothing at all answers identically, so the status is not an oracle. */
+    @Test
+    void refusesToWithdrawAnInterestThatDoesNotExist() {
+        assertThatThrownBy(() -> interests.withdraw(OWNER, UUID.randomUUID(), LocalDate.of(2026, 11, 1)))
+            .isInstanceOf(NoSuchInterestException.class);
+    }
+
     /** And a stranger may not use the log as an oracle either: already-erased-elsewhere is the same 404. */
     @Test
     void refusesToEraseAContactAnotherWorkspaceHasAlreadyErased() {

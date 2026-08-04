@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import pl.najem.contacts.application.NoSuchContactException;
+import pl.najem.contacts.application.NoSuchInterestException;
 
 /**
  * Scoped to this package's controllers rather than the application, because a module publishing a
@@ -27,5 +28,15 @@ public class ContactsAdvice {
     @ExceptionHandler(NoSuchContactException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public void onUnknownContact(NoSuchContactException e) {
+    }
+
+    /**
+     * Same treatment for the same reason. Withdrawing an interest that is not yours used to reach
+     * the edge as an {@code EmptyResultDataAccessException} and render as a 500 — safe, since the
+     * lookup was workspace-scoped, but it reported an outage for an ordinary bad id.
+     */
+    @ExceptionHandler(NoSuchInterestException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public void onUnknownInterest(NoSuchInterestException e) {
     }
 }
