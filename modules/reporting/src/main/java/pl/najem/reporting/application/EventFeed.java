@@ -21,6 +21,14 @@ import java.util.UUID;
  * The restriction lives here, in the one place events enter Reporting, rather than in each
  * projection — a rule every caller must remember is a rule that will eventually be forgotten,
  * and the thing being protected is other modules' private data.
+ * <p>
+ * <b>This class reads {@code events} rows directly and MUST NOT be refactored to go through
+ * {@code EventStore.load}.</b> That is not a style choice: {@code load} keys on {@code stream_id}
+ * alone and ignores {@code stream_type} (najem-build seq 103), so routing the feed through it would
+ * hand back every type sharing a stream id and silently widen the allowlist past what was granted.
+ * The one place {@code stream_type} is load-bearing for a security boundary is the one place that
+ * does not use {@code load} — keep it that way even once that defect is fixed, because this
+ * guarantee should not depend on someone else's signature staying filtered.
  */
 @Component
 public class EventFeed {
