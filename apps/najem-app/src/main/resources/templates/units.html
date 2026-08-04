@@ -14,7 +14,7 @@
         <tr>
             <th>Lokal</th>
             <th>Czynsz bazowy</th>
-            <th>Status</th>
+            <th>Ogłoszenie</th>
             <th>Najem</th>
         </tr>
         </thead>
@@ -31,17 +31,21 @@
             <td class="amount"
                 th:text="${#numbers.formatDecimal(unit.baseRent(), 1, 'WHITESPACE', 2, 'COMMA')}">—</td>
             <!--/*
-              Three states, not two: a unit nobody has ever opened to rent (inventory) is not the
-              same as one deliberately closed for renovation. Rendering them alike would tell a
-              manager work is under way on a flat that has simply never been listed.
-              The projection decides which; this only labels it.
+              This column is about MARKETING, not occupancy, and the two must not be merged
+              (najem-pm's ruling, carried into RUNNING.md at d006c90): a let unit is legitimately
+              still `inventory`, because it is not being advertised. Whether a unit is let is the
+              next column, from currentTenancyId. An earlier version headed this "Status", which
+              invites exactly the reading that a let flat is standing empty.
+
+              Still three states, not two: never advertised is not the same as deliberately
+              withdrawn. The projection decides which; this only labels it.
             */-->
             <td>
                 <span class="state" th:classappend="'state--' + ${unit.marketState()}"
                       th:switch="${unit.marketState()}">
-                    <span th:case="'open'">Do wynajęcia</span>
-                    <span th:case="'closed'">Wyłączony</span>
-                    <span th:case="'inventory'">Nieudostępniony</span>
+                    <span th:case="'open'">Ogłoszony</span>
+                    <span th:case="'closed'">Wycofany z oferty</span>
+                    <span th:case="'inventory'">Nieogłoszony</span>
                     <span th:case="*" th:text="${unit.marketState()}">—</span>
                 </span>
             </td>
