@@ -36,6 +36,11 @@ Reporting is a **privileged conformist read-side**: it reads the shared `events`
 4. **e2e is continuous:** each phase appends scenarios to `e2e/`; never a big-bang phase.
 5. **No PII in events** (PII lookaside, decided); **no LLM mentions in commits; sign as the repo user.**
 6. Deferred by domain decision (do NOT build): owner statements/tax packs/payouts, management-fee tracking, arrears-chasing workflow, prorating, soft close, aggregator choice (needs FakeBank first + sandbox trial).
+7. **Fail closed, never open (human ruling, 2026-08-04).** Two halves, both binding:
+   - **A convenience default may exist only in tests, and may never be reachable from a production profile.** Defaults that stand in for a value "not available yet" — dev workspace ids, permit-all security branches, unset-issuer fallbacks — are legitimate test scaffolding and illegitimate production behaviour. A test sets them **explicitly**; production must be unable to acquire one by omission. Where the value is genuinely absent, the application **refuses to start** with a message naming what is missing. A boot failure is a good outcome; a silent permissive default is not.
+   - **Where access is in dispute, access is denied.** Any uncertainty — no membership row, an unreadable claim, a missing workspace, a stale projection, an exception mid-check — resolves to denied. `Optional.empty()`, null and "not found" are denials, never permissions. Code may never treat "I could not determine whether this user has access" as "yes".
+
+   Rationale: both failure modes are invisible in exactly the conditions that make them dangerous. A permissive default is indistinguishable from correct behaviour until the day it is wrong, and by then it has already written to, or exposed, the wrong workspace's data.
 
 ## Walking-skeleton scope guard (Phase 0)
 
