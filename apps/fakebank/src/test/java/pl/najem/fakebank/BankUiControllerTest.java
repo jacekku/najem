@@ -283,4 +283,21 @@ class BankUiControllerTest {
         assertThat(html).contains("Rachunek nieotwarty");
         assertThat(file).contains(":60F:C260910PLN0,00");
     }
+
+    /**
+     * Two bookings must never share an id. Accounting deduplicates on it over the JSON port, so a
+     * collision means the second transfer is taken for an already-ingested duplicate and dropped —
+     * a real payment vanishing with no error anywhere.
+     */
+    @Test
+    void everyBookingGetsItsOwnId() throws Exception {
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(post("/accounts/{iban}/transactions", iban)
+                .param("amount", "100.00").param("creditDebitIndicator", "CRDT")
+                .param("bookingDate", "2026-09-10"));
+        }
+
+        assertThat(store.find(iban, null)).extracting(BankTransactionDto::id)
+            .doesNotHaveDuplicates().hasSize(5);
+    }
 }

@@ -41,6 +41,9 @@ public class BankUiController {
     private final StatementRenderer renderer;
     private final AccountRegistry accounts;
 
+    /** Monotonic across the process: see {@link #mintId}. */
+    private final java.util.concurrent.atomic.AtomicLong booked = new java.util.concurrent.atomic.AtomicLong();
+
     public BankUiController(TransactionStore store, StatementRenderer renderer, AccountRegistry accounts) {
         this.store = store;
         this.renderer = renderer;
@@ -93,13 +96,22 @@ public class BankUiController {
      * does not choose one. Letting a person type it would make booking the same transfer twice easy
      * by accident and possible on purpose, which is backwards.
      *
-     * <p><strong>It is not what accounting deduplicates on.</strong> An earlier version of this
-     * comment said it was; that was wrong, and wrong in the direction that matters, because it
-     * would let a reader believe the duplication risk here is already handled. {@code Mt940Import}
-     * builds {@code external_id} from {@code account / statementNumber / position-in-list} and says
-     * in its own javadoc that it is <em>deliberately</em> independent of the bank's reference —
-     * some banks fill that field with {@code NONREF} on every line. So an id minted here is good
-     * practice on its own merits and buys nothing downstream until accounting keys on it.
+     * <p><strong>Accounting has two ingestion paths and this id is the deduplication key on one of
+     * them.</strong> Stating both, because this comment has been wrong in each direction once:
+     *
+     * <ul>
+     *   <li><strong>The JSON port</strong> — {@code FakeBankAdapter} maps {@code tx.id()} straight
+     *       onto {@code BankLine.externalId}, and {@code IngestionService} deduplicates on that.
+     *       This is the path {@code POST /api/acc/ingest/fetch} uses and the only one this
+     *       application feeds, so <em>this id is the key</em> for everything booked here.</li>
+     *   <li><strong>The MT940 file</strong> — {@code Mt940Import} builds its own key from
+     *       {@code account / statementNumber / position-in-list} and ignores the bank's reference
+     *       deliberately, because some banks fill that field with {@code NONREF} on every line.
+     *       A transfer booked here and later imported as a file is keyed differently.</li>
+     * </ul>
+     *
+     * <p>Because the port path keys on it, the id must be unique per booking rather than merely
+     * unique per request — see {@link #mintId}.
      */
     @PostMapping("/accounts/{iban}/transactions")
     public String book(@PathVariable String iban,
@@ -116,7 +128,7 @@ public class BankUiController {
             throw new IllegalArgumentException(
                 "Amount must be positive — direction is the credit/debit indicator, never a sign");
         }
-        String id = "reczna/" + iban + "/" + (store.find(iban, null).size() + 1);
+        String id = mintId(iban);
         store.add(iban, new BankTransactionDto(id, amount, blankToNull(title), bookingDate,
             blankToNull(counterpartyName), blankToNull(counterpartyIban), bankReference(id),
             valueDate == null ? bookingDate : valueDate, creditDebitIndicator,
@@ -182,6 +194,22 @@ public class BankUiController {
             }
         }
         return closing;
+    }
+
+    /**
+     * A transaction id no two bookings can share.
+     *
+     * <p>The obvious version — {@code "reczna/" + iban + "/" + (count + 1)} — is positional, and
+     * two bookings submitted together both read the same count and mint the same id. Accounting
+     * deduplicates on this value over the JSON port, so the second transfer would be recognised as
+     * an already-ingested duplicate and silently dropped: a real payment disappearing with no error
+     * anywhere. Unlikely with one person clicking, and the failure is invisible when it happens,
+     * which is the combination worth spending an {@code AtomicLong} on.
+     *
+     * <p>Still readable, because it ends up in a payment row somebody may have to explain.
+     */
+    private String mintId(String iban) {
+        return "reczna/" + iban + "/" + booked.incrementAndGet();
     }
 
     /** A bank reference the bank invented, distinct from anything the payer wrote. */
