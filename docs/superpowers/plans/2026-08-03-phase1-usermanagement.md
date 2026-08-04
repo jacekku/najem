@@ -41,8 +41,10 @@ Recorded here so a reviewer contests them now rather than at merge.
 - **D2 — Workspace is the hard tenancy boundary** (human ruling, seq 21): workspace ≈ agency, holding multiple properties and multiple owners. Cross-workspace reads do not exist in module code.
 - **D3 — Invitee email is PII and stays out of events.** `MemberInvited` carries `invitationId`, `workspaceId`, `role`, `invitedByUserId`, `issuedOn`, `expiresOn` — no email, no name. The address lives in `um_invitation_recipient(invitation_id, email)` and is deleted when the invitation is accepted, revoked or expired. This mirrors the PII-lookaside decision without depending on `modules/contacts` (module isolation forbids the dependency, and an invitee is not yet a contact).
 - **D4 — Invitation tokens are stored hashed.** The plaintext token is returned once, at issue time, and never persisted. `um_invitation.token_hash` holds SHA-256. A stolen database row cannot be used to accept an invitation.
-- **D5 — Roles are a fixed enum in Phase 1:** `ADMIN`, `MANAGER`, `OWNER`, `VIEWER`. Not configurable, not hierarchical, no per-property grants. See the HUMAN-QUESTION at the end of this plan — this is the recommended default, and it is additive to change.
+- **D5 — Roles are a fixed enum in Phase 1: `ADMIN` and `MANAGER`.** Not configurable, not hierarchical, no per-property grants. (Superseded the plan's original four-role proposal: the coordinator ruled from the domain session records that the property OWNER is **not a system user** in MVP, and owner statements / tax packs were cut from scope — so no `OWNER`, `VIEWER` or `ACCOUNTANT` role exists yet. The enum stays open for them to arrive with owner access. najem-build seq 56.)
 - **D6 — `UserRegistered` is not an integration event.** Only `WorkspaceCreatedEvent` crosses into `contracts/`, because other modules need to validate that a `workspace_id` exists. Nobody outside this module needs to know a user exists.
+- **D7 — A workspace can never exist without an ADMIN.** `WorkspaceService.create` makes the creator an ADMIN in the same transaction and refuses to create a workspace for an unregistered user. Under invite-only, only an ADMIN can invite, so a workspace created without one could never be joined by anybody. (Coordinator ruling, seq 56 — the first-admin bootstrap question raised in this plan's original open-questions section.)
+- **D8 — A fresh deployment gets exactly one seeded account.** `PlatformOperator` registers a user from `najem.bootstrap.operator-subject`, `@ConditionalOnProperty` with **no default value**: an implicit operator would be an unauthenticated way into every deployment. This closes the other half of the bootstrap problem — invite-only otherwise leaves a brand-new installation with nobody able to issue the first invitation.
 
 ## File Structure
 
@@ -235,12 +237,13 @@ create index um_invitation_workspace_idx on um_invitation (workspace_id, status)
 ```java
 package pl.najem.um.domain;
 
-/** Workspace-scoped roles. NAJEM domain data — never Keycloak realm roles (decision D1). */
+/**
+ * Workspace-scoped roles. NAJEM domain data — never Keycloak realm roles (decision D1).
+ * Phase 1 has exactly two (decision D5); the enum stays open for owner access later.
+ */
 public enum Role {
     ADMIN,
-    MANAGER,
-    OWNER,
-    VIEWER
+    MANAGER
 }
 ```
 
@@ -2628,11 +2631,51 @@ Post to najem-build: STATUS najem-usermgmt — DONE, branch `najem-usermgmt/phas
 
 ---
 
-## Open question for the human
+## Questions raised by this plan — both ANSWERED
 
-To be posted on najem-build as a **HUMAN-QUESTION** (protocol seq 26), non-blocking — Task 1 proceeds on the stated default and a different answer is an additive change.
+Kept for the record: these were posted as HUMAN-QUESTIONs (najem-build seq 40) and ruled plan-level by the
+coordinator at seq 56, from the domain-session records rather than by asking the human again.
 
-> **HUMAN-QUESTION (non-blocking) — workspace role set.** Phase 1 needs a fixed set of workspace-scoped roles. Recommended default, which I will build unless told otherwise: **ADMIN** (manages members and invitations, full data access), **MANAGER** (day-to-day operations: properties, tenancies, reconciliation — cannot manage members), **OWNER** (read-only on the properties they own — note that per-property scoping is NOT in Phase 1, so today this behaves as workspace-wide read-only), **VIEWER** (read-only, no financial detail). Two things I would rather hear now: (a) does an agency need a distinct ACCOUNTANT role, and (b) should OWNER be restricted to specific properties in Phase 1 rather than Phase 2? (b) is the expensive one — per-property grants change the membership table shape, so if the answer is yes I would rather know before Task 1 lands.
+**1. Workspace role set — ANSWERED: ADMIN + MANAGER only.** The proposal was four roles
+(ADMIN/MANAGER/OWNER/VIEWER) plus two questions: whether an agency needs a distinct ACCOUNTANT, and
+whether OWNER should be restricted to specific properties in Phase 1. Ruling: the property OWNER is
+**not a system user in MVP**, and owner statements / tax packs were cut from scope — so no OWNER, no
+VIEWER, no ACCOUNTANT. Per-property grants are **not** Phase 1: membership stays workspace-level and
+access arrives later as an access-layer filter. See decision D5; the enum stays extensible.
+
+**2. First-admin bootstrap — ANSWERED: the recommended default was adopted.** Invite-only left two
+holes: (i) a newly created workspace has no members, so nobody can invite into it, and (ii) a fresh
+deployment has no first user at all. Both are closed — (i) by the creator becoming ADMIN inside
+`WorkspaceService.create` (decision D7), (ii) by the config-seeded `PlatformOperator` (decision D8).
+
+## As built — where the code deviates from the tasks above
+
+The tasks below were written before implementation and are kept as the record of intent. Four things
+came out differently, and the code is the truth:
+
+1. **`SecurityConfig` is unconditional, with two branches** — not `@ConditionalOnProperty`. This module
+   puts spring-security on the whole application's classpath, so with no chain registered Boot's default
+   would demand authentication on **every endpoint in the monolith**, including other modules'. The bean
+   now always registers: permit-all when no issuer is configured (identical to pre-module behaviour),
+   resource-server when one is.
+2. **`WalkingSkeletonTest` needed three more `spring.autoconfigure.exclude` entries.** e2e runs FakeBank
+   and najem-app in one JVM on one classpath, so FakeBank inherited security it has no use for and 401'd
+   the seed call. The exclusion sits where the classpath sharing happens; adding spring-security to
+   `apps/fakebank` was considered and rejected as polluting a module for a test-JVM artefact.
+3. **`KeycloakAdminAdapter` is built by `IdentityProviderConfig`, not annotated `@Component`.** The port
+   must always exist or `InvitationService` cannot be constructed and the application will not start
+   without Keycloak configured. The factory returns the real adapter when `najem.keycloak.base-url` is
+   set and otherwise one that **throws on use** — the context starts, provisioning fails loudly rather
+   than inventing accounts.
+4. **`PlatformOperator` and `WorkspaceCaller` are not in the task list at all.** They are decisions D7/D8
+   made concrete. `WorkspaceCaller` resolves the acting user — JWT when secured, configured operator when
+   not, `AccessDeniedException` when neither, so an unauthenticated request never ends up acting as
+   somebody.
+
+Also: `KeycloakAdminAdapterTest` is `@Tag("keycloak")` and excluded from the default build — it pulls and
+boots a real identity provider, which took the full build from ~30s to 21m47s. Opt in with
+`-PkeycloakTests`; CI runs it always (GitHub Actions sets `CI` itself). The trade is real and stated on
+the class: locally, nothing then proves the adapter speaks Keycloak's actual API.
 
 ## Self-Review
 

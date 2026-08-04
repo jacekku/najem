@@ -53,8 +53,16 @@ Keycloak is the identity provider and nothing more: it owns credentials, login a
 and workspace membership are NAJEM domain data in the event store. A workspace is an agency — the hard
 multi-tenancy boundary.
 
+Every workspace has an ADMIN from the moment it exists — its creator becomes one — because only an
+ADMIN can invite, so a workspace without one could never be joined. That leaves the question of who
+creates the *first* one on a fresh install: a single seeded platform-operator account, configured
+explicitly and with no default, since an implicit operator would be an unauthenticated way in.
+
 ```sh
-# 1. create a workspace (unsecured local run)
+# start the app with a seeded operator (any UUID; it is the Keycloak subject the account maps to)
+./gradlew :apps:najem-app:bootRun --args='--najem.bootstrap.operator-subject=00000000-0000-0000-0000-0000000000ff'
+
+# 1. create a workspace — the caller becomes its ADMIN
 WS=$(curl -s -X POST localhost:8080/api/um/workspaces \
   -H 'Content-Type: application/json' -d '{"name":"Agencja Krakowska"}' | jq -r .workspaceId)
 
@@ -68,12 +76,20 @@ curl -s -X POST localhost:8080/api/um/invitations/accept \
   -H 'Content-Type: application/json' -d "{\"token\":\"$TOKEN\"}"
 ```
 
+Without `najem.bootstrap.operator-subject` the calls above return 403: with no token and no configured
+operator there is nobody for the request to act as, and acting as nobody is not an option.
+
 Authentication is off by default so the walking skeleton and module tests run without an identity
-provider. Turn it on by setting the issuer:
+provider. Turn it on by setting the issuer — then every endpoint except invitation acceptance needs a
+token (acceptance stays public because the invitation token *is* the credential, and the invitee has no
+account yet):
 
 ```sh
 SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://localhost:8180/realms/najem
 ```
+
+The `KeycloakAdminAdapterTest` suite boots a real Keycloak and is excluded from the default build. Run
+it with `./gradlew build -PkeycloakTests`; CI runs it on every push.
 
 ## Test
 
