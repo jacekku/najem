@@ -51,7 +51,8 @@ public class WorkspaceController {
         UUID userId = caller.resolveWithoutWorkspace(jwt);
         UUID subject = jwt != null ? currentUser.subject(jwt) : subjectOf(userId);
         List<Map<String, Object>> workspaceList = access.forSubject(subject).stream()
-            .map(m -> Map.<String, Object>of("workspaceId", m.workspaceId(), "role", m.role().name()))
+            .map(m -> Map.<String, Object>of(
+                "workspaceId", m.workspaceId(), "name", m.name(), "role", m.role().name()))
             .toList();
         return Map.of("userId", userId, "workspaces", workspaceList);
     }

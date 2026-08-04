@@ -143,6 +143,25 @@ class MembershipServiceTest {
             .containsExactly(mine);
     }
 
+    /**
+     * The screens must name the agency rather than print its UUID, so the name has to survive the
+     * read. The second assertion is the one that matters: the name arrives via a join, and a join
+     * that matches nothing drops the whole membership — which would read as "this user belongs to
+     * no agency" and be refused, not as a missing label.
+     */
+    @Test
+    void aMembershipCarriesTheAgencysNameAndNotOnlyItsId() {
+        var workspaceId = workspace("Agencja Nazwana");
+        var me = member(workspaceId, Role.MANAGER);
+
+        assertThat(access.forSubject(me.subject()))
+            .singleElement()
+            .satisfies(m -> {
+                assertThat(m.name()).isEqualTo("Agencja Nazwana");
+                assertThat(m.workspaceId()).isEqualTo(workspaceId);
+            });
+    }
+
     @Test
     void anUnknownSubjectHasNoAccessAtAll() {
         assertThat(access.forSubject(UUID.randomUUID())).isEmpty();
