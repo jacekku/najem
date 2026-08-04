@@ -12,6 +12,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.application.DepositService;
 import pl.najem.acc.application.LedgerService;
 import pl.najem.acc.application.WarningService;
 import pl.najem.contracts.events.TenancyActivatedEvent;
@@ -50,7 +51,9 @@ class TenancyActivatedHandlerTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        handler = new TenancyActivatedHandler(new LedgerService(store, jdbc, new WarningService(jdbc)));
+        var warnings = new WarningService(jdbc);
+        handler = new TenancyActivatedHandler(new LedgerService(store, jdbc, warnings),
+            new DepositService(store, jdbc, warnings));
     }
 
     @Test
@@ -61,7 +64,7 @@ class TenancyActivatedHandlerTest {
             new BigDecimal("3000"), true, new BigDecimal("2400"), new BigDecimal("300"),
             new BigDecimal("300"), "ZWYKLY", new BigDecimal("4800"), "NAJEM/ACL1/2026"));
 
-        assertThat(componentsOf(tenancyId)).containsExactlyInAnyOrder("rent", "adminFee", "mediaAdvance");
+        assertThat(monthlyComponentsOf(tenancyId)).containsExactlyInAnyOrder("rent", "adminFee", "mediaAdvance");
         assertThat(amountOf(tenancyId, "rent")).isEqualByComparingTo("2400");
     }
 
@@ -73,13 +76,18 @@ class TenancyActivatedHandlerTest {
             new BigDecimal("3000"), false, null, null, null,
             "OKAZJONALNY", new BigDecimal("6000"), "NAJEM/ACL2/2026"));
 
-        assertThat(componentsOf(tenancyId)).containsExactly("rent");
+        assertThat(monthlyComponentsOf(tenancyId)).containsExactly("rent");
         assertThat(amountOf(tenancyId, "rent")).isEqualByComparingTo("3000");
     }
 
-    private static List<String> componentsOf(UUID tenancyId) {
-        return jdbc.queryForList("select component from acc_charge where tenancy_id = ?",
-            String.class, tenancyId);
+    /**
+     * The monthly cycle's components. The deposit is charged by the same activation but is not part
+     * of the monthly breakdown these tests are about — it has its own test and its own rules.
+     */
+    private static List<String> monthlyComponentsOf(UUID tenancyId) {
+        return jdbc.queryForList("""
+            select component from acc_charge where tenancy_id = ? and component <> 'deposit'
+            """, String.class, tenancyId);
     }
 
     private static BigDecimal amountOf(UUID tenancyId, String component) {
