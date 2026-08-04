@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.AbstractDataSource;
+import pl.najem.acc.application.BankStatementPort;
 import pl.najem.eventstore.EventStore;
 import pl.najem.eventstore.EventTypeRegistry;
 
@@ -90,6 +91,19 @@ class AccountingContextTest {
         @Bean
         Clock clock() {
             return Clock.systemUTC();
+        }
+
+        /**
+         * The bank, as the composition root publishes it — the same standing as the clock above,
+         * and for the same reason this test gives for the clock. {@code FakeBankAdapter} used to be
+         * a component in this package, so accounting appeared to supply its own bank; it is now
+         * gated on {@code najem.bank.fake.enabled} in {@code BankConfig}, because which bank a
+         * deployment talks to is not accounting's decision to make. Never called: nothing here
+         * fetches a statement.
+         */
+        @Bean
+        BankStatementPort bank() {
+            return since -> List.of();
         }
 
         /** Resolves the @Value properties accounting's own adapters declare. */
