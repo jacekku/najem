@@ -28,6 +28,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * five keys must carry no default holds until someone adds a sixth — which is exactly how four
  * write endpoints were born without a workspace header inside ninety minutes. Any new key under the
  * scanned prefixes fails this test on the commit that introduces it.
+ *
+ * <p><strong>The scope is a prefix list and its limits are real.</strong> An earlier version of this
+ * comment claimed the guard covered keys nobody had thought of; that is true only within
+ * {@link #SCANNED_PREFIXES}. {@code spring.mail.*}, {@code management.*} and a third-party starter's
+ * root are all outside it. The bound is deliberate — a <em>default</em> is only wrong where the
+ * value names an environment, and asserting that no key anywhere carries a value would fail on
+ * {@code spring.flyway.locations}, which must be packaged. Widening the prefixes as the application
+ * acquires environment-naming configuration is expected; treating this list as complete is not.
+ *
+ * <p>Secrets are the case where a bounded scope <em>is</em> wrong, because a secret is wrong
+ * wherever it appears. {@link PackagedSecretsTest} matches on the key name across every packaged
+ * config in the tree and carries no prefix list at all.
  */
 class PackagedConfigTest {
 
@@ -37,10 +49,11 @@ class PackagedConfigTest {
     /**
      * Keys that still carry a default, each with the agent who owns removing it.
      *
-     * <p>This is a debt register, not an exemption list. It is deliberately the inverse of a
-     * fix-list: everything <em>not</em> named here is checked, so the guard covers keys nobody has
-     * thought of yet. The test also fails when an entry here no longer appears in the file, so a
-     * key cannot be fixed and leave its excuse behind.
+     * <p>This is a debt register, not an exemption list — everything <em>not</em> named here fails,
+     * within the scanned prefixes. It answers "how does a guard stay green while covering someone
+     * else's debt", and nothing at all about what is in scope; scope comes from
+     * {@link #SCANNED_PREFIXES} above. The test also fails when an entry here no longer appears in
+     * the file, so a key cannot be fixed and leave its excuse behind.
      */
     private static final Set<String> KNOWN_UNFIXED = new LinkedHashSet<>(List.of(
         "spring.datasource.url",          // unowned as of seq 240 — raised by najem-reviewer
