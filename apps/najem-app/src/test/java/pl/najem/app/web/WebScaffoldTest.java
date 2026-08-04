@@ -93,6 +93,20 @@ class WebScaffoldTest {
     }
 
     /**
+     * Every screen says which agency it is showing, not only the home page. Once a person can
+     * belong to several and switch, a screen that stays silent about it invites acting in the
+     * wrong one — and a misdirected write never collides with the correct one, so nothing tells
+     * them. Asserted on a screen that is not the home page, because that is the case that was
+     * missing.
+     */
+    @Test
+    void everyScreenNamesTheAgencyItIsShowing() throws Exception {
+        mvc.perform(get("/properties"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Agencja Testowa")));
+    }
+
+    /**
      * A page that pulls its script from a third party is a page whose render depends on that party
      * being reachable, in an application handling tenancy-scoped financial data (plan decision E).
      */

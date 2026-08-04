@@ -20,6 +20,13 @@
 <header class="masthead">
     <a class="masthead__brand" th:href="@{/}">NAJEM</a>
     <!--/*
+      Which agency this request is acting in, on every screen rather than only on the home page.
+      With a switcher, a screen that does not say invites acting in the wrong agency — and a
+      misdirected write never collides with the correct one, so it does not announce itself.
+      Handed here by the resolver; this layout still resolves nothing.
+    */-->
+    <span class="masthead__agency" th:if="${activeAgency}" th:text="${activeAgency}">—</span>
+    <!--/*
       Boards here are eventually consistent. A stalled or lagging projector renders as a short or
       empty list, which is indistinguishable from a correct one — so a manager who has just created
       something and cannot see it has no way to tell "not yet" from "it didn't work". Saying so is
