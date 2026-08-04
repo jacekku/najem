@@ -50,6 +50,39 @@ class SchemaTest {
             .allSatisfy(column -> assertThat(column).startsWith("contacts_person."));
     }
 
+    /**
+     * A scoping predicate on an unindexed column is a sequential scan: it never fails, it just gets
+     * slower as an agency's data grows, which is the failure mode no test notices. Asked for by
+     * najem-reviewer (najem-build seq 187) as the half the column check alone does not cover.
+     */
+    @Test
+    void indexesWorkspaceFirstOnEveryTableThatFiltersByIt() {
+        var jdbc = migrated();
+        var tables = jdbc.queryForList("""
+            select table_name from information_schema.columns
+            where table_schema = 'public' and column_name = 'workspace_id'
+              and table_name like 'contacts%'
+            """, String.class).stream()
+            // The erasure tombstone is written and never read: it records THAT an erasure happened,
+            // for audit, and nothing queries it by workspace. It carries the column so the row can
+            // be attributed, not so it can be filtered. If anything ever reads it, index it.
+            .filter(table -> !table.equals("contacts_erasure_log"))
+            .toList();
+
+        assertThat(tables).isNotEmpty();
+        assertThat(tables).allSatisfy(table -> assertThat(jdbc.queryForList("""
+            select a.attname
+            from pg_index i
+            join pg_class c on c.oid = i.indrelid
+            join pg_attribute a on a.attrelid = c.oid and a.attnum = i.indkey[0]
+            where c.relname = ?
+            """, String.class, table))
+            .as("""
+                %s filters by workspace_id but no index leads with it, so every scoped query \
+                against it is a sequential scan.""".formatted(table))
+            .contains("workspace_id"));
+    }
+
     @Test
     void scopesEveryContactsTableByWorkspace() {
         assertThat(migrated().queryForList("""
