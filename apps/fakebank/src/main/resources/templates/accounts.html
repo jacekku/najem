@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('FakeBank — rachunki', ~{::main})}">
+<body>
+<main>
+    <h1>Rachunki</h1>
+
+    <!--/* An empty bank is a normal state, not an error: nothing has been seeded yet. Saying so,
+           and saying how to change it, beats an empty table that reads as a fault. */-->
+    <p class="empty" th:if="${#lists.isEmpty(accounts)}">
+        Żaden rachunek nie ma jeszcze operacji. Zasil bank przez
+        <code>POST /api/scenarios</code> albo uruchom <code>tools/seed-demo.sh</code>.
+    </p>
+
+    <table th:unless="${#lists.isEmpty(accounts)}">
+        <thead>
+        <tr>
+            <th>Rachunek</th>
+            <th class="num">Operacji</th>
+            <th>Waluty</th>
+            <th class="num">Wpływy − obciążenia</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="account : ${accounts}">
+            <td><a th:href="@{/accounts/{iban}(iban=${account.iban})}"
+                   th:text="${account.iban}" class="iban">PL…</a></td>
+            <td class="num" th:text="${account.lines}">0</td>
+            <td th:text="${account.currencies}">PLN</td>
+            <td class="num" th:classappend="${account.net.signum() < 0} ? 'neg'"
+                th:text="${#numbers.formatDecimal(account.net, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <!--/* Stated rather than left to be inferred: the last column adds different currencies
+           together. It is a direction-of-travel figure for a demo, and FakeBank holds no opening
+           balance, so a real balance cannot be computed from what it knows. */-->
+    <p class="footnote" th:unless="${#lists.isEmpty(accounts)}">
+        Ostatnia kolumna sumuje kwoty niezależnie od waluty i <strong>nie jest saldem</strong> —
+        FakeBank nie zna salda otwarcia.
+    </p>
+</main>
+</body>
+</html>

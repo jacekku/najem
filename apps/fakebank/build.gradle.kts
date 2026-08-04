@@ -6,5 +6,6 @@ plugins {
 dependencies {
     implementation(project(":platform:mt940"))
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }

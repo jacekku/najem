@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!--/*
+  FakeBank's shell. Deliberately the same shape as the main application's layout, and deliberately
+  its own copy: these are two separate deployments with separate classpaths, so sharing the file
+  would mean one of them serving a template it does not package.
+
+  The masthead says FAKEBANK, in a colour the main app does not use, because the one confusion
+  worth engineering against in a demo is a person not noticing which system they are looking at.
+
+  htmx is served from here, never from a CDN — same reasoning as the main app, see
+  static/vendor/README.md.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org" lang="pl" th:fragment="page(title, content)">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title}">FakeBank</title>
+    <script th:src="@{/vendor/htmx.min.js}" defer></script>
+    <link rel="stylesheet" th:href="@{/css/fakebank.css}">
+</head>
+<body>
+<header class="masthead">
+    <a class="masthead__brand" th:href="@{/}">FAKEBANK</a>
+    <span class="masthead__note">symulator banku &middot; dane wyłącznie testowe</span>
+</header>
+<main th:replace="${content}">
+    <p>Screen content renders here.</p>
+</main>
+</body>
+</html>

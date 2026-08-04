@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('FakeBank — wyciąg', ~{::main})}">
+<body>
+<main>
+    <p class="crumb"><a th:href="@{/}">← Rachunki</a></p>
+    <h1 class="iban" th:text="${iban}">PL…</h1>
+
+    <p class="empty" th:if="${empty}">
+        Ten rachunek nie ma operacji.
+    </p>
+
+    <!--/* One section per statement because MT940 states its currency once, on the balance
+           fields — so two currencies cannot share a statement. The grouping on screen is the
+           grouping in the file, not a presentational choice. */-->
+    <section th:each="statement : ${statements}" class="statement">
+        <h2>
+            Wyciąg <span th:text="${statement.statementNumber}">1/1</span>
+            <span class="ccy" th:text="${statement.currency}">PLN</span>
+        </h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Księgowanie</th>
+                <th>Waluta&nbsp;dnia</th>
+                <th>Tytuł</th>
+                <th>Kontrahent</th>
+                <th class="num">Kwota</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="line : ${statement.lines}">
+                <td th:text="${line.bookingDate}">2026-09-10</td>
+                <td th:text="${line.valueDate}">2026-09-10</td>
+                <td>
+                    <span th:text="${line.remittanceInfo}">NAJEM/M1/2026</span>
+                    <!--/* The bank's own reference, shown small: it is what the dedup key is built
+                           from, so when a line imports twice this is the field to look at. */-->
+                    <span class="ref" th:if="${line.bankReference}"
+                          th:text="${line.bankReference}">BNP0001</span>
+                </td>
+                <td>
+                    <span th:text="${line.counterpartyName}">—</span>
+                    <span class="ref" th:if="${line.counterpartyIban}"
+                          th:text="${line.counterpartyIban}">PL…</span>
+                </td>
+                <!--/* Amounts are always positive in MT940; the mark carries direction. The sign
+                       here is presentation only, and the class is what a reader actually scans. */-->
+                <td class="num" th:classappend="${line.mark.name() == 'D'} ? 'neg' : 'pos'"
+                    th:text="${(line.mark.name() == 'D' ? '−' : '+')
+                              + #numbers.formatDecimal(line.amount, 1, 'WHITESPACE', 2, 'COMMA')}">+0,00</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!--/* The raw file, fetched on demand rather than rendered into the page: what appears here is
+           byte-for-byte what GET /api/accounts/{iban}/statement.mt940 hands to accounting. A
+           re-rendering could differ from the thing being demonstrated. */-->
+    <section th:unless="${empty}" class="raw">
+        <button type="button"
+                th:hx-get="@{/accounts/{iban}/mt940(iban=${iban})}"
+                hx-target="#mt940" hx-swap="innerHTML">
+            Pokaż plik MT940
+        </button>
+        <pre id="mt940"></pre>
+    </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,165 @@
+/*
+ * FakeBank's own stylesheet, matching the main application's approach: a small number of custom
+ * properties, no framework, no build step. It is a separate file rather than a shared one because
+ * these are separate deployments — see templates/layout.html.
+ *
+ * The one deliberate divergence is the masthead colour. Two systems that look identical in a demo
+ * are two systems a viewer will confuse, and confusing the bank with the agency is the specific
+ * mistake worth preventing here.
+ */
+:root {
+    --ink: #1c1b19;
+    --paper: #fbfaf8;
+    --rule: #d8d4cd;
+    --quiet: #6b665e;
+    --bank: #14532d;
+    --neg: #9a2c2c;
+    --pos: #14532d;
+}
+
+body {
+    margin: 0;
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+}
+
+.masthead {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 2px solid var(--bank);
+}
+
+.masthead__brand {
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    color: var(--bank);
+}
+
+.masthead__note {
+    font-size: 0.8125rem;
+    color: var(--quiet);
+}
+
+main {
+    padding: 1.25rem;
+    max-width: 60rem;
+}
+
+h1 {
+    font-size: 1.375rem;
+    margin: 0 0 1rem;
+}
+
+h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 1.5rem 0 0.5rem;
+}
+
+.crumb {
+    margin: 0 0 0.5rem;
+    font-size: 0.875rem;
+}
+
+.crumb a, .iban a {
+    color: inherit;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+th, td {
+    text-align: left;
+    padding: 0.375rem 0.5rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+}
+
+th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--quiet);
+    font-weight: 600;
+}
+
+/* Figures line up only in a tabular font; a column of amounts that does not align is a column
+   nobody can scan for the odd one out. Thousands are grouped with a plain space, per Polish
+   convention, so the cell must not wrap — "2 500,00" broken across two lines reads as two
+   numbers. */
+.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.neg { color: var(--neg); }
+.pos { color: var(--pos); }
+
+.iban, code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.iban { font-size: 0.9375rem; }
+
+/* Secondary identifiers — bank reference, counterparty account. Present for when someone needs
+   them, quiet enough not to compete with the amount. */
+.ref {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: var(--quiet);
+}
+
+.ccy {
+    font-size: 0.75rem;
+    color: var(--quiet);
+    letter-spacing: 0.04em;
+}
+
+.empty, .footnote {
+    color: var(--quiet);
+    font-size: 0.875rem;
+}
+
+.footnote {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.75rem;
+}
+
+.raw {
+    margin-top: 2rem;
+}
+
+button {
+    font: inherit;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+}
+
+button:hover {
+    border-color: var(--bank);
+}
+
+pre {
+    font-size: 0.8125rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0.75rem 0 0;
+}
+
+pre:not(:empty) {
+    padding: 0.75rem;
+    background: #fff;
+    border: 1px solid var(--rule);
+}
