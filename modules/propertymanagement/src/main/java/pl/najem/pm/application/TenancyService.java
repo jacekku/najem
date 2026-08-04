@@ -81,7 +81,8 @@ public class TenancyService {
         store.append(tenancy.unitId(), "Unit", unitStream.version(),
             Unit.from(unitStream.events()).releaseTenancyPeriod(tenancyId), List.of());
         due.disarm(TenancyStartProcess.KIND, tenancyId);
-        jdbc.update("update pm_tenancy set state = 'CANCELLED' where tenancy_id = ?", tenancyId);
+        jdbc.update("update pm_tenancy set state = 'CANCELLED' where tenancy_id = ? "
+            + "and workspace_id = ?", tenancyId, tenancy.workspaceId());
     }
 
     public void addTenant(UUID tenancyId, UUID contactId) {
@@ -117,8 +118,8 @@ public class TenancyService {
                 breakdown == null ? null : breakdown.mediaAdvance(),
                 tenancy.legalForm().wireName(), tenancy.depositAmount(),
                 tenancy.paymentReference())));
-        jdbc.update("update pm_tenancy set state = 'ACTIVE', activated_on = ? where tenancy_id = ?",
-            on, tenancyId);
+        jdbc.update("update pm_tenancy set state = 'ACTIVE', activated_on = ? "
+            + "where tenancy_id = ? and workspace_id = ?", on, tenancyId, tenancy.workspaceId());
         armEndingSoon(tenancyId);
         return warnings(tenancyId);
     }
@@ -180,12 +181,13 @@ public class TenancyService {
                 breakdown == null ? null : breakdown.mediaAdvance(),
                 change.type().wireName())));
         jdbc.update("update pm_tenancy set monthly_total = ?, rent = ?, admin_fee = ?, "
-                + "media_advance = ?, component_split = ? where tenancy_id = ?",
+                + "media_advance = ?, component_split = ? where tenancy_id = ? "
+                + "and workspace_id = ?",
             monthly.total(),
             breakdown == null ? null : breakdown.rent(),
             breakdown == null ? null : breakdown.adminFee(),
             breakdown == null ? null : breakdown.mediaAdvance(),
-            monthly.componentSplitInContract(), tenancyId);
+            monthly.componentSplitInContract(), tenancyId, tenancy.workspaceId());
     }
 
     /**
@@ -236,7 +238,8 @@ public class TenancyService {
         due.disarm(TenancyStartProcess.KIND, tenancyId);
         due.disarm(RentChangeProcess.KIND, tenancyId);
         due.disarm(EndOfTenancyProcess.KIND, tenancyId);
-        jdbc.update("update pm_tenancy set state = 'ENDED' where tenancy_id = ?", tenancyId);
+        jdbc.update("update pm_tenancy set state = 'ENDED' where tenancy_id = ? "
+            + "and workspace_id = ?", tenancyId, tenancy.workspaceId());
     }
 
     /**
@@ -291,9 +294,9 @@ public class TenancyService {
 
         var corrected = Tenancy.from(store.load(tenancyId, "Tenancy").events());
         jdbc.update("update pm_tenancy set payment_reference = ?, rent_day = ?, start_date = ?, "
-                + "monthly_total = ? where tenancy_id = ?",
+                + "monthly_total = ? where tenancy_id = ? and workspace_id = ?",
             corrected.paymentReference(), corrected.rentDay(), corrected.startDate(),
-            corrected.monthly().total(), tenancyId);
+            corrected.monthly().total(), tenancyId, corrected.workspaceId());
         return corrected.warnings().messages();
     }
 
@@ -305,10 +308,10 @@ public class TenancyService {
             List.of());
         // The aggregate decides which policy is current (a renewal supersedes), so the
         // projection copies its answer rather than reimplementing "latest".
-        Tenancy.from(store.load(tenancyId, "Tenancy").events()).insuranceExpiry()
-            .ifPresent(expiry -> jdbc.update(
-                "update pm_tenancy set insurance_valid_to = ? where tenancy_id = ?",
-                expiry, tenancyId));
+        var updated = Tenancy.from(store.load(tenancyId, "Tenancy").events());
+        updated.insuranceExpiry().ifPresent(expiry -> jdbc.update(
+            "update pm_tenancy set insurance_valid_to = ? where tenancy_id = ? "
+                + "and workspace_id = ?", expiry, tenancyId, updated.workspaceId()));
     }
 
     /** One sweep item as its own unit of work — see {@link SweepResult}. */

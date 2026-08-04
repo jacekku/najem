@@ -47,9 +47,10 @@ public class RepairService {
 
     public void complete(UUID repairId, LocalDate on, String notes) {
         var stream = store.load(repairId, "Repair");
-        store.append(repairId, "Repair", stream.version(),
-            Repair.from(stream.events()).complete(on, notes), List.of());
-        jdbc.update("update pm_repair set completed_on = ? where repair_id = ?", on, repairId);
+        var repair = Repair.from(stream.events());
+        store.append(repairId, "Repair", stream.version(), repair.complete(on, notes), List.of());
+        jdbc.update("update pm_repair set completed_on = ? where repair_id = ? "
+            + "and workspace_id = ?", on, repairId, repair.workspaceId());
     }
 
     private UUID workspaceOfAsset(RepairScope scope, UUID assetId) {

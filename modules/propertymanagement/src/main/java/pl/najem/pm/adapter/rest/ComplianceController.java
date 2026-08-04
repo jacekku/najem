@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.ComplianceService;
+import pl.najem.pm.application.WorkspaceGuard;
 import pl.najem.pm.domain.InspectionType;
 
 import java.time.LocalDate;
@@ -24,14 +25,18 @@ public class ComplianceController {
                                     String findings) {}
 
     private final ComplianceService compliance;
+    private final WorkspaceGuard guard;
 
-    public ComplianceController(ComplianceService compliance) {
+    public ComplianceController(ComplianceService compliance, WorkspaceGuard guard) {
         this.compliance = compliance;
+        this.guard = guard;
     }
 
     @PostMapping("/properties/{propertyId}/inspections")
-    public Map<String, UUID> record(@PathVariable UUID propertyId,
+    public Map<String, UUID> record(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+                                    @PathVariable UUID propertyId,
                                     @RequestBody InspectionRequest request) {
+        guard.requireProperty(workspaceId, propertyId);
         return Map.of("inspectionId", compliance.recordInspection(propertyId,
             typeOf(request.type()), request.performedOn(), request.reportDoc(),
             request.findings()));

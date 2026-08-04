@@ -47,9 +47,10 @@ public class PortfolioService {
 
     public void setUnitBaseRent(UUID unitId, BigDecimal amount) {
         var stream = store.load(unitId, "Unit");
-        store.append(unitId, "Unit", stream.version(),
-            Unit.from(stream.events()).setBaseRent(amount), List.of());
-        jdbc.update("update pm_unit set base_rent = ? where unit_id = ?", amount, unitId);
+        var unit = Unit.from(stream.events());
+        store.append(unitId, "Unit", stream.version(), unit.setBaseRent(amount), List.of());
+        jdbc.update("update pm_unit set base_rent = ? where unit_id = ? and workspace_id = ?",
+            amount, unitId, unit.workspaceId());
     }
 
     public void updateUnitDetails(UUID unitId, Map<String, String> details) {
@@ -57,8 +58,9 @@ public class PortfolioService {
         var unit = Unit.from(stream.events());
         store.append(unitId, "Unit", stream.version(), unit.updateDetails(details), List.of());
         if (details.containsKey("listingRef")) {
-            jdbc.update("update pm_unit set listing_ref = ? where unit_id = ?",
-                details.get("listingRef"), unitId);
+            jdbc.update("update pm_unit set listing_ref = ? where unit_id = ? "
+                    + "and workspace_id = ?",
+                details.get("listingRef"), unitId, unit.workspaceId());
         }
     }
 
@@ -77,10 +79,11 @@ public class PortfolioService {
      */
     public void removeUnit(UUID unitId, String reason) {
         var stream = store.load(unitId, "Unit");
-        store.append(unitId, "Unit", stream.version(),
-            Unit.from(stream.events()).remove(reason), List.of());
-        jdbc.update("update pm_unit set market_state = ? where unit_id = ?",
-            Unit.MarketState.REMOVED.name(), unitId);
+        var unit = Unit.from(stream.events());
+        store.append(unitId, "Unit", stream.version(), unit.remove(reason), List.of());
+        jdbc.update("update pm_unit set market_state = ? where unit_id = ? "
+                + "and workspace_id = ?",
+            Unit.MarketState.REMOVED.name(), unitId, unit.workspaceId());
     }
 
     private void applyMarketTransition(UUID unitId, String reason, boolean open) {
@@ -88,8 +91,10 @@ public class PortfolioService {
         var unit = Unit.from(stream.events());
         var events = open ? unit.openToRent(reason) : unit.closeToRent(reason);
         store.append(unitId, "Unit", stream.version(), events, List.of());
-        jdbc.update("update pm_unit set market_state = ? where unit_id = ?",
-            (open ? Unit.MarketState.OPEN : Unit.MarketState.CLOSED).name(), unitId);
+        jdbc.update("update pm_unit set market_state = ? where unit_id = ? "
+                + "and workspace_id = ?",
+            (open ? Unit.MarketState.OPEN : Unit.MarketState.CLOSED).name(), unitId,
+            unit.workspaceId());
     }
 
     /**

@@ -33,8 +33,8 @@ import static org.awaitility.Awaitility.await;
 class SharedTenancyIdTest {
 
     /**
-     * PM's property creation is a write, so it names its workspace explicitly (rule 7). Units
-     * and tenancies inherit the workspace from the property rather than taking a header.
+     * Every PM write names its workspace explicitly (rule 7): the header is what the caller is
+     * checked against, so a write can no longer land in an agency nobody named.
      */
     private static final String DEV_WORKSPACE = "00000000-0000-0000-0000-000000000001";
 
@@ -64,17 +64,18 @@ class SharedTenancyIdTest {
         String propertyId = given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)
             .body(Map.of("address", "Zbiegła 4, Wrocław"))
             .post("/api/pm/properties").then().statusCode(200).extract().path("propertyId");
-        String unitId = given().contentType(ContentType.JSON)
+        String unitId = given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)
             .body(Map.of("name", "M3", "baseRent", "3100"))
             .post("/api/pm/properties/" + propertyId + "/units").then().statusCode(200).extract().path("unitId");
-        String tenancyId = given().contentType(ContentType.JSON)
+        String tenancyId = given().header("X-Workspace-Id", DEV_WORKSPACE)
+            .contentType(ContentType.JSON)
             .body(Map.of("unitId", unitId,
                 "tenantContactIds", List.of(UUID.randomUUID().toString()),
                 "startDate", "2026-09-01", "endDate", "2027-08-31",
                 "legalForm", "zwykly", "monthlyTotal", "3100",
                 "paymentReference", "NAJEM/M3/2026"))
             .post("/api/pm/tenancies").then().statusCode(200).extract().path("tenancyId");
-        given().contentType(ContentType.JSON)
+        given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)
             .body(Map.of("activatedOn", "2026-09-01"))
             .post("/api/pm/tenancies/" + tenancyId + "/activate").then().statusCode(200);
 
@@ -84,12 +85,12 @@ class SharedTenancyIdTest {
         await().atMost(Duration.ofSeconds(10)).until(() -> !given().get("/api/acc/board")
             .then().statusCode(200).extract().jsonPath().getList("").isEmpty());
 
-        given().contentType(ContentType.JSON)
+        given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)
             .body(Map.of("decidedOn", "2026-09-15", "effectiveFrom", "2027-01-01",
                 "monthlyTotal", "3300", "changeType", "agreed-change"))
             .post("/api/pm/tenancies/" + tenancyId + "/rent-changes").then().statusCode(200);
 
-        given().contentType(ContentType.JSON)
+        given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)
             .body(Map.of("endDate", "2027-08-31", "vacateDate", "2027-08-31", "reasonType", "agreement-expiry"))
             .post("/api/pm/tenancies/" + tenancyId + "/end").then().statusCode(200);
     }

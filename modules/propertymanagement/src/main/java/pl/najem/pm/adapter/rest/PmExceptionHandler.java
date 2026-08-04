@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import pl.najem.pm.domain.OverlappingTenancyException;
+import pl.najem.pm.domain.UnknownInThisWorkspaceException;
 
 import java.util.Map;
 
@@ -22,6 +23,12 @@ public class PmExceptionHandler {
     @ExceptionHandler(OverlappingTenancyException.class)
     public ResponseEntity<Map<String, String>> handle(OverlappingTenancyException ex) {
         return body(HttpStatus.CONFLICT, ex);
+    }
+
+    /** 404, not 403: a caller must not learn that another agency's id exists. */
+    @ExceptionHandler(UnknownInThisWorkspaceException.class)
+    public ResponseEntity<Map<String, String>> handle(UnknownInThisWorkspaceException ex) {
+        return body(HttpStatus.NOT_FOUND, ex);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.PortfolioService;
+import pl.najem.pm.application.WorkspaceGuard;
 import pl.najem.pm.domain.Owner;
 
 import java.math.BigDecimal;
@@ -30,9 +31,11 @@ public class PortfolioController {
     public record ReasonRequest(String reason) {}
 
     private final PortfolioService portfolio;
+    private final WorkspaceGuard guard;
 
-    public PortfolioController(PortfolioService portfolio) {
+    public PortfolioController(PortfolioService portfolio, WorkspaceGuard guard) {
         this.portfolio = portfolio;
+        this.guard = guard;
     }
 
     @PostMapping("/properties")
@@ -46,33 +49,45 @@ public class PortfolioController {
     }
 
     @PostMapping("/properties/{propertyId}/units")
-    public Map<String, UUID> addUnit(@PathVariable UUID propertyId, @RequestBody AddUnitRequest request) {
+    public Map<String, UUID> addUnit(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+                                    @PathVariable UUID propertyId, @RequestBody AddUnitRequest request) {
+        guard.requireProperty(workspaceId, propertyId);
         return Map.of("unitId", portfolio.addUnit(propertyId, request.name(), request.baseRent()));
     }
 
     @PostMapping("/units/{unitId}/base-rent")
-    public void setBaseRent(@PathVariable UUID unitId, @RequestBody BaseRentRequest request) {
+    public void setBaseRent(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+                           @PathVariable UUID unitId, @RequestBody BaseRentRequest request) {
+        guard.requireUnit(workspaceId, unitId);
         portfolio.setUnitBaseRent(unitId, request.baseRent());
     }
 
     @PostMapping("/units/{unitId}/details")
-    public void updateDetails(@PathVariable UUID unitId, @RequestBody Map<String, String> details) {
+    public void updateDetails(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+                           @PathVariable UUID unitId, @RequestBody Map<String, String> details) {
+        guard.requireUnit(workspaceId, unitId);
         portfolio.updateUnitDetails(unitId, details);
     }
 
     @PostMapping("/units/{unitId}/open")
-    public void openToRent(@PathVariable UUID unitId, @RequestBody(required = false) ReasonRequest request) {
+    public void openToRent(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+                           @PathVariable UUID unitId, @RequestBody(required = false) ReasonRequest request) {
+        guard.requireUnit(workspaceId, unitId);
         portfolio.openUnitToRent(unitId, reasonOf(request));
     }
 
     @PostMapping("/units/{unitId}/close")
-    public void closeToRent(@PathVariable UUID unitId, @RequestBody(required = false) ReasonRequest request) {
+    public void closeToRent(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+                           @PathVariable UUID unitId, @RequestBody(required = false) ReasonRequest request) {
+        guard.requireUnit(workspaceId, unitId);
         portfolio.closeUnitToRent(unitId, reasonOf(request));
     }
 
     @PostMapping("/units/{unitId}/remove")
-    public void removeUnit(@PathVariable UUID unitId,
+    public void removeUnit(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+                           @PathVariable UUID unitId,
                            @RequestBody(required = false) ReasonRequest request) {
+        guard.requireUnit(workspaceId, unitId);
         portfolio.removeUnit(unitId, request == null ? "" : request.reason());
     }
 
