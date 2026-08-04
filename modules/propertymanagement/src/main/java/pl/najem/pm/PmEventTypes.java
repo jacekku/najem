@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.pm.domain.PropertyEvents;
 import pl.najem.pm.domain.TenancyActivated;
+import pl.najem.pm.domain.TenancyReservationCancelled;
 import pl.najem.pm.domain.TenancyReserved;
 import pl.najem.pm.domain.UnitEvents;
 
@@ -29,7 +30,10 @@ public class PmEventTypes {
             UnitEvents.UnitOpenedToRent.class,
             UnitEvents.UnitClosedToRent.class,
             UnitEvents.UnitRemovedFromProperty.class,
+            UnitEvents.TenancyPeriodRegistered.class,
+            UnitEvents.TenancyPeriodReleased.class,
             TenancyReserved.class,
+            TenancyReservationCancelled.class,
             TenancyActivated.class);
     }
 

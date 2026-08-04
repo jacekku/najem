@@ -16,9 +16,10 @@ import java.util.UUID;
 @RequestMapping("/api/pm/tenancies")
 public class TenancyController {
 
-    public record ReserveRequest(UUID unitId, LocalDate startDate, BigDecimal monthlyRent,
-                                 String paymentReference) {}
+    public record ReserveRequest(UUID unitId, LocalDate startDate, LocalDate endDate,
+                                 BigDecimal monthlyRent, String paymentReference) {}
     public record ActivateRequest(LocalDate activatedOn) {}
+    public record CancelRequest(String reason) {}
 
     private final TenancyService tenancies;
 
@@ -29,7 +30,12 @@ public class TenancyController {
     @PostMapping
     public Map<String, UUID> reserve(@RequestBody ReserveRequest request) {
         return Map.of("tenancyId", tenancies.reserve(request.unitId(), request.startDate(),
-            request.monthlyRent(), request.paymentReference()));
+            request.endDate(), request.monthlyRent(), request.paymentReference()));
+    }
+
+    @PostMapping("/{tenancyId}/cancel")
+    public void cancel(@PathVariable UUID tenancyId, @RequestBody(required = false) CancelRequest request) {
+        tenancies.cancelReservation(tenancyId, request == null ? "" : request.reason());
     }
 
     @PostMapping("/{tenancyId}/activate")

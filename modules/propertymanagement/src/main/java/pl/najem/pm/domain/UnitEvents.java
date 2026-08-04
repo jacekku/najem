@@ -1,6 +1,7 @@
 package pl.najem.pm.domain;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,5 +29,13 @@ public final class UnitEvents {
     }
 
     public record UnitRemovedFromProperty(UUID workspaceId, UUID unitId, String reason) {
+    }
+
+    /** The unit's tenancy calendar — where the one hard invariant is enforced. */
+    public record TenancyPeriodRegistered(UUID workspaceId, UUID unitId, UUID tenancyId,
+                                          LocalDate start, LocalDate end) {
+    }
+
+    public record TenancyPeriodReleased(UUID workspaceId, UUID unitId, UUID tenancyId) {
     }
 }

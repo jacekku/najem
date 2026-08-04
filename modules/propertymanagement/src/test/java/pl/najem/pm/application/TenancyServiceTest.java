@@ -50,7 +50,7 @@ class TenancyServiceTest {
     @Test
     void activationWritesIntegrationEventToOutbox() {
         var unitId = unitIn(UUID.randomUUID());
-        var tenancyId = service.reserve(unitId, LocalDate.of(2026, 9, 1),
+        var tenancyId = service.reserve(unitId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31),
             new BigDecimal("2500"), "NAJEM/M1/2026");
 
         service.activate(tenancyId, LocalDate.of(2026, 9, 1));
@@ -64,7 +64,7 @@ class TenancyServiceTest {
     @Test
     void activationCarriesTheWorkspaceOfTheUnitNotAConstant() {
         var workspaceId = UUID.randomUUID();
-        var tenancyId = service.reserve(unitIn(workspaceId), LocalDate.of(2026, 10, 1),
+        var tenancyId = service.reserve(unitIn(workspaceId), LocalDate.of(2026, 10, 1), LocalDate.of(2027, 9, 30),
             new BigDecimal("3000"), "NAJEM/M2/2026");
 
         service.activate(tenancyId, LocalDate.of(2026, 10, 1));

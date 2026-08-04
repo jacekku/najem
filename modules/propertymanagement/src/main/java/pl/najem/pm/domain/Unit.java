@@ -1,6 +1,8 @@
 package pl.najem.pm.domain;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +24,7 @@ public class Unit {
     private BigDecimal baseRent;
     private MarketState marketState;
     private String listingRef;
+    private final List<TenancyPeriod> periods = new ArrayList<>();
 
     Unit() {
     }
@@ -51,6 +54,34 @@ public class Unit {
         return List.of(new UnitEvents.UnitRemovedFromProperty(workspaceId, id, reason));
     }
 
+    /**
+     * THE hard invariant. Note what is deliberately NOT checked: market state. Reserving a
+     * closed unit is allowed (expert freedom — you sign for a flat still under construction).
+     *
+     * <p>Safety under concurrency does not come from this check alone. The caller appends the
+     * resulting event to the Unit stream at the version it read, so two simultaneous
+     * reservations collide on the event store's unique(stream_id, version) and one loses.
+     */
+    public List<Object> registerTenancyPeriod(UUID tenancyId, LocalDate start, LocalDate end) {
+        var candidate = new TenancyPeriod(tenancyId, start, end);
+        for (TenancyPeriod existing : periods) {
+            if (existing.overlaps(candidate)) {
+                throw new OverlappingTenancyException("Tenancy period " + start + ".." + end
+                    + " overlaps tenancy " + existing.tenancyId() + " (" + existing.start()
+                    + ".." + existing.end() + ") on unit " + id);
+            }
+        }
+        return List.of(new UnitEvents.TenancyPeriodRegistered(workspaceId, id, tenancyId, start, end));
+    }
+
+    public List<Object> releaseTenancyPeriod(UUID tenancyId) {
+        return List.of(new UnitEvents.TenancyPeriodReleased(workspaceId, id, tenancyId));
+    }
+
+    public List<TenancyPeriod> periods() {
+        return List.copyOf(periods);
+    }
+
     public static Unit from(List<Object> events) {
         var unit = new Unit();
         events.forEach(unit::apply);
@@ -77,6 +108,10 @@ public class Unit {
             case UnitEvents.UnitOpenedToRent e -> marketState = MarketState.OPEN;
             case UnitEvents.UnitClosedToRent e -> marketState = MarketState.CLOSED;
             case UnitEvents.UnitRemovedFromProperty e -> marketState = MarketState.REMOVED;
+            case UnitEvents.TenancyPeriodRegistered e ->
+                periods.add(new TenancyPeriod(e.tenancyId(), e.start(), e.end()));
+            case UnitEvents.TenancyPeriodReleased e ->
+                periods.removeIf(p -> p.tenancyId().equals(e.tenancyId()));
             default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
         }
     }

@@ -15,10 +15,11 @@ class TenancyTest {
 
     private final UUID tenancyId = UUID.randomUUID();
     private final UUID unitId = UUID.randomUUID();
+    private final UUID workspaceId = UUID.randomUUID();
 
     private List<Object> reserved() {
-        return Tenancy.reserve(tenancyId, unitId, LocalDate.of(2026, 9, 1),
-            new BigDecimal("2500"), "NAJEM/M1/2026");
+        return Tenancy.reserve(tenancyId, workspaceId, unitId, LocalDate.of(2026, 9, 1),
+            LocalDate.of(2027, 8, 31), new BigDecimal("2500"), "NAJEM/M1/2026");
     }
 
     @Test
