@@ -104,7 +104,7 @@ class PropertyOccupancyTest {
 
         occupancy = new PropertyOccupancy(jdbc);
         runner = new ProjectionRunner(new EventFeed(jdbc, json), jdbc,
-            new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
+            new DataSourceTransactionManager(dataSource),
             List.of(new PropertyProjection(jdbc), new UnitTimelineProjection(jdbc)), 100);
         runner.runOnce();
     }

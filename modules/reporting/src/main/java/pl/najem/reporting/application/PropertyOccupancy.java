@@ -1,5 +1,6 @@
 package pl.najem.reporting.application;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +28,8 @@ public class PropertyOccupancy {
      */
     public record Counts(int occupied, int available, int unavailable, int inventory) {
 
+        /** Annotated because a record serialises its components only, and a caller wants the total. */
+        @JsonProperty("total")
         public int total() {
             return occupied + available + unavailable + inventory;
         }

@@ -44,7 +44,7 @@ class ProjectionRunnerTest {
 
     static JdbcTemplate jdbc;
     static EventFeed feed;
-    static TransactionTemplate tx;
+    static DataSourceTransactionManager txManager;
 
     /** Records what it was handed, so the tests can assert on delivery rather than on side effects. */
     static class RecordingProjection implements Projection {
@@ -87,7 +87,7 @@ class ProjectionRunnerTest {
             .locations("classpath:db/eventstore", "classpath:db/reporting").load().migrate();
         jdbc = new JdbcTemplate(dataSource);
         feed = new EventFeed(jdbc, productionMapper());
-        tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+        txManager = new DataSourceTransactionManager(dataSource);
     }
 
     @BeforeEach
@@ -104,7 +104,7 @@ class ProjectionRunnerTest {
     }
 
     private static ProjectionRunner runnerFor(Projection... projections) {
-        return new ProjectionRunner(feed, jdbc, tx, List.of(projections), 100);
+        return new ProjectionRunner(feed, jdbc, txManager, List.of(projections), 100);
     }
 
     @Test
@@ -220,7 +220,7 @@ class ProjectionRunnerTest {
             append("Tenancy", "TenancyReserved");
         }
         var projection = new RecordingProjection("batched", Set.of("TenancyReserved"));
-        var runner = new ProjectionRunner(feed, jdbc, tx, List.of(projection), 2);
+        var runner = new ProjectionRunner(feed, jdbc, txManager, List.of(projection), 2);
 
         assertThat(runner.runOnce()).isEqualTo(5);
         assertThat(projection.applied).hasSize(5);

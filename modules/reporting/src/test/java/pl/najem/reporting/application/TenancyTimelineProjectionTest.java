@@ -140,7 +140,7 @@ class TenancyTimelineProjectionTest {
 
         projection = new TenancyTimelineProjection(jdbc);
         runner = new ProjectionRunner(new EventFeed(jdbc, json), jdbc,
-            new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
+            new DataSourceTransactionManager(dataSource),
             List.of(projection), 100);
         runner.runOnce();
     }
