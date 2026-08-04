@@ -2,6 +2,8 @@ package pl.najem.reporting;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -65,6 +67,20 @@ class EventContractTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     /**
+     * Deliberately configured like the APPLICATION's mapper, not like the other modules' test
+     * mappers. Boot disables WRITE_DATES_AS_TIMESTAMPS, so production stores dates as ISO strings;
+     * a bare {@code new ObjectMapper().registerModule(new JavaTimeModule())} stores them as arrays
+     * ([2026,9,1]). Reporting parses payloads, so testing against the wrong encoding would test a
+     * shape that never reaches production.
+     */
+    private static ObjectMapper productionMapper() {
+        return JsonMapper.builder()
+            .addModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .build();
+    }
+
+    /**
      * Every field Reporting reads, per stream. Circulated to the owning agents for correction
      * before it was written down (najem-build seq 88).
      * <p>
@@ -123,7 +139,7 @@ class EventContractTest {
             .locations("classpath:db/eventstore", "classpath:db/pm", "classpath:db/acc", "classpath:db/reporting")
             .load().migrate();
         var jdbc = new JdbcTemplate(dataSource);
-        var json = new ObjectMapper().registerModule(new JavaTimeModule());
+        var json = productionMapper();
 
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);

@@ -60,7 +60,7 @@ public class EventFeed {
         }
         args[i] = limit;
         return jdbc.query("""
-            select global_seq, stream_id, stream_type, event_type, payload::text as payload
+            select global_seq, stream_id, stream_type, event_type, occurred_at, payload::text as payload
             from events
             where global_seq > ? and stream_type in (%s)
             order by global_seq
@@ -71,6 +71,7 @@ public class EventFeed {
                 UUID.fromString(rs.getString("stream_id")),
                 rs.getString("stream_type"),
                 rs.getString("event_type"),
+                rs.getTimestamp("occurred_at").toInstant(),
                 tree(rs.getString("payload"))),
             args);
     }
