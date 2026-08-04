@@ -22,6 +22,11 @@ POST /api/scenarios
 `anchorDate` is the charge's due date; every scenario expresses its dates relative to it, so tests
 never hardcode a calendar. An unknown `name` is a 400.
 
+`secondReference` is optional and read by `lump-sum-two-tenancies` alone, which is refused without
+it. It is not derived from `reference` on purpose: a derived reference would share a segment with
+the first, and a matching rule keyed on that similarity would look like it handled a cross-tenancy
+transfer while having recognised one tenancy twice — the fixture would pass for the wrong reason.
+
 Seeded lines are then served by the existing endpoint, unchanged since Phase 0:
 `GET /api/accounts/{iban}/transactions?since=YYYY-MM-DD`
 
@@ -43,10 +48,23 @@ should seed into their own IBAN rather than rely on cleanup.
 | `no-reference` | A at D, empty title | Tiers 3–4, counterparty-based matching |
 | `duplicate` | Two identical credits, distinct ids and bank references | Deduplication of a real bank duplicate |
 | `reversal` | Credit at D, equal debit at D+3 | Returned transfer |
-| `lump-sum` | 2×A at D, title naming two references | One transfer, many charges |
+| `lump-sum` | 2×A at D, title naming the reference twice | One transfer, many charges of ONE tenancy |
+| `lump-sum-two-tenancies` | 2×A at D, title naming `reference` and `secondReference` | One transfer, two **independent** tenancies — the ladder must REFUSE it |
 | `third-party-payer` | A at D, empty title, payer `ANNA KOWALSKA` on a stable non-tenant account | Tier 3 remembered-payer mapping |
 | `outgoing-debit` | 287.43 DBIT at D+1, `OPLATA ZA MEDIA` | A line that must NOT become a rent payment |
 | `foreign-currency` | A at D in EUR | Non-PLN as a classifiable fact |
+
+### The cross-tenancy case is a negative fixture
+
+`lump-sum-two-tenancies` is one transfer from one payer settling two tenancies that share nothing —
+different tenants, different units. Accounting's allocation engine can *represent* that split
+(`PaymentAllocated` carries a `tenancyId` per allocation), but **the matching ladder must never
+suggest it**: no rung can honestly claim which two tenants a single transfer was meant for, and a
+confident split across a tenancy boundary is worse than no suggestion at all. A human resolves it
+through `POST /api/acc/payments/{id}/allocate`.
+
+So the assertion this fixture exists for is an absence — the payment reaches the manual queue and
+carries no suggestion. It pins that the ladder stays honest exactly where guessing is easiest.
 
 ## Field conventions
 

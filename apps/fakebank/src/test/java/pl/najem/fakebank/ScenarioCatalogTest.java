@@ -18,8 +18,16 @@ class ScenarioCatalogTest {
 
     private final ScenarioCatalog catalog = new ScenarioCatalog();
 
+    /** The second tenancy's reference — a different tenant, a different unit, the same payer. */
+    private static final String OTHER_REFERENCE = "NAJEM/M7/2026";
+
     private List<BankTransactionDto> generate(String name) {
-        return catalog.generate(new ScenarioRequest(name, IBAN, REFERENCE, AMOUNT, DUE));
+        return catalog.generate(new ScenarioRequest(name, IBAN, REFERENCE, AMOUNT, DUE, null));
+    }
+
+    private List<BankTransactionDto> generateWithSecond(String name) {
+        return catalog.generate(
+            new ScenarioRequest(name, IBAN, REFERENCE, AMOUNT, DUE, OTHER_REFERENCE));
     }
 
     @Test
@@ -149,6 +157,50 @@ class ScenarioCatalogTest {
         assertThat(line.title()).isEqualTo(REFERENCE + " " + REFERENCE + "/2");
     }
 
+    /**
+     * One transfer settling two <em>independent</em> tenancies — different tenants, different
+     * units, one payer. Distinct from {@code lump-sum}, which covers two charges of ONE tenancy.
+     *
+     * <p>This is the fixture the ladder must <strong>refuse</strong>: no rung can honestly claim
+     * which two tenants a single transfer was meant for, and a confident split across a tenancy
+     * boundary is worse than no suggestion. A human resolves it through the manual allocation path.
+     */
+    @Test
+    void lumpSumAcrossTenanciesNamesTwoUnrelatedReferencesInOneTransfer() {
+        List<BankTransactionDto> lines = generateWithSecond("lump-sum-two-tenancies");
+
+        assertThat(lines).hasSize(1);
+        BankTransactionDto line = lines.getFirst();
+        assertThat(line.amount())
+            .as("one transfer carrying both tenancies' rent")
+            .isEqualByComparingTo("5000.00");
+        assertThat(line.title()).isEqualTo(REFERENCE + " " + OTHER_REFERENCE);
+        assertThat(line.creditDebitIndicator()).isEqualTo("CRDT");
+    }
+
+    /**
+     * The two references must be genuinely unrelated, or the fixture tests nothing: a ladder that
+     * matched on a shared prefix would appear to handle the cross-tenancy case while actually
+     * having recognised one tenancy twice.
+     */
+    @Test
+    void theTwoReferencesShareNoTenancySegment() {
+        String title = generateWithSecond("lump-sum-two-tenancies").getFirst().title();
+
+        assertThat(title).contains(REFERENCE).contains(OTHER_REFERENCE);
+        assertThat(OTHER_REFERENCE).isNotEqualTo(REFERENCE);
+        assertThat(OTHER_REFERENCE).doesNotStartWith(REFERENCE);
+        assertThat(REFERENCE).doesNotStartWith(OTHER_REFERENCE);
+    }
+
+    /** Without a second reference there is no second tenancy, so the scenario cannot be built. */
+    @Test
+    void lumpSumAcrossTenanciesRefusesToGuessTheSecondReference() {
+        assertThatThrownBy(() -> generate("lump-sum-two-tenancies"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("secondReference");
+    }
+
     @Test
     void thirdPartyPayerUsesADifferentAccountAndNamesADifferentPerson() {
         BankTransactionDto line = generate("third-party-payer").getFirst();
@@ -195,14 +247,15 @@ class ScenarioCatalogTest {
 
     @Test
     void everyAdvertisedScenarioGenerates() {
-        assertThat(catalog.names()).hasSize(13);
-        assertThat(catalog.names()).allSatisfy(name -> assertThat(generate(name)).isNotEmpty());
+        assertThat(catalog.names()).hasSize(14);
+        assertThat(catalog.names())
+            .allSatisfy(name -> assertThat(generateWithSecond(name)).isNotEmpty());
     }
 
     @Test
     void everyLineCarriesAPositiveAmount() {
         assertThat(catalog.names()).allSatisfy(name ->
-            assertThat(generate(name)).allSatisfy(line ->
+            assertThat(generateWithSecond(name)).allSatisfy(line ->
                 assertThat(line.amount()).isPositive()));
     }
 }

@@ -29,6 +29,8 @@ class StatementRoundTripTest {
     private static final String REFERENCE = "NAJEM/M1/2026";
     private static final BigDecimal AMOUNT = new BigDecimal("2500.00");
     private static final LocalDate ANCHOR = LocalDate.of(2026, 9, 1);
+    /** Supplied for every scenario; only lump-sum-two-tenancies reads it. */
+    private static final String OTHER_REFERENCE = "NAJEM/M7/2026";
 
     private final ScenarioCatalog catalog = new ScenarioCatalog();
     private final StatementRenderer renderer = new StatementRenderer();
@@ -50,7 +52,7 @@ class StatementRoundTripTest {
     @MethodSource("scenarios")
     void everyScenarioSurvivesTheRoundTrip(String scenario) {
         List<BankTransactionDto> seeded =
-            catalog.generate(new ScenarioRequest(scenario, IBAN, REFERENCE, AMOUNT, ANCHOR));
+            catalog.generate(new ScenarioRequest(scenario, IBAN, REFERENCE, AMOUNT, ANCHOR, OTHER_REFERENCE));
 
         List<Mt940Line> reread = exportAndReread(seeded);
 
@@ -81,7 +83,7 @@ class StatementRoundTripTest {
     @MethodSource("scenarios")
     void noScenarioEverProducesASignedAmount(String scenario) {
         List<Mt940Line> reread = exportAndReread(
-            catalog.generate(new ScenarioRequest(scenario, IBAN, REFERENCE, AMOUNT, ANCHOR)));
+            catalog.generate(new ScenarioRequest(scenario, IBAN, REFERENCE, AMOUNT, ANCHOR, OTHER_REFERENCE)));
 
         assertThat(reread).allSatisfy(line -> assertThat(line.amount()).isPositive());
     }
@@ -89,7 +91,7 @@ class StatementRoundTripTest {
     @Test
     void theOutgoingDebitStaysADebit() {
         List<Mt940Line> reread = exportAndReread(
-            catalog.generate(new ScenarioRequest("outgoing-debit", IBAN, REFERENCE, AMOUNT, ANCHOR)));
+            catalog.generate(new ScenarioRequest("outgoing-debit", IBAN, REFERENCE, AMOUNT, ANCHOR, OTHER_REFERENCE)));
 
         assertThat(reread).singleElement()
             .satisfies(line -> assertThat(line.mark()).isEqualTo(Mt940Mark.D));
@@ -98,7 +100,7 @@ class StatementRoundTripTest {
     @Test
     void exportingTwiceProducesByteIdenticalText() {
         List<BankTransactionDto> seeded =
-            catalog.generate(new ScenarioRequest("partial-then-topup", IBAN, REFERENCE, AMOUNT, ANCHOR));
+            catalog.generate(new ScenarioRequest("partial-then-topup", IBAN, REFERENCE, AMOUNT, ANCHOR, OTHER_REFERENCE));
 
         assertThat(Mt940Writer.write(renderer.render(IBAN, seeded)))
             .isEqualTo(Mt940Writer.write(renderer.render(IBAN, seeded)));

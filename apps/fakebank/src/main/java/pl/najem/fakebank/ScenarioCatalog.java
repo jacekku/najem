@@ -23,6 +23,7 @@ public class ScenarioCatalog {
     private static final Set<String> NAMES = Set.of(
         "on-time", "late", "partial", "partial-then-topup", "overpay",
         "wrong-reference", "no-reference", "duplicate", "reversal", "lump-sum",
+        "lump-sum-two-tenancies",
         "third-party-payer", "outgoing-debit", "foreign-currency");
 
     public Set<String> names() {
@@ -59,6 +60,9 @@ public class ScenarioCatalog {
             case "lump-sum" -> List.of(
                 credit(request, 0, request.amount().multiply(BigDecimal.TWO),
                     request.reference() + " " + request.reference() + "/2", 0, 0));
+            case "lump-sum-two-tenancies" -> List.of(
+                credit(request, 0, request.amount().multiply(BigDecimal.TWO),
+                    request.reference() + " " + secondReferenceOf(request), 0, 0));
             case "third-party-payer" -> List.of(
                 line(request, 0, request.amount(), "", 0, 0, CREDIT, PLN,
                     "ANNA KOWALSKA", syntheticIban("payer:" + request.reference())));
@@ -100,6 +104,23 @@ public class ScenarioCatalog {
             request.anchorDate().plusDays(valueOffset),
             indicator,
             currency);
+    }
+
+    /**
+     * The second tenancy's reference, which the caller must supply.
+     *
+     * <p>Deliberately not derived from the first. A derived reference would share a prefix or a
+     * segment with it, and a matching rule that keyed on that similarity would appear to handle a
+     * cross-tenancy transfer while having actually recognised one tenancy twice — the fixture would
+     * pass for the wrong reason.
+     */
+    private static String secondReferenceOf(ScenarioRequest request) {
+        if (request.secondReference() == null || request.secondReference().isBlank()) {
+            throw new IllegalArgumentException(
+                "lump-sum-two-tenancies needs a secondReference: it is a transfer covering two "
+                    + "independent tenancies, and the second one cannot be invented");
+        }
+        return request.secondReference();
     }
 
     private static BigDecimal percentOf(BigDecimal amount, int percent) {
