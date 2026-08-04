@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.reporting.WorkspaceContext;
 import pl.najem.reporting.application.ProjectionRunner;
+import pl.najem.reporting.application.ProjectionStatus;
 import pl.najem.reporting.application.PropertyOccupancy;
 import pl.najem.reporting.application.TimelineQuery;
 import pl.najem.reporting.application.UnitBoardQuery;
@@ -36,13 +37,27 @@ public class ReportingController {
     private final PropertyOccupancy occupancy;
     private final UnitBoardQuery board;
     private final ProjectionRunner runner;
+    private final ProjectionStatus status;
 
     public ReportingController(TimelineQuery timelines, PropertyOccupancy occupancy,
-                               UnitBoardQuery board, ProjectionRunner runner) {
+                               UnitBoardQuery board, ProjectionRunner runner,
+                               ProjectionStatus status) {
         this.timelines = timelines;
         this.occupancy = occupancy;
         this.board = board;
         this.runner = runner;
+        this.status = status;
+    }
+
+    /**
+     * How far behind each projection is, so a caller rendering a board can say so.
+     * <p>
+     * Not workspace-scoped: lag is a property of the projector, not of anyone's data, and it
+     * exposes no facts about any agency — only how many events remain unapplied.
+     */
+    @GetMapping("/status")
+    public List<ProjectionStatus.Status> status() {
+        return status.all();
     }
 
     @GetMapping("/tenancies/{tenancyId}/timeline")
