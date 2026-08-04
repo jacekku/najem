@@ -104,7 +104,9 @@ public class LedgerService {
         var stream = store.load(tenancyId, "TenancyLedger");
         store.append(tenancyId, "TenancyLedger", stream.version(),
             List.of(new ChargeDeactivated(chargeId, tenancyId, reason)), List.of());
-        jdbc.update("update acc_charge set active = false where charge_id = ?", chargeId);
+        jdbc.update("""
+            update acc_charge set active = false where workspace_id = ? and charge_id = ?
+            """, workspaceId, chargeId);
     }
 
     /**

@@ -182,7 +182,10 @@ public class IngestionService {
         }
         jdbc.update("insert into acc_suggestion(payment_id, workspace_id, charge_id, tier) values (?,?,?,?)",
             paymentId, workspaceId, chargeId.get(), tier.number());
-        jdbc.update("update acc_payment set status = 'suggested' where payment_id = ?", paymentId);
+        jdbc.update("""
+            update acc_payment set status = 'suggested'
+            where workspace_id = ? and payment_id = ?
+            """, workspaceId, paymentId);
         return true;
     }
 

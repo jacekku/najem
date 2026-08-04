@@ -67,8 +67,8 @@ public class AllocationService {
                 update acc_charge
                 set allocated_amount = allocated_amount + ?,
                     allocated = allocated_amount + ? >= amount
-                where charge_id = ?
-                """, amount, amount, charge.chargeId());
+                where workspace_id = ? and charge_id = ?
+                """, amount, amount, workspaceId, charge.chargeId());
             events.add(new PaymentAllocated(paymentId, charge.chargeId(), amount));
             remaining = remaining.subtract(amount);
             allocated = allocated.add(amount);
@@ -78,8 +78,10 @@ public class AllocationService {
             var stream = store.load(paymentId, "Payment");
             store.append(paymentId, "Payment", stream.version(), List.copyOf(events), List.of());
         }
-        jdbc.update("update acc_payment set unallocated_amount = ?, status = ? where payment_id = ?",
-            remaining, statusFor(allocated, remaining), paymentId);
+        jdbc.update("""
+            update acc_payment set unallocated_amount = ?, status = ?
+            where workspace_id = ? and payment_id = ?
+            """, remaining, statusFor(allocated, remaining), workspaceId, paymentId);
         refreshBoard(workspaceId, tenancyId);
         return allocated;
     }
