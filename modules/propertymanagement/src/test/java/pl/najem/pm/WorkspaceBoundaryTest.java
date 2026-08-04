@@ -88,24 +88,72 @@ class WorkspaceBoundaryTest {
     /**
      * A write endpoint that takes no workspace cannot check one, whatever the service does. This
      * is the gap that let POST /api/pm/repairs/{id}/complete finish a repair in any agency.
+     *
+     * <p>Per mapping, not per file (najem-reviewer, seq 243). A file-wide {@code contains} passes
+     * a controller the moment one of its methods takes the header, so the twelfth endpoint added
+     * to {@code TenancyController} taking none at all would have been green — and the two
+     * instances this class grew while under assignment were both born inside controllers that
+     * already took the header somewhere else in the file. The earlier version of this test would
+     * not have caught the thing it was written for.
      */
     @Test
-    void everyWriteControllerTakesTheWorkspaceHeader() throws IOException {
-        var offenders = javaSources(MAIN.resolve("adapter/rest"))
-            .filter(path -> !path.getFileName().toString().equals("WorkspaceHeader.java"))
-            .filter(path -> !path.getFileName().toString().equals("PmExceptionHandler.java"))
-            .filter(path -> !path.getFileName().toString().equals("TestEndpointsEnabled.java"))
-            // The process runner is opt-in test scaffolding and sweeps every workspace by design.
-            .filter(path -> !path.getFileName().toString().equals("ProcessRunnerController.java"))
-            .filter(WorkspaceBoundaryTest::hasWriteMapping)
-            .filter(path -> !read(path).contains("@RequestHeader(WorkspaceHeader.NAME)"))
-            .map(path -> path.getFileName().toString())
+    void everyWriteMappingTakesTheWorkspaceHeader() throws IOException {
+        var offenders = writeMappings()
+            .filter(mapping -> !mapping.source().contains("@RequestHeader(WorkspaceHeader.NAME)"))
+            .map(Mapping::name)
             .toList();
 
         assertThat(offenders)
-            .as("a controller with a write mapping and no workspace header cannot check one")
+            .as("a write mapping with no workspace header cannot check one")
             .isEmpty();
     }
+
+    /**
+     * The header is only the input; {@link pl.najem.pm.application.WorkspaceGuard} is what refuses.
+     *
+     * <p>This is the assertion that actually defends PM, and it did not exist until seq 243 pointed
+     * out why: the {@code workspace_id = ?} predicates the tests above check are bound to the
+     * aggregate's own workspace, so they are satisfied by construction and cannot exclude anything.
+     * That derivation is the right design — a caller cannot assert a workspace it does not own —
+     * but it means the SQL scan passes for a reason unrelated to safety. Delete a {@code guard.}
+     * line and every other test in this class stays green while the endpoint stands wide open.
+     */
+    @Test
+    void everyWriteMappingReachesTheGuard() throws IOException {
+        var offenders = writeMappings()
+            .filter(mapping -> !GUARD_NOT_APPLICABLE.contains(mapping.method()))
+            .filter(mapping -> !mapping.reachesGuard())
+            .map(Mapping::name)
+            .toList();
+
+        assertThat(offenders)
+            .as("these endpoints accept a workspace and never check it against the subject")
+            .isEmpty();
+    }
+
+    /**
+     * The two tests above are assertions that a list is empty, so a parser that returns nothing
+     * passes them both — and one did: skipping the annotation's braces was wrong first time and
+     * every mapping came back named {@code ?}. This is what makes the silence meaningful.
+     */
+    @Test
+    void thescanFindsEveryWriteMappingAndNamesIt() throws IOException {
+        var mappings = writeMappings().toList();
+
+        assertThat(mappings).as("PM's write surface cannot have shrunk to nothing")
+            .hasSizeGreaterThanOrEqualTo(18);
+        assertThat(mappings).as("an unparsed method is not a checked method")
+            .extracting(Mapping::method).doesNotContain("?");
+        assertThat(mappings).extracting(Mapping::name)
+            .contains("RepairController.complete", "TenancyController.end");
+    }
+
+    /**
+     * A create owns nothing yet: {@code createProperty} takes the workspace and stamps it on a
+     * property that did not exist a moment ago, so there is no prior row to check it against. By
+     * name rather than by rule, for the same reason as the table exemption above.
+     */
+    private static final Set<String> GUARD_NOT_APPLICABLE = Set.of("createProperty");
 
     /** Nothing in PM may reintroduce a dev-workspace stand-in under any name. */
     @Test
@@ -122,10 +170,112 @@ class WorkspaceBoundaryTest {
         return TABLES_WITHOUT_A_WORKSPACE.stream().anyMatch(sql::contains);
     }
 
-    private static boolean hasWriteMapping(Path path) {
+    private static final Pattern WRITE_MAPPING =
+        Pattern.compile("@(?:Post|Put|Delete|Patch)Mapping");
+
+    private static final Pattern METHOD_NAME = Pattern.compile("(\\w+)\\s*\\(");
+
+    private static final Pattern PRIVATE_METHOD =
+        Pattern.compile("private\\s+(?:static\\s+)?[\\w.<>,\\[\\]\\s]+?\\s(\\w+)\\s*\\(");
+
+    /**
+     * One write endpoint: the method as written, plus the names of every guard-calling helper in
+     * its file, so a check made through {@code RepairController.requireAsset} counts as made.
+     */
+    private record Mapping(String file, String method, String source, Set<String> guardHelpers) {
+
+        String name() {
+            return file + "." + method;
+        }
+
+        boolean reachesGuard() {
+            return source.contains("guard.")
+                || guardHelpers.stream().anyMatch(helper -> source.contains(helper + "("));
+        }
+    }
+
+    private static Stream<Mapping> writeMappings() throws IOException {
+        return javaSources(MAIN.resolve("adapter/rest"))
+            // Opt-in test scaffolding that sweeps every workspace by design — see
+            // TestEndpointsEnabled; it does not exist unless a property turns it on.
+            .filter(path -> !path.getFileName().toString().equals("ProcessRunnerController.java"))
+            .flatMap(WorkspaceBoundaryTest::writeMappingsIn);
+    }
+
+    private static Stream<Mapping> writeMappingsIn(Path path) {
         String source = read(path);
-        return source.contains("@PostMapping") || source.contains("@PutMapping")
-            || source.contains("@DeleteMapping") || source.contains("@PatchMapping");
+        String file = path.getFileName().toString().replace(".java", "");
+        Set<String> helpers = guardCallingHelpers(source);
+        return WRITE_MAPPING.matcher(source).results()
+            .map(hit -> methodAt(source, hit.start()))
+            .map(method -> new Mapping(file, nameOf(method), method, helpers));
+    }
+
+    private static Set<String> guardCallingHelpers(String source) {
+        return PRIVATE_METHOD.matcher(source).results()
+            .filter(hit -> methodAt(source, hit.start()).contains("guard."))
+            .map(hit -> hit.group(1))
+            .collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
+     * The declaration at {@code from} through the closing brace of its body, by brace depth rather
+     * than by slicing at the next annotation — otherwise the last method in a file swallows every
+     * private helper below it and inherits their guard calls.
+     */
+    private static String methodAt(String source, int from) {
+        int open = source.indexOf('{', skipAnnotationArguments(source, from));
+        if (open < 0) {
+            return source.substring(from);
+        }
+        int depth = 0;
+        for (int i = open; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}' && --depth == 0) {
+                return source.substring(from, i + 1);
+            }
+        }
+        return source.substring(from);
+    }
+
+    /**
+     * A path variable puts braces inside the annotation — {@code @PostMapping("/{repairId}/complete")}
+     * — and they close, so a naive scan for the body finds {@code {repairId\}} and reads a method
+     * one word long. Every mapping then looks header-less and guard-less at once, which is how
+     * this was caught: an all-red scan is a broken scan, not twenty new findings.
+     */
+    private static int skipAnnotationArguments(String source, int from) {
+        int paren = source.indexOf('(', from);
+        int brace = source.indexOf('{', from);
+        if (paren < 0 || (brace >= 0 && brace < paren)) {
+            return from;
+        }
+        int depth = 0;
+        for (int i = paren; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (c == '(') {
+                depth++;
+            } else if (c == ')' && --depth == 0) {
+                return i + 1;
+            }
+        }
+        return from;
+    }
+
+    private static String nameOf(String method) {
+        var matcher = METHOD_NAME.matcher(method);
+        String last = "?";
+        while (matcher.find()) {
+            String candidate = matcher.group(1);
+            // Skip the annotation and modifiers; the declared name is the one before the body.
+            if (!candidate.endsWith("Mapping") && !candidate.equals("value")) {
+                last = candidate;
+                break;
+            }
+        }
+        return last;
     }
 
     /**
