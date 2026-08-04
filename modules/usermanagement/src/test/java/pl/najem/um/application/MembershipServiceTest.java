@@ -70,20 +70,20 @@ class MembershipServiceTest {
     void roleChangeIsVisibleThroughTheAccessReadModel() {
         var workspaceId = workspace("Agencja Role");
         member(workspaceId, Role.ADMIN);
-        var viewer = member(workspaceId, Role.VIEWER);
+        var manager = member(workspaceId, Role.MANAGER);
 
-        memberships.changeRole(workspaceId, viewer.userId(), Role.MANAGER, LocalDate.of(2026, 8, 5));
+        memberships.changeRole(workspaceId, manager.userId(), Role.ADMIN, LocalDate.of(2026, 8, 5));
 
-        assertThat(access.roleIn(viewer.subject(), workspaceId)).contains(Role.MANAGER);
+        assertThat(access.roleIn(manager.subject(), workspaceId)).contains(Role.ADMIN);
     }
 
     @Test
     void roleChangeIsRecordedAsAnEventOnTheWorkspaceStream() {
         var workspaceId = workspace("Agencja Audyt");
         member(workspaceId, Role.ADMIN);
-        var viewer = member(workspaceId, Role.VIEWER);
+        var manager = member(workspaceId, Role.MANAGER);
 
-        memberships.changeRole(workspaceId, viewer.userId(), Role.MANAGER, LocalDate.of(2026, 8, 5));
+        memberships.changeRole(workspaceId, manager.userId(), Role.ADMIN, LocalDate.of(2026, 8, 5));
 
         var types = jdbc.queryForList(
             "select event_type from events where stream_id = ? order by version", String.class, workspaceId);
@@ -94,7 +94,7 @@ class MembershipServiceTest {
     void removedMemberLosesAccess() {
         var workspaceId = workspace("Agencja Remove");
         member(workspaceId, Role.ADMIN);
-        var leaving = member(workspaceId, Role.VIEWER);
+        var leaving = member(workspaceId, Role.MANAGER);
 
         memberships.remove(workspaceId, leaving.userId(), LocalDate.of(2026, 8, 5));
 
@@ -116,7 +116,7 @@ class MembershipServiceTest {
         var soleAdmin = member(workspaceId, Role.ADMIN);
 
         assertThatThrownBy(() ->
-            memberships.changeRole(workspaceId, soleAdmin.userId(), Role.VIEWER, LocalDate.of(2026, 8, 5)))
+            memberships.changeRole(workspaceId, soleAdmin.userId(), Role.MANAGER, LocalDate.of(2026, 8, 5)))
             .isInstanceOf(IllegalStateException.class);
     }
 
@@ -126,7 +126,7 @@ class MembershipServiceTest {
         var stranger = member(workspace("Agencja Inna"), Role.ADMIN);
 
         assertThatThrownBy(() ->
-            memberships.changeRole(workspaceId, stranger.userId(), Role.VIEWER, LocalDate.of(2026, 8, 5)))
+            memberships.changeRole(workspaceId, stranger.userId(), Role.MANAGER, LocalDate.of(2026, 8, 5)))
             .isInstanceOf(IllegalStateException.class);
     }
 
