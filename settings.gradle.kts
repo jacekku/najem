@@ -2,6 +2,7 @@ rootProject.name = "najem"
 include(
     "contracts",
     "platform:eventstore",
+    "platform:mt940",
     "modules:propertymanagement",
     "modules:accounting",
     "modules:contacts",
