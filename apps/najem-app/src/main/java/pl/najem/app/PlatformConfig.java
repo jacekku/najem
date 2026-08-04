@@ -16,10 +16,22 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.eventstore.OutboxDispatcher;
 
+import java.time.Clock;
 import java.util.List;
 
 @Configuration
 public class PlatformConfig {
+
+    /**
+     * Services take a Clock rather than calling now() so tests can drive the date. Nothing
+     * supplied one at the composition root, so every module's convenience constructor fell back
+     * to Clock.systemDefaultZone() and the application started -- which is why no test saw it:
+     * modules test their services directly and never start the context that would have failed.
+     */
+    @Bean
+    Clock clock() {
+        return Clock.systemDefaultZone();
+    }
 
     @Bean
     EventTypeRegistry eventTypeRegistry() {
