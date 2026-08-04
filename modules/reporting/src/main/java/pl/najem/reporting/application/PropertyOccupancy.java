@@ -91,7 +91,7 @@ public class PropertyOccupancy {
     private boolean isOccupiedOn(UUID workspaceId, UUID unitId, LocalDate asOf) {
         Integer count = jdbc.queryForObject("""
             select count(*) from reporting_unit_period
-            where workspace_id = ? and unit_id = ? and not released
+            where workspace_id = ? and unit_id = ? and not annulled and (not released or ended_on is not null)
               and starts_on <= ? and (ends_on is null or ends_on > ?)
             """, Integer.class, workspaceId, unitId, asOf, asOf);
         return count != null && count > 0;

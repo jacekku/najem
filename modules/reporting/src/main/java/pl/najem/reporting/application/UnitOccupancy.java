@@ -42,7 +42,7 @@ public class UnitOccupancy {
     public List<Span> spansFor(UUID workspaceId, UUID unitId, LocalDate asOf) {
         var periods = jdbc.query("""
             select tenancy_id, starts_on, ends_on from reporting_unit_period
-            where workspace_id = ? and unit_id = ? and not released
+            where workspace_id = ? and unit_id = ? and not annulled and (not released or ended_on is not null)
             order by starts_on
             """,
             (rs, i) -> new Span(rs.getDate("starts_on").toLocalDate(),
@@ -73,7 +73,7 @@ public class UnitOccupancy {
     public UUID occupantOn(UUID workspaceId, UUID unitId, LocalDate date) {
         var found = jdbc.queryForList("""
             select tenancy_id from reporting_unit_period
-            where workspace_id = ? and unit_id = ? and not released
+            where workspace_id = ? and unit_id = ? and not annulled and (not released or ended_on is not null)
               and starts_on <= ? and (ends_on is null or ends_on > ?)
             order by starts_on limit 1
             """, UUID.class, workspaceId, unitId, date, date);
@@ -84,7 +84,7 @@ public class UnitOccupancy {
     public UUID nextOccupantAfter(UUID workspaceId, UUID unitId, LocalDate date) {
         var found = jdbc.queryForList("""
             select tenancy_id from reporting_unit_period
-            where workspace_id = ? and unit_id = ? and not released and starts_on > ?
+            where workspace_id = ? and unit_id = ? and not annulled and (not released or ended_on is not null) and starts_on > ?
             order by starts_on limit 1
             """, UUID.class, workspaceId, unitId, date);
         return found.isEmpty() ? null : found.get(0);

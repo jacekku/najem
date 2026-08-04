@@ -24,7 +24,7 @@ public class UnitTimelineProjection implements Projection {
     private static final Set<String> HANDLES = Set.of(
         "UnitAddedToProperty", "UnitBaseRentSet", "UnitDetailsUpdated",
         "UnitOpenedToRent", "UnitClosedToRent", "UnitRemovedFromProperty",
-        "TenancyPeriodRegistered", "TenancyPeriodReleased");
+        "TenancyPeriodRegistered", "TenancyPeriodReleased", "TenancyEnded");
 
     private final JdbcTemplate jdbc;
 
@@ -52,6 +52,12 @@ public class UnitTimelineProjection implements Projection {
     @Override
     public void apply(FeedEntry entry) {
         var p = entry.payload();
+        // TenancyEnded rides the Tenancy stream and names no unit — the unit is whichever one this
+        // tenancy's period sits on, which this projection already recorded.
+        if ("TenancyEnded".equals(entry.eventType())) {
+            applyTenancyEnded(entry, p);
+            return;
+        }
         var unitId = uuid(p, "unitId");
         switch (entry.eventType()) {
             case "UnitAddedToProperty" -> {
@@ -107,6 +113,46 @@ public class UnitTimelineProjection implements Projection {
                 // Curated timeline (Decision 4): anything unrecognised is skipped, not an error.
             }
         }
+    }
+
+    /**
+     * An annulled tenancy is excluded from occupancy and kept on the timeline, marked. Decision 5:
+     * a mistaken activation genuinely happened to that unit, and records that silently vanish are
+     * how people stop trusting a timeline — but it never housed anyone, so counting it as occupancy
+     * would report a flat as let for a period nobody lived in it.
+     */
+    private void applyTenancyEnded(FeedEntry entry, JsonNode p) {
+        var tenancyId = uuid(p, "tenancyId");
+        var unitIds = jdbc.queryForList(
+            "select unit_id from reporting_unit_period where tenancy_id = ?", UUID.class, tenancyId);
+        if (unitIds.isEmpty()) {
+            // The period was never projected — nothing to annul and nowhere to put the entry.
+            return;
+        }
+        var unitId = unitIds.get(0);
+        if (isAnnulment(p)) {
+            jdbc.update("update reporting_unit_period set annulled = true where tenancy_id = ?", tenancyId);
+            record(entry, unitId, "tenancy-annulled", "Annulled: this tenancy should never have existed");
+        } else {
+            // Records the ending AND shortens the period to it. PM releases the calendar slot on
+            // ending as well as on cancellation, so without this the tenancy's occupancy would be
+            // discarded along with the reservation's — the unit would read as never let.
+            jdbc.update("""
+                update reporting_unit_period set ended_on = ?, ends_on = ? where tenancy_id = ?
+                """, date(p, "endDate"), date(p, "endDate"), tenancyId);
+            record(entry, unitId, "tenancy-ended", "Tenancy ended " + text(p, "endDate"));
+        }
+    }
+
+    /**
+     * Accepts both spellings on purpose. The stored event carries Jackson's default enum rendering
+     * ({@code ERROR_ANNULLED}) while {@code EndReason.wireName()} — the form PM calls the published
+     * contract — is {@code error-annulled}, and only the integration event uses it. Matching either
+     * means a change on one path cannot silently turn every annulment back into an ending.
+     */
+    private static boolean isAnnulment(JsonNode p) {
+        var reason = p.path("reasonType").asText("");
+        return "ERROR_ANNULLED".equals(reason) || "error-annulled".equals(reason);
     }
 
     /**
