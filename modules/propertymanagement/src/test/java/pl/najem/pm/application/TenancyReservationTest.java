@@ -70,7 +70,7 @@ class TenancyReservationTest {
         var first = tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
         var second = tenancies.reserve(command(unitId, LocalDate.of(2026, 6, 30), LocalDate.of(2026, 12, 31), "2600", "NAJEM/M1/B")).tenancyId();
 
-        assertThat(Unit.from(store.load(unitId).events()).periods())
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).periods())
             .extracting(p -> p.tenancyId()).containsExactly(first, second);
     }
 
@@ -89,13 +89,13 @@ class TenancyReservationTest {
     void aRejectedReservationLeavesNoTraceOnEitherStream() {
         var unitId = unit();
         tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
-        long versionBefore = store.load(unitId).version();
+        long versionBefore = store.load(unitId, "Unit").version();
 
         assertThatThrownBy(() -> tenancies.reserve(command(unitId, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 9, 30), "2600", "NAJEM/M1/B")))
             .isInstanceOf(OverlappingTenancyException.class);
 
-        assertThat(store.load(unitId).version()).isEqualTo(versionBefore);
-        assertThat(Unit.from(store.load(unitId).events()).periods()).hasSize(1);
+        assertThat(store.load(unitId, "Unit").version()).isEqualTo(versionBefore);
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).periods()).hasSize(1);
     }
 
     @Test
@@ -106,7 +106,7 @@ class TenancyReservationTest {
         tenancies.cancelReservation(cancelled, "never signed");
 
         var replacement = tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2400", "NAJEM/M1/B")).tenancyId();
-        assertThat(Unit.from(store.load(unitId).events()).periods())
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).periods())
             .extracting(p -> p.tenancyId()).containsExactly(replacement);
     }
 

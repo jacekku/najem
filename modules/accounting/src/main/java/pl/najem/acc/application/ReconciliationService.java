@@ -52,7 +52,7 @@ public class ReconciliationService {
             "select tenancy_id from acc_charge where workspace_id = ? and charge_id = ?",
             UUID.class, workspaceId, chargeId);
 
-        var stream = store.load(paymentId);
+        var stream = store.load(paymentId, "Payment");
         store.append(paymentId, "Payment", stream.version(),
             List.of(new PaymentAllocated(paymentId, chargeId, amount)), List.of());
         jdbc.update("update acc_charge set allocated = true where charge_id = ?", chargeId);

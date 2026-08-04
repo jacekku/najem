@@ -118,9 +118,9 @@ class EndOfTenancyProcessTest {
         tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
             LocalDate.of(2027, 9, 2), EndReason.AGREEMENT_EXPIRY, "", true));
 
-        assertThat(Unit.from(store.load(unitId).events()).marketState())
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).marketState())
             .isEqualTo(Unit.MarketState.OPEN);
-        assertThat(Unit.from(store.load(unitId).events()).periods()).isEmpty();
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).periods()).isEmpty();
     }
 
     /**
@@ -136,9 +136,9 @@ class EndOfTenancyProcessTest {
         tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
             LocalDate.of(2027, 9, 2), EndReason.MUTUAL_AGREEMENT, "renovation planned", false));
 
-        assertThat(Unit.from(store.load(unitId).events()).marketState())
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).marketState())
             .isNotEqualTo(Unit.MarketState.OPEN);
-        assertThat(Unit.from(store.load(unitId).events()).periods()).isEmpty();
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).periods()).isEmpty();
     }
 
     @Test
@@ -293,7 +293,7 @@ class EndOfTenancyProcessTest {
     }
 
     private static boolean endingSoon(UUID tenancyId) {
-        return Tenancy.from(store.load(tenancyId).events()).endingSoon();
+        return Tenancy.from(store.load(tenancyId, "Tenancy").events()).endingSoon();
     }
 
     private static LocalDate armedDate(String kind, UUID subjectId) {

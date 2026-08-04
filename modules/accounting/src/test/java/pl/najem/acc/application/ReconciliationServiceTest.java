@@ -61,7 +61,7 @@ class ReconciliationServiceTest {
 
         reconciliation.confirm(WorkspaceContext.DEV_WORKSPACE_ID, paymentId);
 
-        assertThat(store.load(paymentId).events())
+        assertThat(store.load(paymentId, "Payment").events())
             .anySatisfy(e -> assertThat(e).isInstanceOf(PaymentAllocated.class));
         assertThat(jdbc.queryForObject(
             "select allocated from acc_charge where charge_id = ?", Boolean.class, chargeId)).isTrue();

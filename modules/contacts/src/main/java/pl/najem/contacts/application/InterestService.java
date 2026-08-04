@@ -27,7 +27,7 @@ public class InterestService {
     public UUID register(UUID workspaceId, UUID contactId, UUID unitId,
                          BigDecimal willingToPay, LocalDate desiredStart) {
         UUID interestId = UUID.randomUUID();
-        var stream = store.load(contactId);
+        var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new InterestRegistered(workspaceId, interestId, contactId, unitId,
                 willingToPay, desiredStart)), List.of());
@@ -43,7 +43,7 @@ public class InterestService {
         UUID contactId = jdbc.queryForObject(
             "select contact_id from contacts_interest where workspace_id = ? and interest_id = ?",
             UUID.class, workspaceId, interestId);
-        var stream = store.load(contactId);
+        var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new InterestWithdrawn(workspaceId, interestId, contactId, withdrawnOn)), List.of());
         jdbc.update("update contacts_interest set status = 'withdrawn' where workspace_id = ? and interest_id = ?",
@@ -63,6 +63,6 @@ public class InterestService {
     }
 
     public List<Object> eventsFor(UUID contactId) {
-        return List.copyOf(store.load(contactId).events());
+        return List.copyOf(store.load(contactId, "Contact").events());
     }
 }

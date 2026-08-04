@@ -64,15 +64,15 @@ class RetentionServiceTest {
         var contactId = aContactRetainedUntil(LocalDate.of(2027, 8, 3));
         var unitId = UUID.randomUUID();
         interests.register(AGENCY, contactId, unitId, new BigDecimal("2400"), LocalDate.of(2026, 10, 1));
-        var eventCountBefore = store.load(contactId).events().size();
+        var eventCountBefore = store.load(contactId, "Contact").events().size();
 
         contacts.erase(AGENCY, contactId, LocalDate.of(2027, 9, 1));
 
         assertThat(directory.find(AGENCY, contactId)).isEmpty();
         assertThat(jdbc.queryForObject(
             "select count(*) from contacts_person where contact_id = ?", Integer.class, contactId)).isZero();
-        assertThat(store.load(contactId).events()).hasSize(eventCountBefore + 1);
-        assertThat(store.load(contactId).events())
+        assertThat(store.load(contactId, "Contact").events()).hasSize(eventCountBefore + 1);
+        assertThat(store.load(contactId, "Contact").events())
             .contains(new ContactErased(AGENCY, contactId, LocalDate.of(2027, 9, 1)));
         assertThat(jdbc.queryForObject(
             "select erased_on from contacts_erasure_log where contact_id = ?", LocalDate.class, contactId))
@@ -224,6 +224,6 @@ class RetentionServiceTest {
             "select count(*) from contacts_erasure_log where contact_id = ?", Integer.class, contactId))
             .as("an erasure that erased nothing must not leave a tombstone claiming it did")
             .isZero();
-        assertThat(store.load(contactId).events()).noneMatch(ContactErased.class::isInstance);
+        assertThat(store.load(contactId, "Contact").events()).noneMatch(ContactErased.class::isInstance);
     }
 }

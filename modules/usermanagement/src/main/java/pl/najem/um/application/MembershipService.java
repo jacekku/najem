@@ -29,7 +29,7 @@ public class MembershipService {
         if (role != Role.ADMIN) {
             requireAnotherAdmin(workspaceId, userId);
         }
-        var stream = store.load(workspaceId);
+        var stream = store.load(workspaceId, "Workspace");
         store.append(workspaceId, "Workspace", stream.version(),
             List.of(new MemberRoleChanged(workspaceId, userId, role, on)), List.of());
         jdbc.update("update um_membership set role = ? where workspace_id = ? and user_id = ?",
@@ -39,7 +39,7 @@ public class MembershipService {
     public void remove(UUID workspaceId, UUID userId, LocalDate on) {
         requireMember(workspaceId, userId);
         requireAnotherAdmin(workspaceId, userId);
-        var stream = store.load(workspaceId);
+        var stream = store.load(workspaceId, "Workspace");
         store.append(workspaceId, "Workspace", stream.version(),
             List.of(new MemberRemoved(workspaceId, userId, on)), List.of());
         jdbc.update("delete from um_membership where workspace_id = ? and user_id = ?", workspaceId, userId);

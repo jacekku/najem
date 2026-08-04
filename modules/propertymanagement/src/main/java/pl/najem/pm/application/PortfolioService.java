@@ -46,14 +46,14 @@ public class PortfolioService {
     }
 
     public void setUnitBaseRent(UUID unitId, BigDecimal amount) {
-        var stream = store.load(unitId);
+        var stream = store.load(unitId, "Unit");
         store.append(unitId, "Unit", stream.version(),
             Unit.from(stream.events()).setBaseRent(amount), List.of());
         jdbc.update("update pm_unit set base_rent = ? where unit_id = ?", amount, unitId);
     }
 
     public void updateUnitDetails(UUID unitId, Map<String, String> details) {
-        var stream = store.load(unitId);
+        var stream = store.load(unitId, "Unit");
         var unit = Unit.from(stream.events());
         store.append(unitId, "Unit", stream.version(), unit.updateDetails(details), List.of());
         if (details.containsKey("listingRef")) {
@@ -71,7 +71,7 @@ public class PortfolioService {
     }
 
     private void applyMarketTransition(UUID unitId, String reason, boolean open) {
-        var stream = store.load(unitId);
+        var stream = store.load(unitId, "Unit");
         var unit = Unit.from(stream.events());
         var events = open ? unit.openToRent(reason) : unit.closeToRent(reason);
         store.append(unitId, "Unit", stream.version(), events, List.of());
@@ -85,6 +85,6 @@ public class PortfolioService {
      * rather than merely validated.
      */
     public UUID workspaceOf(UUID propertyId) {
-        return Property.from(store.load(propertyId).events()).workspaceId();
+        return Property.from(store.load(propertyId, "Property").events()).workspaceId();
     }
 }

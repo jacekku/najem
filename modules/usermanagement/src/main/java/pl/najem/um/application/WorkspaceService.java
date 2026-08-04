@@ -46,7 +46,7 @@ public class WorkspaceService {
     }
 
     public void rename(UUID workspaceId, String name, LocalDate on) {
-        var stream = store.load(workspaceId);
+        var stream = store.load(workspaceId, "Workspace");
         var workspace = Workspace.from(stream.events());
         var events = workspace.rename(name, on);
         store.append(workspaceId, "Workspace", stream.version(), events, List.of());

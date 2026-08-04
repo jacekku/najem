@@ -32,7 +32,7 @@ public class UserService {
     }
 
     public void linkContact(UUID userId, UUID contactId, LocalDate on) {
-        var stream = store.load(userId);
+        var stream = store.load(userId, "User");
         var user = User.from(stream.events());
         store.append(userId, "User", stream.version(), user.linkContact(contactId, on), List.of());
         jdbc.update("update um_user set contact_id = ? where user_id = ?", contactId, userId);

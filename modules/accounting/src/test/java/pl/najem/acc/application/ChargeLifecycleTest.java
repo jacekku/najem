@@ -67,7 +67,7 @@ class ChargeLifecycleTest {
 
         assertThat(jdbc.queryForObject("select active from acc_charge where charge_id = ?",
             Boolean.class, chargeId)).isFalse();
-        assertThat(store.load(tenancyId).events())
+        assertThat(store.load(tenancyId, "TenancyLedger").events())
             .anySatisfy(e -> assertThat(e).isInstanceOf(ChargeDeactivated.class));
     }
 
@@ -107,7 +107,7 @@ class ChargeLifecycleTest {
             BigDecimal.class, chargeId)).isEqualByComparingTo("2300");
         assertThat(jdbc.queryForObject("select amount from acc_credit_note where credit_note_id = ?",
             BigDecimal.class, creditNoteId)).isEqualByComparingTo("300");
-        assertThat(store.load(tenancyId).events())
+        assertThat(store.load(tenancyId, "TenancyLedger").events())
             .anySatisfy(e -> assertThat(e).isInstanceOf(CreditNoteIssued.class));
     }
 

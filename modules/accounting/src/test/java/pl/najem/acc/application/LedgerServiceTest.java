@@ -51,7 +51,7 @@ class LedgerServiceTest {
         var chargeId = service.postRentCharge(WorkspaceContext.DEV_WORKSPACE_ID, tenancyId, new BigDecimal("2500"),
             LocalDate.of(2026, 9, 1), "NAJEM/M1/2026");
 
-        assertThat(store.load(tenancyId).events())
+        assertThat(store.load(tenancyId, "TenancyLedger").events())
             .containsExactly(new ChargePosted(chargeId, tenancyId, "rent",
                 new BigDecimal("2500"), LocalDate.of(2026, 9, 1)));
         assertThat(jdbc.queryForObject(

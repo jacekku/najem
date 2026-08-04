@@ -28,7 +28,7 @@ public class ContactService {
 
     public UUID register(NewContact contact) {
         UUID contactId = UUID.randomUUID();
-        var stream = store.load(contactId);
+        var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new ContactRegistered(contact.workspaceId(), contactId, contact.lawfulBasis(),
                 contact.infoClauseServedAt(), contact.retainUntil())), List.of());
@@ -44,7 +44,7 @@ public class ContactService {
     }
 
     public void correctDetails(UUID workspaceId, UUID contactId, ContactDetails details, LocalDate correctedOn) {
-        var stream = store.load(contactId);
+        var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new ContactDetailsCorrected(workspaceId, contactId, correctedOn)), List.of());
         jdbc.update("""
@@ -69,7 +69,7 @@ public class ContactService {
             // Unknown here, or another workspace's contact: erase nothing, claim nothing.
             return;
         }
-        var stream = store.load(contactId);
+        var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new ContactErased(workspaceId, contactId, erasedOn)), List.of());
         jdbc.update("delete from contacts_interest where workspace_id = ? and contact_id = ?",

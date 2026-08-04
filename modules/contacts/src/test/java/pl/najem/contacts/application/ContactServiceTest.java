@@ -52,7 +52,7 @@ class ContactServiceTest {
 
         var contactId = service.register(anna);
 
-        assertThat(store.load(contactId).events()).containsExactly(
+        assertThat(store.load(contactId, "Contact").events()).containsExactly(
             new ContactRegistered(AGENCY, contactId, "legitimate-interest",
                 LocalDate.of(2026, 8, 3), LocalDate.of(2027, 8, 3)));
         assertThat(jdbc.queryForMap("select * from contacts_person where contact_id = ?", contactId))

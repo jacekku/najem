@@ -44,7 +44,7 @@ public class TenancyService {
      * @return the new tenancy id and the soft warnings the manager should see
      */
     public Reservation reserve(ReserveTenancy command) {
-        var unitStream = store.load(command.unitId());
+        var unitStream = store.load(command.unitId(), "Unit");
         var unit = Unit.from(unitStream.events());
         var scoped = withWorkspaceOf(unit, command);
 
@@ -69,11 +69,11 @@ public class TenancyService {
     }
 
     public void cancelReservation(UUID tenancyId, String reason) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         store.append(tenancyId, "Tenancy", stream.version(), tenancy.cancelReservation(reason), List.of());
 
-        var unitStream = store.load(tenancy.unitId());
+        var unitStream = store.load(tenancy.unitId(), "Unit");
         store.append(tenancy.unitId(), "Unit", unitStream.version(),
             Unit.from(unitStream.events()).releaseTenancyPeriod(tenancyId), List.of());
         due.disarm(TenancyStartProcess.KIND, tenancyId);
@@ -81,13 +81,13 @@ public class TenancyService {
     }
 
     public void addTenant(UUID tenancyId, UUID contactId) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         store.append(tenancyId, "Tenancy", stream.version(),
             Tenancy.from(stream.events()).addTenant(contactId), List.of());
     }
 
     public void removeTenant(UUID tenancyId, UUID contactId) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         store.append(tenancyId, "Tenancy", stream.version(),
             Tenancy.from(stream.events()).removeTenant(contactId), List.of());
     }
@@ -99,7 +99,7 @@ public class TenancyService {
      * signing and only PM holds them.
      */
     public void activate(UUID tenancyId, LocalDate on) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         MonthlyAmount monthly = tenancy.monthly();
         MonthlyAmount.Breakdown breakdown = monthly.breakdown();
@@ -120,7 +120,7 @@ public class TenancyService {
 
     public void scheduleRentChange(UUID tenancyId, LocalDate decidedOn, LocalDate effectiveFrom,
                                    MonthlyAmount newMonthly, ChangeType type) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         store.append(tenancyId, "Tenancy", stream.version(),
             tenancy.scheduleRentChange(decidedOn, effectiveFrom, newMonthly, type), List.of());
@@ -131,7 +131,7 @@ public class TenancyService {
     }
 
     public void cancelRentChange(UUID tenancyId, LocalDate effectiveFrom) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         store.append(tenancyId, "Tenancy", stream.version(),
             tenancy.cancelRentChange(effectiveFrom), List.of());
@@ -139,7 +139,7 @@ public class TenancyService {
     }
 
     private void armNextRentChange(UUID tenancyId) {
-        Tenancy.from(store.load(tenancyId).events()).nextPendingRentChange()
+        Tenancy.from(store.load(tenancyId, "Tenancy").events()).nextPendingRentChange()
             .ifPresentOrElse(
                 next -> due.arm(RentChangeProcess.KIND, tenancyId,
                     next.effectiveFrom().minusDays(1)),
@@ -152,7 +152,7 @@ public class TenancyService {
      * (najem-accounting, seq 48).
      */
     public void applyRentChange(UUID tenancyId, LocalDate effectiveFrom) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         var change = tenancy.pendingRentChange(effectiveFrom).orElseThrow(
             () -> new IllegalStateException("No rent change pending for " + effectiveFrom));
@@ -182,7 +182,7 @@ public class TenancyService {
      */
     public void giveTerminationNotice(UUID tenancyId, String ground, LocalDate noticeDate,
                                       LocalDate effectiveDate, String noticeDocRef) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         store.append(tenancyId, "Tenancy", stream.version(),
             tenancy.giveTerminationNotice(ground, noticeDate, effectiveDate, noticeDocRef),
@@ -197,7 +197,7 @@ public class TenancyService {
      * tenancy that ended yesterday would otherwise fire against an ended aggregate.
      */
     public void end(UUID tenancyId, EndTenancy command) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
 
         store.append(tenancyId, "Tenancy", stream.version(), tenancy.end(command),
@@ -206,7 +206,7 @@ public class TenancyService {
 
         // The calendar is freed whatever the manager decided about the market: the tenancy is
         // over, so it must stop blocking a new one. Reopening to rent is the separate decision.
-        var unitStream = store.load(tenancy.unitId());
+        var unitStream = store.load(tenancy.unitId(), "Unit");
         var unit = Unit.from(unitStream.events());
         var unitEvents = new ArrayList<>(unit.releaseTenancyPeriod(tenancyId));
         // backToMarket is answered either way, never left as whatever the unit happened to be.
@@ -232,7 +232,7 @@ public class TenancyService {
      * timer was armed against a tenancy that has since moved on, which is not a failure.
      */
     public boolean flagEndingSoonIfDue(UUID tenancyId, LocalDate on) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         if (stream.events().isEmpty()) {
             throw new IllegalStateException(
                 "Ending-soon timer armed against unknown tenancy " + tenancyId);
@@ -259,7 +259,7 @@ public class TenancyService {
 
     /** One sweep item as its own unit of work — see {@link SweepResult}. */
     public boolean applyDueRentChange(UUID tenancyId, LocalDate on) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         if (stream.events().isEmpty()) {
             throw new IllegalStateException(
                 "Rent-change timer armed against unknown tenancy " + tenancyId);
@@ -279,7 +279,7 @@ public class TenancyService {
 
         // A tenancy may have several changes queued; arm the next one rather than
         // leaving it stranded behind a fired timer.
-        var later = Tenancy.from(store.load(tenancyId).events()).nextPendingRentChange();
+        var later = Tenancy.from(store.load(tenancyId, "Tenancy").events()).nextPendingRentChange();
         if (later.isPresent()) {
             due.arm(RentChangeProcess.KIND, tenancyId, later.get().effectiveFrom().minusDays(1));
         } else {
@@ -290,7 +290,7 @@ public class TenancyService {
 
     /** One sweep item as its own unit of work — see {@link SweepResult}. */
     public boolean activateIfDue(UUID tenancyId) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         if (stream.events().isEmpty()) {
             throw new IllegalStateException(
                 "Start timer armed against unknown tenancy " + tenancyId);
@@ -311,7 +311,7 @@ public class TenancyService {
 
     /** Armed at activation, and only when there is an end to warn about. */
     void armEndingSoon(UUID tenancyId) {
-        LocalDate end = Tenancy.from(store.load(tenancyId).events()).effectiveEndDate();
+        LocalDate end = Tenancy.from(store.load(tenancyId, "Tenancy").events()).effectiveEndDate();
         if (end == null) {
             due.disarm(EndOfTenancyProcess.KIND, tenancyId);
         } else {

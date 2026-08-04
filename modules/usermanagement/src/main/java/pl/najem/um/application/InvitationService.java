@@ -55,7 +55,7 @@ public class InvitationService {
         UUID invitationId = UUID.randomUUID();
         String token = newToken();
 
-        var stream = store.load(workspaceId);
+        var stream = store.load(workspaceId, "Workspace");
         store.append(workspaceId, "Workspace", stream.version(),
             List.of(new MemberInvited(workspaceId, invitationId, role, invitedByUserId, on, expiresOn)),
             List.of());
@@ -71,7 +71,7 @@ public class InvitationService {
     }
 
     public void revoke(UUID workspaceId, UUID invitationId, LocalDate on) {
-        var stream = store.load(workspaceId);
+        var stream = store.load(workspaceId, "Workspace");
         store.append(workspaceId, "Workspace", stream.version(),
             List.of(new InvitationRevoked(workspaceId, invitationId, on)), List.of());
         jdbc.update("update um_invitation set status = 'REVOKED' where invitation_id = ? and status = 'PENDING'",
@@ -107,7 +107,7 @@ public class InvitationService {
         UUID subject = keycloak.provision(invitation.email());
         UUID userId = users.findBySubject(subject).orElseGet(() -> users.register(subject, on));
 
-        var stream = store.load(invitation.workspaceId());
+        var stream = store.load(invitation.workspaceId(), "Workspace");
         store.append(invitation.workspaceId(), "Workspace", stream.version(),
             List.of(new InvitationAccepted(invitation.workspaceId(), invitation.invitationId(), userId, on)),
             List.of());

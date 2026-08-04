@@ -23,13 +23,13 @@ public class ChecklistService {
     }
 
     public void addItem(UUID tenancyId, String key, ChecklistPhase phase) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         store.append(tenancyId, "Tenancy", stream.version(),
             Tenancy.from(stream.events()).addChecklistItem(key, phase), List.of());
     }
 
     public void completeItem(UUID tenancyId, String key) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         store.append(tenancyId, "Tenancy", stream.version(),
             Tenancy.from(stream.events()).completeChecklistItem(key), List.of());
     }
@@ -40,7 +40,7 @@ public class ChecklistService {
      * and the date that, with the vacate date, fixes their deposit-settlement deadline.
      */
     public void recordHandover(UUID tenancyId, HandoverProtocol protocol) {
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         store.append(tenancyId, "Tenancy", stream.version(),
             tenancy.recordHandoverProtocol(protocol),

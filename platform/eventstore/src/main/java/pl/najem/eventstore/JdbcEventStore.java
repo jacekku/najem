@@ -43,11 +43,11 @@ public class JdbcEventStore implements EventStore {
     }
 
     @Override
-    public StreamEvents load(UUID streamId) {
+    public StreamEvents load(UUID streamId, String streamType) {
         List<Map.Entry<Long, Object>> rows = jdbc.query(
-            "select version, event_type, payload from events where stream_id = ? order by version",
+            "select version, event_type, payload from events where stream_id = ? and stream_type = ? order by version",
             (rs, i) -> Map.entry(rs.getLong(1), read(rs.getString(2), rs.getString(3))),
-            streamId);
+            streamId, streamType);
         long version = rows.isEmpty() ? 0 : rows.getLast().getKey();
         return new StreamEvents(version, rows.stream().map(Map.Entry::getValue).toList());
     }

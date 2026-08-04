@@ -94,7 +94,7 @@ class ContactDirectoryTest {
 
         assertThat(directory.find(AGENCY, contactId))
             .contains(new ContactDetails("Anna", "Kowalska", "anna@example.com", "+48600100201"));
-        assertThat(store.load(contactId).events())
+        assertThat(store.load(contactId, "Contact").events())
             .contains(new ContactDetailsCorrected(AGENCY, contactId, LocalDate.of(2026, 8, 4)));
         assertThat(jdbc.queryForList(
             "select payload::text from events where stream_id = ?", String.class, contactId))

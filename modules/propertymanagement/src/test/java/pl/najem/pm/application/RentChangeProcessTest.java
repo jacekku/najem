@@ -151,7 +151,7 @@ class RentChangeProcessTest {
     }
 
     private static BigDecimal monthlyTotalOf(UUID tenancyId) {
-        return Tenancy.from(store.load(tenancyId).events()).monthly().total();
+        return Tenancy.from(store.load(tenancyId, "Tenancy").events()).monthly().total();
     }
 
     private static int rentChangeEventsFor(UUID tenancyId) {

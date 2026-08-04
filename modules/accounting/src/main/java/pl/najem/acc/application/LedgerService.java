@@ -52,7 +52,7 @@ public class LedgerService {
                 line.amount(), dueDate));
         }
 
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "TenancyLedger");
         store.append(tenancyId, "TenancyLedger", stream.version(), List.copyOf(events), List.of());
         for (int i = 0; i < lines.size(); i++) {
             jdbc.update("""
@@ -81,7 +81,7 @@ public class LedgerService {
                 "charge " + chargeId + " is paid and cannot be deactivated; issue a credit note instead");
         }
         UUID tenancyId = (UUID) charge.get("tenancy_id");
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "TenancyLedger");
         store.append(tenancyId, "TenancyLedger", stream.version(),
             List.of(new ChargeDeactivated(chargeId, tenancyId, reason)), List.of());
         jdbc.update("update acc_charge set active = false where charge_id = ?", chargeId);
@@ -105,7 +105,7 @@ public class LedgerService {
         UUID tenancyId = (UUID) charge.get("tenancy_id");
         UUID creditNoteId = UUID.randomUUID();
         LocalDate issuedOn = (LocalDate) charge.get("due_date");
-        var stream = store.load(tenancyId);
+        var stream = store.load(tenancyId, "TenancyLedger");
         store.append(tenancyId, "TenancyLedger", stream.version(),
             List.of(new CreditNoteIssued(creditNoteId, chargeId, tenancyId, amount, reason, issuedOn)),
             List.of());

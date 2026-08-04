@@ -36,7 +36,7 @@ public class RetentionService {
      * changed roster will send the same hold repeatedly, and that is normal traffic, not an error.
      */
     public void setHold(UUID workspaceId, UUID contactId, String reason, String sourceRef, LocalDate setOn) {
-        var stream = store.load(contactId);
+        var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new RetentionHoldSet(workspaceId, contactId, reason, sourceRef, setOn)), List.of());
         jdbc.update("""
@@ -53,7 +53,7 @@ public class RetentionService {
 
     /** Releases only {@code sourceRef}'s hold. Another source's hold on the same reason survives. */
     public void releaseHold(UUID workspaceId, UUID contactId, String reason, String sourceRef, LocalDate releasedOn) {
-        var stream = store.load(contactId);
+        var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new RetentionHoldReleased(workspaceId, contactId, reason, sourceRef, releasedOn)), List.of());
         jdbc.update("""

@@ -51,7 +51,7 @@ class PortfolioServiceTest {
         var propertyId = service.createProperty(workspaceId, "Testowa 1, Kraków", owners());
         var unitId = service.addUnit(propertyId, "M1", new BigDecimal("2500"));
 
-        assertThat(store.load(unitId).events()).containsExactly(
+        assertThat(store.load(unitId, "Unit").events()).containsExactly(
             new UnitEvents.UnitAddedToProperty(workspaceId, unitId, propertyId, "M1", new BigDecimal("2500")));
         Integer rows = jdbc.queryForObject("select count(*) from pm_unit where unit_id = ?", Integer.class, unitId);
         assertThat(rows).isEqualTo(1);
@@ -97,7 +97,7 @@ class PortfolioServiceTest {
         assertThat(marketStateOf(unitId)).isEqualTo("OPEN");
         assertThat(jdbc.queryForObject("select listing_ref from pm_unit where unit_id = ?",
             String.class, unitId)).isEqualTo("OLX-99887");
-        assertThat(Unit.from(store.load(unitId).events()).marketState())
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).marketState())
             .isEqualTo(Unit.MarketState.OPEN);
 
         service.closeUnitToRent(unitId, "renovation");
@@ -112,7 +112,7 @@ class PortfolioServiceTest {
 
         service.setUnitBaseRent(unitId, new BigDecimal("2400"));
 
-        assertThat(Unit.from(store.load(unitId).events()).baseRent()).isEqualByComparingTo("2400");
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).baseRent()).isEqualByComparingTo("2400");
         assertThat(jdbc.queryForObject("select base_rent from pm_unit where unit_id = ?",
             BigDecimal.class, unitId)).isEqualByComparingTo("2400");
     }

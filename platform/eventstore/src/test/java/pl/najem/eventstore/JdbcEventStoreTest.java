@@ -42,7 +42,7 @@ class JdbcEventStoreTest {
         var id = UUID.randomUUID();
         store.append(id, "Test", 0, List.of(new SampleEvent("a"), new SampleEvent("b")), List.of());
 
-        var stream = store.load(id);
+        var stream = store.load(id, "Test");
 
         assertThat(stream.version()).isEqualTo(2);
         assertThat(stream.events()).containsExactly(new SampleEvent("a"), new SampleEvent("b"));
@@ -59,9 +59,51 @@ class JdbcEventStoreTest {
 
     @Test
     void loadOfUnknownStreamIsEmptyAtVersionZero() {
-        var stream = store.load(UUID.randomUUID());
+        var stream = store.load(UUID.randomUUID(), "Test");
 
         assertThat(stream.version()).isZero();
         assertThat(stream.events()).isEmpty();
+    }
+
+    // Two bounded contexts may name a stream after the same subject -- PM writes (tenancyId,
+    // "Tenancy") while accounting writes (tenancyId, "TenancyLedger") for the same tenancy.
+    // Those are two streams that happen to share an id, and neither module may see the other's
+    // events: rehydrating an aggregate from a foreign event is an immediate crash, and it is
+    // not a case a module can defend against, since it cannot know the other module exists.
+    @Test
+    void oneIdUnderTwoTypesIsTwoStreams() {
+        var id = UUID.randomUUID();
+        store.append(id, "Tenancy", 0, List.of(new SampleEvent("pm")), List.of());
+        store.append(id, "TenancyLedger", 0, List.of(new SampleEvent("acc")), List.of());
+
+        assertThat(store.load(id, "Tenancy").events()).containsExactly(new SampleEvent("pm"));
+        assertThat(store.load(id, "TenancyLedger").events()).containsExactly(new SampleEvent("acc"));
+    }
+
+    // The read above is only half of it. Each type versions from its OWN history, so both
+    // streams legitimately hold a version 1 under one id -- which the uniqueness constraint
+    // has to permit. If it does not, the second module's first append dies with a
+    // ConcurrencyException naming a concurrent writer that does not exist, and retrying
+    // fails identically forever.
+    @Test
+    void eachTypeVersionsIndependentlyUnderASharedId() {
+        var id = UUID.randomUUID();
+        store.append(id, "Tenancy", 0, List.of(new SampleEvent("pm-1")), List.of());
+        store.append(id, "TenancyLedger", 0, List.of(new SampleEvent("acc-1")), List.of());
+        store.append(id, "Tenancy", 1, List.of(new SampleEvent("pm-2")), List.of());
+
+        assertThat(store.load(id, "Tenancy").version()).isEqualTo(2);
+        assertThat(store.load(id, "TenancyLedger").version()).isEqualTo(1);
+    }
+
+    // Optimistic concurrency must still be per (id, type) rather than per id.
+    @Test
+    void rejectsStaleExpectedVersionWithinOneType() {
+        var id = UUID.randomUUID();
+        store.append(id, "Tenancy", 0, List.of(new SampleEvent("a")), List.of());
+        store.append(id, "TenancyLedger", 0, List.of(new SampleEvent("b")), List.of());
+
+        assertThatThrownBy(() -> store.append(id, "Tenancy", 0, List.of(new SampleEvent("c")), List.of()))
+            .isInstanceOf(ConcurrencyException.class);
     }
 }

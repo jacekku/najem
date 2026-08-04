@@ -154,7 +154,7 @@ class TenancyStartProcessTest {
     }
 
     private static Tenancy.State stateOf(UUID tenancyId) {
-        return Tenancy.from(store.load(tenancyId).events()).state();
+        return Tenancy.from(store.load(tenancyId, "Tenancy").events()).state();
     }
 
     private static LocalDate activatedOn(UUID tenancyId) {

@@ -14,5 +14,13 @@ public interface EventStore {
     void append(UUID streamId, String streamType, long expectedVersion,
                 List<Object> events, List<IntegrationEvent> integrationEvents);
 
-    StreamEvents load(UUID streamId);
+    /**
+     * The events of one stream, in order. A stream is identified by id AND type: two bounded
+     * contexts may legitimately name a stream after the same subject (PM's {@code Tenancy} and
+     * accounting's {@code TenancyLedger} share a tenancy id), and each must see only its own
+     * events. Loading by id alone returned both modules' events to whichever asked, which crashed
+     * the first aggregate to rehydrate a foreign event -- a module cannot defend against that,
+     * because it cannot know the other module exists.
+     */
+    StreamEvents load(UUID streamId, String streamType);
 }
