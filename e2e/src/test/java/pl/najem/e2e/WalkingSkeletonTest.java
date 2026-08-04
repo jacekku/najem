@@ -57,6 +57,8 @@ class WalkingSkeletonTest {
         bankPort = Integer.parseInt(bank.getEnvironment().getProperty("local.server.port"));
         app = new SpringApplicationBuilder(NajemApplication.class).run(
             "--server.port=0",
+            // Explicit: rule 7 forbids acquiring permit-all by omission.
+            "--najem.security.permit-all=true",
             "--spring.datasource.url=" + pg.getJdbcUrl(),
             "--spring.datasource.username=" + pg.getUsername(),
             "--spring.datasource.password=" + pg.getPassword(),

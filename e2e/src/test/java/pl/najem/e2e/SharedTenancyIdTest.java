@@ -53,6 +53,8 @@ class SharedTenancyIdTest {
             "--najem.bank.fake.enabled=true",
             "--najem.bank.base-url=http://localhost:8081",
             "--najem.bank.iban=PL61109010140000071219812874",
+            // Explicit: rule 7 forbids acquiring permit-all by omission.
+            "--najem.security.permit-all=true",
             "--spring.datasource.url=" + pg.getJdbcUrl(),
             "--spring.datasource.username=" + pg.getUsername(),
             "--spring.datasource.password=" + pg.getPassword(),
