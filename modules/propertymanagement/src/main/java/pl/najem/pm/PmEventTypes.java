@@ -24,6 +24,11 @@ public class PmEventTypes {
             PropertyEvents.PropertyOwnershipChanged.class,
             PropertyEvents.PropertyDetailsUpdated.class,
             UnitEvents.UnitAddedToProperty.class,
+            UnitEvents.UnitBaseRentSet.class,
+            UnitEvents.UnitDetailsUpdated.class,
+            UnitEvents.UnitOpenedToRent.class,
+            UnitEvents.UnitClosedToRent.class,
+            UnitEvents.UnitRemovedFromProperty.class,
             TenancyReserved.class,
             TenancyActivated.class);
     }

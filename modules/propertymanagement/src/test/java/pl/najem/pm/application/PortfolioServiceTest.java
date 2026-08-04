@@ -14,10 +14,12 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.domain.Owner;
+import pl.najem.pm.domain.Unit;
 import pl.najem.pm.domain.UnitEvents;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -81,6 +83,44 @@ class PortfolioServiceTest {
             UUID.class, workspaceA);
 
         assertThat(unitsInA).containsExactly(unitA);
+    }
+
+    @Test
+    void marketStateAndListingRefTrackTheUnitStreamIntoTheProjection() {
+        var propertyId = service.createProperty(UUID.randomUUID(), "Testowa 1", owners());
+        var unitId = service.addUnit(propertyId, "M12", new BigDecimal("2600"));
+
+        assertThat(marketStateOf(unitId)).isEqualTo("INVENTORY");
+
+        service.updateUnitDetails(unitId, Map.of("listingRef", "OLX-99887"));
+        service.openUnitToRent(unitId, "listed");
+
+        assertThat(marketStateOf(unitId)).isEqualTo("OPEN");
+        assertThat(jdbc.queryForObject("select listing_ref from pm_unit where unit_id = ?",
+            String.class, unitId)).isEqualTo("OLX-99887");
+        assertThat(Unit.from(store.load(unitId).events()).marketState())
+            .isEqualTo(Unit.MarketState.OPEN);
+
+        service.closeUnitToRent(unitId, "renovation");
+
+        assertThat(marketStateOf(unitId)).isEqualTo("CLOSED");
+    }
+
+    @Test
+    void baseRentChangeReachesBothTheStreamAndTheProjection() {
+        var propertyId = service.createProperty(UUID.randomUUID(), "Testowa 1", owners());
+        var unitId = service.addUnit(propertyId, "M12", new BigDecimal("2600"));
+
+        service.setUnitBaseRent(unitId, new BigDecimal("2400"));
+
+        assertThat(Unit.from(store.load(unitId).events()).baseRent()).isEqualByComparingTo("2400");
+        assertThat(jdbc.queryForObject("select base_rent from pm_unit where unit_id = ?",
+            BigDecimal.class, unitId)).isEqualByComparingTo("2400");
+    }
+
+    private static String marketStateOf(UUID unitId) {
+        return jdbc.queryForObject("select market_state from pm_unit where unit_id = ?",
+            String.class, unitId);
     }
 
     private static List<Owner> owners() {

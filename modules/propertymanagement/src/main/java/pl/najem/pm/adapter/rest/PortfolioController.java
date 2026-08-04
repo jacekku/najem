@@ -25,6 +25,10 @@ public class PortfolioController {
 
     public record AddUnitRequest(String name, BigDecimal baseRent) {}
 
+    public record BaseRentRequest(BigDecimal baseRent) {}
+
+    public record ReasonRequest(String reason) {}
+
     private final PortfolioService portfolio;
 
     public PortfolioController(PortfolioService portfolio) {
@@ -44,5 +48,29 @@ public class PortfolioController {
     @PostMapping("/properties/{propertyId}/units")
     public Map<String, UUID> addUnit(@PathVariable UUID propertyId, @RequestBody AddUnitRequest request) {
         return Map.of("unitId", portfolio.addUnit(propertyId, request.name(), request.baseRent()));
+    }
+
+    @PostMapping("/units/{unitId}/base-rent")
+    public void setBaseRent(@PathVariable UUID unitId, @RequestBody BaseRentRequest request) {
+        portfolio.setUnitBaseRent(unitId, request.baseRent());
+    }
+
+    @PostMapping("/units/{unitId}/details")
+    public void updateDetails(@PathVariable UUID unitId, @RequestBody Map<String, String> details) {
+        portfolio.updateUnitDetails(unitId, details);
+    }
+
+    @PostMapping("/units/{unitId}/open")
+    public void openToRent(@PathVariable UUID unitId, @RequestBody(required = false) ReasonRequest request) {
+        portfolio.openUnitToRent(unitId, reasonOf(request));
+    }
+
+    @PostMapping("/units/{unitId}/close")
+    public void closeToRent(@PathVariable UUID unitId, @RequestBody(required = false) ReasonRequest request) {
+        portfolio.closeUnitToRent(unitId, reasonOf(request));
+    }
+
+    private static String reasonOf(ReasonRequest request) {
+        return request == null || request.reason() == null ? "" : request.reason();
     }
 }

@@ -6,10 +6,11 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.najem.eventstore.EventStore;
 import pl.najem.pm.domain.Owner;
 import pl.najem.pm.domain.Property;
-import pl.najem.pm.domain.UnitEvents;
+import pl.najem.pm.domain.Unit;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -37,11 +38,45 @@ public class PortfolioService {
         UUID workspaceId = workspaceOf(propertyId);
         UUID unitId = UUID.randomUUID();
         store.append(unitId, "Unit", 0,
-            List.of(new UnitEvents.UnitAddedToProperty(workspaceId, unitId, propertyId, name, baseRent)),
-            List.of());
-        jdbc.update("insert into pm_unit(unit_id, property_id, workspace_id, name, base_rent) "
-            + "values (?,?,?,?,?)", unitId, propertyId, workspaceId, name, baseRent);
+            Unit.add(unitId, workspaceId, propertyId, name, baseRent), List.of());
+        jdbc.update("insert into pm_unit(unit_id, property_id, workspace_id, name, base_rent, market_state) "
+            + "values (?,?,?,?,?,?)", unitId, propertyId, workspaceId, name, baseRent,
+            Unit.MarketState.INVENTORY.name());
         return unitId;
+    }
+
+    public void setUnitBaseRent(UUID unitId, BigDecimal amount) {
+        var stream = store.load(unitId);
+        store.append(unitId, "Unit", stream.version(),
+            Unit.from(stream.events()).setBaseRent(amount), List.of());
+        jdbc.update("update pm_unit set base_rent = ? where unit_id = ?", amount, unitId);
+    }
+
+    public void updateUnitDetails(UUID unitId, Map<String, String> details) {
+        var stream = store.load(unitId);
+        var unit = Unit.from(stream.events());
+        store.append(unitId, "Unit", stream.version(), unit.updateDetails(details), List.of());
+        if (details.containsKey("listingRef")) {
+            jdbc.update("update pm_unit set listing_ref = ? where unit_id = ?",
+                details.get("listingRef"), unitId);
+        }
+    }
+
+    public void openUnitToRent(UUID unitId, String reason) {
+        applyMarketTransition(unitId, reason, true);
+    }
+
+    public void closeUnitToRent(UUID unitId, String reason) {
+        applyMarketTransition(unitId, reason, false);
+    }
+
+    private void applyMarketTransition(UUID unitId, String reason, boolean open) {
+        var stream = store.load(unitId);
+        var unit = Unit.from(stream.events());
+        var events = open ? unit.openToRent(reason) : unit.closeToRent(reason);
+        store.append(unitId, "Unit", stream.version(), events, List.of());
+        jdbc.update("update pm_unit set market_state = ? where unit_id = ?",
+            (open ? Unit.MarketState.OPEN : Unit.MarketState.CLOSED).name(), unitId);
     }
 
     /**
