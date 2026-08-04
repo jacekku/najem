@@ -27,6 +27,8 @@ import pl.najem.pm.application.PortfolioService;
 import pl.najem.pm.application.ProcessDueStore;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.ChecklistPhase;
+import pl.najem.pm.domain.EndReason;
+import pl.najem.pm.domain.EndTenancy;
 import pl.najem.pm.domain.HandoverProtocol;
 import pl.najem.pm.domain.LegalForm;
 import pl.najem.pm.domain.MeterReading;
@@ -108,6 +110,8 @@ class EventContractTest {
         requires("ChecklistItemCompleted", PM, "tenancyId", "key");
         requires("HandoverProtocolRecorded", PM, "tenancyId", "protocol");
         requires("RentChangeApplied", PM, "tenancyId", "effectiveFrom", "monthly", "type");
+        requires("TerminationNoticeGiven", PM, "workspaceId", "tenancyId", "ground", "noticeDate", "effectiveDate");
+        requires("TenancyEnded", PM, "workspaceId", "tenancyId", "endDate", "reasonType");
         // PM — Unit stream (@najem-pm)
         requires("TenancyPeriodRegistered", PM, "workspaceId", "unitId", "tenancyId", "start");
         requires("TenancyPeriodReleased", PM, "workspaceId", "unitId", "tenancyId");
@@ -173,6 +177,14 @@ class EventContractTest {
         tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 9, 2), LocalDate.of(2027, 1, 1),
             new MonthlyAmount(new BigDecimal("2600"), null), pl.najem.pm.domain.ChangeType.AGREED_CHANGE);
         tenancies.applyRentChange(tenancyId, LocalDate.of(2027, 1, 1));
+
+        // Termination and ending, driven BEFORE the accounting block below: PM cannot rehydrate a
+        // Tenancy once accounting has written to the shared stream (najem-build seq 103).
+        tenancies.giveTerminationNotice(tenancyId, "art. 11 ust. 2 pkt 2",
+            LocalDate.of(2027, 2, 1), LocalDate.of(2027, 5, 1), "doc-notice-1");
+        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 5, 1), LocalDate.of(2027, 5, 3),
+            EndReason.LANDLORD_NOTICE, "moved out on time", true));
+
         portfolio.closeUnitToRent(unitId, "renovation");
 
         var reference = "NAJEM-TRIPWIRE-1";
