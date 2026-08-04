@@ -1,6 +1,9 @@
 package pl.najem.reporting.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -20,6 +23,19 @@ class EventFeedTest {
     @Container
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
+    /**
+     * Built the way the APPLICATION builds it. A bare {@code new ObjectMapper()} was a third
+     * encoding again — no JavaTimeModule at all — on top of the production/module-test divergence
+     * (najem-build seq 119). Reporting parses stored payloads, so its tests have no business
+     * reading a shape production never writes.
+     */
+    private static ObjectMapper productionMapper() {
+        return JsonMapper.builder()
+            .addModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .build();
+    }
+
     static JdbcTemplate jdbc;
     static EventFeed feed;
 
@@ -29,7 +45,7 @@ class EventFeedTest {
         Flyway.configure().dataSource(dataSource)
             .locations("classpath:db/eventstore", "classpath:db/reporting").load().migrate();
         jdbc = new JdbcTemplate(dataSource);
-        feed = new EventFeed(jdbc, new ObjectMapper());
+        feed = new EventFeed(jdbc, productionMapper());
     }
 
     private static long append(String streamType, String eventType, String payload) {
