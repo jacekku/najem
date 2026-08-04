@@ -25,6 +25,33 @@ public enum Component {
         this.wireName = wireName;
     }
 
+    /**
+     * Where this component sits in the allocation order within one due date: interest, then media,
+     * then admin, then repair recharges, and rent last.
+     *
+     * <p>Rent last is the load-bearing part. Rent is what the arrears board and the art. 11
+     * full-periods counter watch, so if something must stay unpaid it should be the obligation whose
+     * consequences stay visible — settling rent first would clear the alarm and leave the debt.
+     */
+    public int allocationRank() {
+        return switch (this) {
+            case INTEREST -> 1;
+            case MEDIA_ADVANCE -> 2;
+            case ADMIN_FEE -> 3;
+            case REPAIR_RECHARGE -> 4;
+            case RENT -> 5;
+            case DEPOSIT -> Integer.MAX_VALUE;
+        };
+    }
+
+    /**
+     * A deposit is a separate obligation met by a separate transfer, so rent money must not drift
+     * onto it as a side effect of the monthly cycle. Settling a deposit is an explicit act.
+     */
+    public boolean settledByAutomaticAllocation() {
+        return this != DEPOSIT;
+    }
+
     public String wireName() {
         return wireName;
     }

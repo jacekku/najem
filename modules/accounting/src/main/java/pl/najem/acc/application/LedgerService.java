@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.ChargeDeactivated;
 import pl.najem.acc.domain.ChargePosted;
+import pl.najem.acc.domain.Component;
 import pl.najem.acc.domain.CreditNoteIssued;
 import pl.najem.eventstore.EventStore;
 
@@ -33,6 +34,25 @@ public class LedgerService {
                                String paymentReference) {
         return postMonthlyCharges(workspaceId, tenancyId, MonthlyBreakdown.unsplit(amount), dueDate,
             paymentReference).chargeIds().getFirst();
+    }
+
+    /**
+     * Charges a single component against a tenancy — a deposit, a repair recharge, interest. The
+     * monthly cycle goes through {@link #postMonthlyCharges}; this is for the obligations that
+     * arrive on their own.
+     */
+    public UUID postCharge(UUID workspaceId, UUID tenancyId, Component component, BigDecimal amount,
+                           LocalDate dueDate, String paymentReference) {
+        UUID chargeId = UUID.randomUUID();
+        var stream = store.load(tenancyId, "TenancyLedger");
+        store.append(tenancyId, "TenancyLedger", stream.version(),
+            List.of(new ChargePosted(chargeId, tenancyId, component.wireName(), amount, dueDate)),
+            List.of());
+        jdbc.update("""
+            insert into acc_charge(charge_id, workspace_id, tenancy_id, component, amount, due_date, payment_reference)
+            values (?,?,?,?,?,?,?)
+            """, chargeId, workspaceId, tenancyId, component.wireName(), amount, dueDate, paymentReference);
+        return chargeId;
     }
 
     /**

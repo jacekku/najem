@@ -4,11 +4,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pl.najem.acc.domain.PaymentAllocated;
 import pl.najem.acc.domain.WarningKind;
 import pl.najem.eventstore.EventStore;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -17,20 +15,20 @@ import java.util.UUID;
 @Transactional
 public class ReconciliationService {
 
-    private final EventStore store;
     private final JdbcTemplate jdbc;
     private final WarningService warnings;
+    private final AllocationService allocation;
 
     @Autowired
-    public ReconciliationService(EventStore store, JdbcTemplate jdbc, WarningService warnings) {
-        this.store = store;
+    public ReconciliationService(JdbcTemplate jdbc, WarningService warnings, AllocationService allocation) {
         this.jdbc = jdbc;
         this.warnings = warnings;
+        this.allocation = allocation;
     }
 
-    /** Reconciliation with its own warning register, for tests and callers outside the context. */
+    /** Reconciliation with its own collaborators, for tests and callers outside the context. */
     public ReconciliationService(EventStore store, JdbcTemplate jdbc) {
-        this(store, jdbc, new WarningService(jdbc));
+        this(jdbc, new WarningService(jdbc), new AllocationService(store, jdbc));
     }
 
     /**
@@ -45,18 +43,13 @@ public class ReconciliationService {
             return;
         }
         UUID chargeId = suggested.getFirst();
-        BigDecimal amount = jdbc.queryForObject(
-            "select amount from acc_payment where workspace_id = ? and payment_id = ?",
-            BigDecimal.class, workspaceId, paymentId);
         UUID tenancyId = jdbc.queryForObject(
             "select tenancy_id from acc_charge where workspace_id = ? and charge_id = ?",
             UUID.class, workspaceId, chargeId);
 
-        var stream = store.load(paymentId, "Payment");
-        store.append(paymentId, "Payment", stream.version(),
-            List.of(new PaymentAllocated(paymentId, chargeId, amount)), List.of());
-        jdbc.update("update acc_charge set allocated = true where charge_id = ?", chargeId);
-        jdbc.update("update acc_payment set status = 'allocated' where payment_id = ?", paymentId);
+        // What the manager confirms is which tenancy the money belongs to. Where it comes to rest
+        // within that tenancy is the ledger's rule, not theirs: oldest due first, rent last.
+        allocation.allocate(workspaceId, paymentId, tenancyId);
         jdbc.update("update acc_tenancy_status set status = 'green' where tenancy_id = ?", tenancyId);
         rememberPayerAccount(workspaceId, paymentId, tenancyId);
     }

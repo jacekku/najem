@@ -62,10 +62,11 @@ public class IngestionService {
                 line.title(), line.bookingDate())), List.of());
         jdbc.update("""
             insert into acc_payment(payment_id, workspace_id, external_id, amount, title, booking_date,
-                                    status, counterparty_name, counterparty_iban, bank_reference,
-                                    value_date, direction, currency)
-            values (?,?,?,?,?,?,'unmatched',?,?,?,?,?,?)
+                                    status, unallocated_amount, counterparty_name, counterparty_iban,
+                                    bank_reference, value_date, direction, currency)
+            values (?,?,?,?,?,?,'unmatched',?,?,?,?,?,?,?)
             """, paymentId, workspaceId, line.externalId(), line.amount(), line.title(), line.bookingDate(),
+            line.amount(),
             line.counterpartyName(), line.counterpartyIban(), line.bankReference(), line.valueDate(),
             line.creditDebitIndicator(), line.currency());
         climbTheLadder(workspaceId, paymentId, line);
