@@ -10,6 +10,7 @@ import pl.najem.acc.domain.SuspenseAge;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -29,23 +30,35 @@ public class SuspenseService {
     private final EventStore store;
     private final JdbcTemplate jdbc;
     private final AllocationService allocation;
+    private final Clock clock;
     private final int warnAfterDays;
     private final int redAfterDays;
 
     @Autowired
     public SuspenseService(EventStore store, JdbcTemplate jdbc, AllocationService allocation,
+                           Clock clock,
                            @Value("${acc.suspense.warn-after-days:7}") int warnAfterDays,
                            @Value("${acc.suspense.red-after-days:30}") int redAfterDays) {
         this.store = store;
         this.jdbc = jdbc;
         this.allocation = allocation;
+        this.clock = clock;
         this.warnAfterDays = warnAfterDays;
         this.redAfterDays = redAfterDays;
     }
 
     /** The domain-model defaults: a decision expected within the week, red at a month. */
     public SuspenseService(EventStore store, JdbcTemplate jdbc) {
-        this(store, jdbc, new AllocationService(store, jdbc), 7, 30);
+        this(store, jdbc, new AllocationService(store, jdbc), Clock.systemDefaultZone(), 7, 30);
+    }
+
+    /**
+     * Today, as this module reckons it. Callers that have no date of their own use this rather than
+     * {@code LocalDate.now()} — an ageing band is a boundary, and a boundary tested against the
+     * wall clock is a test that passes or fails depending on the day it runs.
+     */
+    public List<SuspenseEntry> waiting(UUID workspaceId) {
+        return waiting(workspaceId, LocalDate.now(clock));
     }
 
     /**
@@ -107,7 +120,7 @@ public class SuspenseService {
         int classified = jdbc.update("""
             update acc_payment set status = 'non-tenant', non_tenant_reason = ?, classified_on = ?
             where workspace_id = ? and payment_id = ?
-            """, reason, LocalDate.now(), workspaceId, paymentId);
+            """, reason, LocalDate.now(clock), workspaceId, paymentId);
         if (classified == 0) {
             throw new IllegalArgumentException(
                 "no payment " + paymentId + " in workspace " + workspaceId);

@@ -9,6 +9,7 @@ import pl.najem.acc.domain.MatchTier;
 import pl.najem.acc.domain.PaymentIngested;
 import pl.najem.eventstore.EventStore;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +23,7 @@ public class IngestionService {
     private final EventStore store;
     private final JdbcTemplate jdbc;
     private final MatchingPolicy policy;
+    private final Clock clock;
 
     @Autowired
     public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
@@ -32,10 +34,16 @@ public class IngestionService {
 
     public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
                             MatchingPolicy policy) {
+        this(bank, store, jdbc, policy, Clock.systemDefaultZone());
+    }
+
+    public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
+                            MatchingPolicy policy, Clock clock) {
         this.bank = bank;
         this.store = store;
         this.jdbc = jdbc;
         this.policy = policy;
+        this.clock = clock;
     }
 
     /** Ingestion with the launch policy: tier 1 only, no automatic allocation. */
@@ -44,7 +52,7 @@ public class IngestionService {
     }
 
     public void fetchAndIngest(UUID workspaceId) {
-        for (BankLine line : bank.fetchSince(LocalDate.now().minusDays(30))) {
+        for (BankLine line : bank.fetchSince(LocalDate.now(clock).minusDays(30))) {
             ingest(workspaceId, line);
         }
     }

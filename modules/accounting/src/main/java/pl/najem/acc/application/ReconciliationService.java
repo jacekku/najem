@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.WarningKind;
 import pl.najem.eventstore.EventStore;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -18,17 +19,21 @@ public class ReconciliationService {
     private final JdbcTemplate jdbc;
     private final WarningService warnings;
     private final AllocationService allocation;
+    private final Clock clock;
 
     @Autowired
-    public ReconciliationService(JdbcTemplate jdbc, WarningService warnings, AllocationService allocation) {
+    public ReconciliationService(JdbcTemplate jdbc, WarningService warnings,
+                                 AllocationService allocation, Clock clock) {
         this.jdbc = jdbc;
         this.warnings = warnings;
         this.allocation = allocation;
+        this.clock = clock;
     }
 
     /** Reconciliation with its own collaborators, for tests and callers outside the context. */
     public ReconciliationService(EventStore store, JdbcTemplate jdbc) {
-        this(jdbc, new WarningService(jdbc), new AllocationService(store, jdbc));
+        this(jdbc, new WarningService(jdbc), new AllocationService(store, jdbc),
+            Clock.systemDefaultZone());
     }
 
     /**
@@ -91,6 +96,6 @@ public class ReconciliationService {
             values (?,?,?,?,?)
             on conflict (workspace_id, counterparty_iban, tenancy_id)
             do update set learned_from = excluded.learned_from, learned_on = excluded.learned_on
-            """, workspaceId, iban, tenancyId, paymentId, LocalDate.now());
+            """, workspaceId, iban, tenancyId, paymentId, LocalDate.now(clock));
     }
 }

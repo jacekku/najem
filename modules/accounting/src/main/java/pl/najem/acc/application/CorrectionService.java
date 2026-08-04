@@ -1,5 +1,6 @@
 package pl.najem.acc.application;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,6 +9,7 @@ import pl.najem.acc.domain.PaymentReversed;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -32,10 +34,20 @@ public class CorrectionService {
     private final JdbcTemplate jdbc;
     private final AllocationService allocation;
 
-    public CorrectionService(EventStore store, JdbcTemplate jdbc, AllocationService allocation) {
+    private final Clock clock;
+
+    @Autowired
+    public CorrectionService(EventStore store, JdbcTemplate jdbc, AllocationService allocation,
+                             Clock clock) {
         this.store = store;
         this.jdbc = jdbc;
         this.allocation = allocation;
+        this.clock = clock;
+    }
+
+    /** For tests and callers outside the container, which have no Clock bean to hand. */
+    public CorrectionService(EventStore store, JdbcTemplate jdbc, AllocationService allocation) {
+        this(store, jdbc, allocation, Clock.systemDefaultZone());
     }
 
     /**
@@ -54,7 +66,7 @@ public class CorrectionService {
             update acc_payment
             set status = 'reversed', unallocated_amount = 0, reversal_reason = ?, reversed_on = ?
             where workspace_id = ? and payment_id = ?
-            """, reason, LocalDate.now(), workspaceId, paymentId);
+            """, reason, LocalDate.now(clock), workspaceId, paymentId);
         append(paymentId, new PaymentReversed(paymentId, reason));
     }
 
@@ -87,14 +99,20 @@ public class CorrectionService {
             where workspace_id = ? and payment_id = ? and not reversed
             """, workspaceId, paymentId);
         for (var row : live) {
+            // greatest(...) rather than a bare subtraction: if the two ever disagreed the column
+            // would go negative, and "amount > allocated_amount" would read the charge as open
+            // forever. A floor makes the disagreement loud instead of permanent.
             jdbc.update("""
                 update acc_charge
-                set allocated_amount = allocated_amount - ?, allocated = false
-                where charge_id = ?
-                """, row.get("amount"), row.get("charge_id"));
-            jdbc.update("update acc_tenancy_status set status = 'awaiting' where tenancy_id = ?",
-                row.get("tenancy_id"));
+                set allocated_amount = greatest(allocated_amount - ?, 0), allocated = false
+                where workspace_id = ? and charge_id = ?
+                """, row.get("amount"), workspaceId, row.get("charge_id"));
         }
+        // The board is derived, never asserted. Writing 'awaiting' here would be right today and
+        // wrong the moment the colours proper exist, and it would look like a colour bug rather
+        // than a missing call. Once per tenancy, after the charges have finished moving.
+        live.stream().map(row -> (UUID) row.get("tenancy_id")).distinct()
+            .forEach(tenancyId -> allocation.refreshBoard(workspaceId, tenancyId));
         jdbc.update("""
             update acc_payment
             set unallocated_amount = unallocated_amount

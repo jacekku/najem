@@ -92,8 +92,11 @@ public class AllocationService {
      * <p>Green means nothing is owed. A tenancy with an open charge left is still awaiting, which is
      * a plainer answer than the unconditional green a confirmed match used to write — the colours
      * proper are task 11's.
+     *
+     * <p>Package-private so corrections can call it too: reversing allocations reopens charges, and
+     * the board must be re-derived rather than assigned. Every writer of charges goes through here.
      */
-    private void refreshBoard(UUID workspaceId, UUID tenancyId) {
+    void refreshBoard(UUID workspaceId, UUID tenancyId) {
         Integer open = jdbc.queryForObject("""
             select count(*) from acc_charge
             where workspace_id = ? and tenancy_id = ? and active and amount > allocated_amount

@@ -11,7 +11,6 @@ import pl.najem.acc.WorkspaceContext;
 import pl.najem.acc.application.SuspenseEntry;
 import pl.najem.acc.application.SuspenseService;
 
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +36,7 @@ public class SuspenseController {
     @GetMapping("/suspense")
     public List<Map<String, Object>> waiting(
         @RequestHeader(value = "X-Workspace-Id", required = false) UUID workspaceId) {
-        return suspense.waiting(workspaceOf(workspaceId), LocalDate.now()).stream()
+        return suspense.waiting(workspaceOf(workspaceId)).stream()
             .map(SuspenseController::asWire)
             .toList();
     }
