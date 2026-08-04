@@ -42,10 +42,21 @@ public class InterestService {
         return interestId;
     }
 
+    /**
+     * The lookup is the workspace gate: it names the workspace, so a foreign or unknown interest
+     * finds nothing and the command is refused before anything is appended.
+     * <p>
+     * It used to use {@code queryForObject}, which throws {@code EmptyResultDataAccessException} on
+     * no rows — safe, but a Spring data-access exception reaching the edge is a <b>500</b>, so an
+     * ordinary "not yours" was reported as the server having broken. A caller cannot tell a bad id
+     * from an outage, and an alert on 5xx fires for routine traffic.
+     */
     public void withdraw(UUID workspaceId, UUID interestId, LocalDate withdrawnOn) {
-        UUID contactId = jdbc.queryForObject(
+        UUID contactId = jdbc.queryForList(
             "select contact_id from contacts_interest where workspace_id = ? and interest_id = ?",
-            UUID.class, workspaceId, interestId);
+            UUID.class, workspaceId, interestId)
+            .stream().findFirst()
+            .orElseThrow(() -> new NoSuchInterestException(interestId));
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new InterestWithdrawn(workspaceId, interestId, contactId, withdrawnOn)), List.of());
