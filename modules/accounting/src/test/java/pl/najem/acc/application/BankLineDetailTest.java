@@ -54,7 +54,7 @@ class BankLineDetailTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
-        ingestion = new IngestionService(since -> java.util.List.of(), store, jdbc);
+        ingestion = new IngestionService((since, iban) -> java.util.List.of(), store, jdbc);
     }
 
     @Test

@@ -223,7 +223,10 @@ class AccountingSchemaShapeTest {
         "acc_warning.seen boolean not null default false",
         "acc_warning.tenancy_id uuid not null",
         "acc_warning.warning_id uuid not null",
-        "acc_warning.workspace_id uuid not null");
+        "acc_warning.workspace_id uuid not null",
+        "acc_workspace_account.iban text not null",
+        "acc_workspace_account.registered_on date not null",
+        "acc_workspace_account.workspace_id uuid not null");
 
     private static final List<String> EXPECTED_CONSTRAINTS = List.of(
         "acc_allocation acc_allocation_charge_id_fkey FOREIGN KEY (charge_id) REFERENCES acc_charge(charge_id)",
@@ -242,7 +245,8 @@ class AccountingSchemaShapeTest {
         "acc_suggestion acc_suggestion_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES acc_payment(payment_id)",
         "acc_suggestion acc_suggestion_pkey PRIMARY KEY (payment_id)",
         "acc_tenancy_status acc_tenancy_status_pkey PRIMARY KEY (tenancy_id)",
-        "acc_warning acc_warning_pkey PRIMARY KEY (warning_id)");
+        "acc_warning acc_warning_pkey PRIMARY KEY (warning_id)",
+        "acc_workspace_account acc_workspace_account_pkey PRIMARY KEY (workspace_id)");
 
     private static final List<String> EXPECTED_INDEXES = List.of(
         "acc_allocation acc_allocation_charge_idx CREATE INDEX acc_allocation_charge_idx ON acc_allocation USING btree (workspace_id, charge_id)",
@@ -266,5 +270,7 @@ class AccountingSchemaShapeTest {
         "acc_tenancy_status acc_tenancy_status_pkey CREATE UNIQUE INDEX acc_tenancy_status_pkey ON acc_tenancy_status USING btree (tenancy_id)",
         "acc_tenancy_status acc_tenancy_status_workspace_idx CREATE INDEX acc_tenancy_status_workspace_idx ON acc_tenancy_status USING btree (workspace_id)",
         "acc_warning acc_warning_pkey CREATE UNIQUE INDEX acc_warning_pkey ON acc_warning USING btree (warning_id)",
-        "acc_warning acc_warning_unseen_idx CREATE INDEX acc_warning_unseen_idx ON acc_warning USING btree (workspace_id, seen)");
+        "acc_warning acc_warning_unseen_idx CREATE INDEX acc_warning_unseen_idx ON acc_warning USING btree (workspace_id, seen)",
+        "acc_workspace_account acc_workspace_account_iban_key CREATE UNIQUE INDEX acc_workspace_account_iban_key ON acc_workspace_account USING btree (iban)",
+        "acc_workspace_account acc_workspace_account_pkey CREATE UNIQUE INDEX acc_workspace_account_pkey ON acc_workspace_account USING btree (workspace_id)");
 }

@@ -19,17 +19,19 @@ import pl.najem.acc.application.BankStatementPort;
 public class BankConfig {
 
     /**
-     * The flag carries no default, and neither does the URL or the IBAN. A deployment that says
-     * nothing gets no {@link BankStatementPort}, and the application refuses to start rather than
-     * reconciling against a bank that isn't there.
+     * The flag carries no default, and neither does the URL. A deployment that says nothing gets no
+     * {@link BankStatementPort}, and the application refuses to start rather than reconciling
+     * against a bank that isn't there.
      *
-     * <p>{@code iban} is not a setting. It answers "whose money is this?" — and a packaged value
-     * answers it with one agency's account for every workspace in the system.
+     * <p>There is no {@code najem.bank.iban} any more, and its absence is the point. It answered
+     * "whose money is this?", and a packaged value answers that with one agency's account for every
+     * workspace in the system: the port handed the same lines to whichever workspace asked, each
+     * matched them against its own charges, and one transfer could read as paid in two sets of
+     * books. The account is now registered per workspace, where the question belongs.
      */
     @Bean
     @ConditionalOnProperty(name = "najem.bank.fake.enabled", havingValue = "true")
-    BankStatementPort fakeBank(@Value("${najem.bank.base-url}") String baseUrl,
-                               @Value("${najem.bank.iban}") String iban) {
-        return new FakeBankAdapter(baseUrl, iban);
+    BankStatementPort fakeBank(@Value("${najem.bank.base-url}") String baseUrl) {
+        return new FakeBankAdapter(baseUrl);
     }
 }

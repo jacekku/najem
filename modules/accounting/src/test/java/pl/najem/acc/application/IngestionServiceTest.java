@@ -42,7 +42,7 @@ class IngestionServiceTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
-        ingestion = new IngestionService(since -> List.of(), store, jdbc);
+        ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
     }
 
     @Test

@@ -37,15 +37,13 @@ public class FakeBankAdapter implements BankStatementPort {
                                LocalDate valueDate, String creditDebitIndicator, String currency) {}
 
     private final RestClient client;
-    private final String iban;
 
-    public FakeBankAdapter(String baseUrl, String iban) {
+    public FakeBankAdapter(String baseUrl) {
         this.client = RestClient.create(baseUrl);
-        this.iban = iban;
     }
 
     @Override
-    public List<BankLine> fetchSince(LocalDate since) {
+    public List<BankLine> fetchSince(LocalDate since, String iban) {
         List<FakeBankTransaction> transactions = client.get()
             .uri("/api/accounts/{iban}/transactions?since={since}", iban, since)
             .retrieve()

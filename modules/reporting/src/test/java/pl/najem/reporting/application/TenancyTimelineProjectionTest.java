@@ -97,7 +97,7 @@ class TenancyTimelineProjectionTest {
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
         var ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
-        var ingestion = new IngestionService(since -> List.of(), store, jdbc);
+        var ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         var reconciliation = new ReconciliationService(store, jdbc);
 
         workspace = UUID.randomUUID();

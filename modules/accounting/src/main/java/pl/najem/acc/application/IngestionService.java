@@ -51,10 +51,27 @@ public class IngestionService {
         this(bank, store, jdbc, MatchingPolicy.tierOneOnly());
     }
 
+    /**
+     * Ingests the workspace's own statement, and only that one.
+     *
+     * <p>The account is looked up per workspace and there is no fallback: a workspace nobody has
+     * registered an account for cannot ingest. It used to fetch from the configured account and hand
+     * every line to whichever workspace called, which meant one transfer could be suggested against
+     * a charge in two different agencies and, if both accepted, read as paid in both.
+     */
     public void fetchAndIngest(UUID workspaceId) {
-        for (BankLine line : bank.fetchSince(LocalDate.now(clock).minusDays(30))) {
+        for (BankLine line : bank.fetchSince(LocalDate.now(clock).minusDays(30), accountOf(workspaceId))) {
             ingest(workspaceId, line);
         }
+    }
+
+    private String accountOf(UUID workspaceId) {
+        var accounts = jdbc.queryForList(
+            "select iban from acc_workspace_account where workspace_id = ?", String.class, workspaceId);
+        if (accounts.isEmpty()) {
+            throw new NoBankAccountRegisteredException(workspaceId);
+        }
+        return accounts.getFirst();
     }
 
     public void ingest(UUID workspaceId, BankLine line) {

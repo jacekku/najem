@@ -103,7 +103,7 @@ class AccountingContextTest {
          */
         @Bean
         BankStatementPort bank() {
-            return since -> List.of();
+            return (since, iban) -> List.of();
         }
 
         /** Resolves the @Value properties accounting's own adapters declare. */

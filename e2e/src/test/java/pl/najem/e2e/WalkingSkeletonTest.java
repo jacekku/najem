@@ -67,8 +67,9 @@ class WalkingSkeletonTest {
             // BankStatementPort and the application refuses to start. This suite is the one
             // deployment that genuinely wants a fake bank, so it asks for one.
             "--najem.bank.fake.enabled=true",
-            "--najem.bank.base-url=http://localhost:" + bankPort,
-            "--najem.bank.iban=" + IBAN);
+            // No najem.bank.iban: the deployment no longer names an account. Which account a
+            // workspace reads is registered per workspace, below.
+            "--najem.bank.base-url=http://localhost:" + bankPort);
         RestAssured.port = Integer.parseInt(app.getEnvironment().getProperty("local.server.port"));
     }
 
@@ -113,6 +114,13 @@ class WalkingSkeletonTest {
             .body(Map.of("id", "tx-1", "amount", "2500", "title", "NAJEM/M1/2026",
                 "bookingDate", java.time.LocalDate.now().toString()))
             .post("/api/accounts/" + IBAN + "/transactions").then().statusCode(201);
+
+        // The account is a property of the workspace, not of the deployment. There is no configured
+        // IBAN to fall back on any more: a workspace that has registered no account cannot reconcile
+        // at all, because the alternative is fetching somebody else's statement into its books.
+        given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)
+            .body(Map.of("iban", IBAN))
+            .put("/api/acc/workspace-account").then().statusCode(200);
 
         given().header("X-Workspace-Id", DEV_WORKSPACE)
             .post("/api/acc/ingest/fetch").then().statusCode(200);

@@ -81,7 +81,7 @@ class Mt940ImportTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, applicationMapper(), registry);
         ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
-        imports = new Mt940Import(new IngestionService(since -> List.of(), store, jdbc));
+        imports = new Mt940Import(new IngestionService((since, iban) -> List.of(), store, jdbc));
     }
 
     /**

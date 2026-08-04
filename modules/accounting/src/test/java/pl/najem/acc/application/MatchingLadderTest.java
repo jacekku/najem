@@ -62,8 +62,8 @@ class MatchingLadderTest {
         warnings = new WarningService(jdbc);
         ledger = new LedgerService(store, jdbc, warnings);
         reconciliation = new ReconciliationService(store, jdbc);
-        laddered = new IngestionService(since -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
-        tierOneOnly = new IngestionService(since -> List.of(), store, jdbc, MatchingPolicy.tierOneOnly());
+        laddered = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
+        tierOneOnly = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tierOneOnly());
     }
 
     /**

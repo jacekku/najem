@@ -66,7 +66,7 @@ class ReversalTest {
         var board = new BoardService(jdbc, Clock.fixed(
             DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
         ledger = new LedgerService(store, jdbc, new WarningService(jdbc), board);
-        ingestion = new IngestionService(since -> List.of(), store, jdbc);
+        ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         var allocation = new AllocationService(store, jdbc, board);
         suspense = new SuspenseService(store, jdbc);
         corrections = new CorrectionService(store, jdbc, allocation);
