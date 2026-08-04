@@ -170,3 +170,76 @@ pre:not(:empty) {
     color: var(--quiet);
     font-style: italic;
 }
+
+/* Forms. This bank is something people demonstrate with, so state can be built by hand — but every
+   write is POST-redirect-GET, so a refresh re-runs the GET and cannot book a second transfer. */
+.panel {
+    margin-top: 2rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: #fff;
+}
+
+.panel h2 {
+    margin-top: 0;
+}
+
+.field {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.field > label:first-child {
+    flex: 0 0 10rem;
+    font-size: 0.8125rem;
+    color: var(--quiet);
+}
+
+.field input {
+    font: inherit;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+}
+
+.field input:focus {
+    outline: 2px solid var(--bank);
+    outline-offset: -1px;
+}
+
+.radio {
+    font-size: 0.9375rem;
+}
+
+/* A note about the input, not a value — kept quiet so it never reads as data. */
+.hint {
+    flex-basis: 100%;
+    margin-left: 10.5rem;
+    font-size: 0.75rem;
+    color: var(--quiet);
+}
+
+.note {
+    margin-top: -0.5rem;
+    font-size: 0.875rem;
+    color: var(--quiet);
+}
+
+/* A refused form is the operator's mistake to fix, so it is loud and says what was wrong. */
+.problem {
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--neg);
+    background: #fff;
+    color: var(--neg);
+}
+
+.flash {
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--bank);
+    background: #fff;
+    font-size: 0.875rem;
+}

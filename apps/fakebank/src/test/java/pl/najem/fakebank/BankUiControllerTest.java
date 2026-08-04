@@ -13,6 +13,8 @@ import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -165,16 +167,120 @@ class BankUiControllerTest {
         assertThat(html).contains("bez tytułu");
     }
 
-    /** No page may offer a way to change what the bank holds; seeding stays on the API. */
+    /**
+     * The screens can now change what the bank holds — deliberately, so a person can build up state
+     * by hand during a demonstration. What replaces the old "no forms at all" rule is that a GET
+     * never writes: every mutation is POST-redirect-GET, so a refresh re-runs the read.
+     */
     @Test
-    void theScreensAreReadOnly() throws Exception {
-        seed("ui-9", "2500.00", "NAJEM", "CRDT");
+    void bookingRedirectsSoARefreshCannotBookItTwice() throws Exception {
+        mvc.perform(post("/accounts/{iban}/transactions", iban)
+                .param("amount", "2500.00")
+                .param("creditDebitIndicator", "CRDT")
+                .param("title", "NAJEM/RE/2026")
+                .param("bookingDate", "2026-09-10"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(header().string("Location", "/accounts/" + iban));
+
+        assertThat(store.find(iban, null)).hasSize(1);
+
+        // The redirect target, replayed as a browser refresh would replay it.
+        mvc.perform(get("/accounts/{iban}", iban)).andExpect(status().isOk());
+        mvc.perform(get("/accounts/{iban}", iban)).andExpect(status().isOk());
+
+        assertThat(store.find(iban, null))
+            .as("a GET must never book anything, however many times it is replayed")
+            .hasSize(1);
+    }
+
+    /** Amounts are positive in MT940 and direction is the indicator. A signed amount is refused. */
+    @Test
+    void aNegativeAmountIsRefusedRatherThanBookedAsADebit() throws Exception {
+        mvc.perform(post("/accounts/{iban}/transactions", iban)
+                .param("amount", "-300.00")
+                .param("creditDebitIndicator", "CRDT")
+                .param("bookingDate", "2026-09-10"))
+            .andExpect(status().isOk());
+
+        assertThat(store.find(iban, null)).isEmpty();
+    }
+
+    @Test
+    void anOpenedAccountAppearsWithItsHolderAndOpeningBalance() throws Exception {
+        mvc.perform(post("/accounts")
+                .param("iban", iban)
+                .param("holder", "Nieruchomości Śródmieście")
+                .param("currency", "PLN")
+                .param("openingBalance", "1500.00"))
+            .andExpect(status().is3xxRedirection());
+
+        String html = mvc.perform(get("/")).andReturn().getResponse().getContentAsString();
+        assertThat(html).contains(iban).contains("Nieruchomości Śródmieście").contains("1 500,00");
+    }
+
+    /**
+     * Re-opening would silently replace an opening balance, and a balance that changes without
+     * anything being booked is the one thing a bank must not do.
+     */
+    @Test
+    void openingTheSameAccountTwiceIsRefused() throws Exception {
+        mvc.perform(post("/accounts").param("iban", iban).param("currency", "PLN"))
+            .andExpect(status().is3xxRedirection());
+
+        String html = mvc.perform(post("/accounts").param("iban", iban).param("currency", "EUR"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("already exists");
+    }
+
+    /** The opening balance must reach the file, not just the screen. */
+    @Test
+    void theOpeningBalanceIsWrittenIntoTheStatement() throws Exception {
+        mvc.perform(post("/accounts").param("iban", iban).param("currency", "PLN")
+            .param("openingBalance", "1500.00"));
+        mvc.perform(post("/accounts/{iban}/transactions", iban)
+            .param("amount", "2500.00").param("creditDebitIndicator", "CRDT")
+            .param("bookingDate", "2026-09-10"));
+
+        String file = mvc.perform(get("/accounts/{iban}/mt940", iban))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(file)
+            .as("opening balance on :60F:, and :62F: is opening plus the entries")
+            .contains(":60F:C260910PLN1500,00")
+            .contains(":62F:C260910PLN4000,00");
+    }
+
+    /**
+     * An account opened in one currency has no opening balance in another, and inventing one would
+     * put a number from nowhere into a bank file.
+     */
+    @Test
+    void aStatementInAnotherCurrencyOpensAtZero() throws Exception {
+        mvc.perform(post("/accounts").param("iban", iban).param("currency", "PLN")
+            .param("openingBalance", "1500.00"));
+        mvc.perform(post("/accounts/{iban}/transactions", iban)
+            .param("amount", "600.00").param("creditDebitIndicator", "CRDT")
+            .param("bookingDate", "2026-09-11").param("currency", "EUR"));
+
+        String file = mvc.perform(get("/accounts/{iban}/mt940", iban))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(file).contains(":60F:C260911EUR0,00");
+    }
+
+    /** An account nobody opened still works, exactly as every account did before the registry. */
+    @Test
+    void anAccountThatWasOnlySeededStillRendersAndOpensAtZero() throws Exception {
+        seed("ui-11", "2500.00", "NAJEM/SEEDED/2026", "CRDT");
 
         String html = mvc.perform(get("/accounts/{iban}", iban))
             .andReturn().getResponse().getContentAsString();
+        String file = mvc.perform(get("/accounts/{iban}/mt940", iban))
+            .andReturn().getResponse().getContentAsString();
 
-        assertThat(html)
-            .as("a form on this page could put the demo into a state the API did not")
-            .doesNotContain("<form");
+        assertThat(html).contains("Rachunek nieotwarty");
+        assertThat(file).contains(":60F:C260910PLN0,00");
     }
 }

@@ -33,13 +33,15 @@ public final class Mt940Writer {
             .append(":20:NAJEM").append(digitsOf(statement.statementNumber())).append('\n')
             .append(":25:").append(statement.account()).append('\n')
             .append(":28C:").append(statement.statementNumber()).append('\n')
-            .append(":60F:").append(balance(BigDecimal.ZERO, opening, statement.currency())).append('\n');
+            .append(":60F:").append(balance(statement.openingBalance(), opening, statement.currency())).append('\n');
 
         for (Mt940Line line : statement.lines()) {
             text.append(entry(line)).append('\n').append(information(line)).append('\n');
         }
         return text
-            .append(":62F:").append(balance(total(statement), closing, statement.currency())).append('\n')
+            .append(":62F:")
+            .append(balance(statement.openingBalance().add(total(statement)), closing, statement.currency()))
+            .append('\n')
             .append("-\n")
             .toString();
     }
@@ -69,7 +71,10 @@ public final class Mt940Writer {
         return information.toString();
     }
 
-    /** Credits add, debits subtract. A statement must agree with its own entries. */
+    /**
+     * Credits add, debits subtract. A statement must agree with its own entries: the closing
+     * balance is the opening balance plus this, never a figure stored alongside them.
+     */
     private static BigDecimal total(Mt940Statement statement) {
         BigDecimal total = BigDecimal.ZERO;
         for (Mt940Line line : statement.lines()) {

@@ -23,6 +23,16 @@ public class StatementRenderer {
     private static final String NO_CUSTOMER_REFERENCE = "NONREF";
 
     public List<Mt940Statement> render(String iban, List<BankTransactionDto> transactions) {
+        return render(iban, transactions, currency -> java.math.BigDecimal.ZERO);
+    }
+
+    /**
+     * @param openingBalanceOf the account's opening balance for a given statement currency. A
+     *                         statement in a currency the account was not opened in gets zero —
+     *                         see {@link BankAccount#openingBalanceIn}.
+     */
+    public List<Mt940Statement> render(String iban, List<BankTransactionDto> transactions,
+                                       java.util.function.Function<String, java.math.BigDecimal> openingBalanceOf) {
         Map<String, List<Mt940Line>> byCurrency = new TreeMap<>();
         for (BankTransactionDto transaction : transactions) {
             byCurrency.computeIfAbsent(currencyOf(transaction), currency -> new ArrayList<>())
@@ -31,7 +41,8 @@ public class StatementRenderer {
         List<Mt940Statement> statements = new ArrayList<>(byCurrency.size());
         int number = 1;
         for (Map.Entry<String, List<Mt940Line>> entry : byCurrency.entrySet()) {
-            statements.add(new Mt940Statement(iban, number++ + "/1", entry.getKey(), entry.getValue()));
+            statements.add(new Mt940Statement(iban, number++ + "/1", entry.getKey(),
+                openingBalanceOf.apply(entry.getKey()), entry.getValue()));
         }
         return statements;
     }
