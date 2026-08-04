@@ -15,7 +15,11 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.domain.OverlappingTenancyException;
+import pl.najem.pm.domain.LegalForm;
+import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.Owner;
+import pl.najem.pm.domain.ReserveTenancy;
+import pl.najem.pm.domain.Term;
 import pl.najem.pm.domain.Unit;
 
 import java.math.BigDecimal;
@@ -54,11 +58,9 @@ class TenancyReservationTest {
     @Test
     void secondOverlappingReservationOnTheSameUnitIsRejected() {
         var unitId = unit();
-        tenancies.reserve(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30),
-            new BigDecimal("2500"), "NAJEM/M1/A");
+        tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
 
-        assertThatThrownBy(() -> tenancies.reserve(unitId, LocalDate.of(2026, 3, 1),
-                LocalDate.of(2026, 9, 30), new BigDecimal("2600"), "NAJEM/M1/B"))
+        assertThatThrownBy(() -> tenancies.reserve(command(unitId, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 9, 30), "2600", "NAJEM/M1/B")))
             .isInstanceOf(OverlappingTenancyException.class);
     }
 
@@ -66,10 +68,8 @@ class TenancyReservationTest {
     void backToBackReservationsOnOneUnitBothSucceed() {
         var unitId = unit();
 
-        var first = tenancies.reserve(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30),
-            new BigDecimal("2500"), "NAJEM/M1/A");
-        var second = tenancies.reserve(unitId, LocalDate.of(2026, 6, 30), LocalDate.of(2026, 12, 31),
-            new BigDecimal("2600"), "NAJEM/M1/B");
+        var first = tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
+        var second = tenancies.reserve(command(unitId, LocalDate.of(2026, 6, 30), LocalDate.of(2026, 12, 31), "2600", "NAJEM/M1/B")).tenancyId();
 
         assertThat(Unit.from(store.load(unitId).events()).periods())
             .extracting(p -> p.tenancyId()).containsExactly(first, second);
@@ -79,11 +79,9 @@ class TenancyReservationTest {
     void theSameDatesOnADifferentUnitAreFine() {
         var unitA = unit();
         var unitB = unit();
-        tenancies.reserve(unitA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30),
-            new BigDecimal("2500"), "NAJEM/A");
+        tenancies.reserve(command(unitA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/A")).tenancyId();
 
-        var onB = tenancies.reserve(unitB, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30),
-            new BigDecimal("2500"), "NAJEM/B");
+        var onB = tenancies.reserve(command(unitB, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/B")).tenancyId();
 
         assertThat(onB).isNotNull();
     }
@@ -91,12 +89,10 @@ class TenancyReservationTest {
     @Test
     void aRejectedReservationLeavesNoTraceOnEitherStream() {
         var unitId = unit();
-        tenancies.reserve(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30),
-            new BigDecimal("2500"), "NAJEM/M1/A");
+        tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
         long versionBefore = store.load(unitId).version();
 
-        assertThatThrownBy(() -> tenancies.reserve(unitId, LocalDate.of(2026, 3, 1),
-            LocalDate.of(2026, 9, 30), new BigDecimal("2600"), "NAJEM/M1/B"))
+        assertThatThrownBy(() -> tenancies.reserve(command(unitId, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 9, 30), "2600", "NAJEM/M1/B")))
             .isInstanceOf(OverlappingTenancyException.class);
 
         assertThat(store.load(unitId).version()).isEqualTo(versionBefore);
@@ -106,13 +102,11 @@ class TenancyReservationTest {
     @Test
     void cancellingAReservationFreesTheSlotForSomeoneElse() {
         var unitId = unit();
-        var cancelled = tenancies.reserve(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30),
-            new BigDecimal("2500"), "NAJEM/M1/A");
+        var cancelled = tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
 
         tenancies.cancelReservation(cancelled, "never signed");
 
-        var replacement = tenancies.reserve(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30),
-            new BigDecimal("2400"), "NAJEM/M1/B");
+        var replacement = tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2400", "NAJEM/M1/B")).tenancyId();
         assertThat(Unit.from(store.load(unitId).events()).periods())
             .extracting(p -> p.tenancyId()).containsExactly(replacement);
     }
@@ -120,12 +114,18 @@ class TenancyReservationTest {
     @Test
     void anIndefiniteTenancyBlocksLaterReservationsOnThatUnit() {
         var unitId = unit();
-        tenancies.reserve(unitId, LocalDate.of(2026, 1, 1), null,
-            new BigDecimal("2500"), "NAJEM/M1/A");
+        tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), null, "2500", "NAJEM/M1/A")).tenancyId();
 
-        assertThatThrownBy(() -> tenancies.reserve(unitId, LocalDate.of(2031, 1, 1),
-                LocalDate.of(2031, 12, 31), new BigDecimal("2600"), "NAJEM/M1/B"))
+        assertThatThrownBy(() -> tenancies.reserve(command(unitId, LocalDate.of(2031, 1, 1), LocalDate.of(2031, 12, 31), "2600", "NAJEM/M1/B")))
             .isInstanceOf(OverlappingTenancyException.class);
+    }
+
+    private static ReserveTenancy command(UUID unitId, LocalDate start, LocalDate end,
+                                          String monthlyTotal, String reference) {
+        return new ReserveTenancy(null, null, unitId, List.of(UUID.randomUUID()), List.of(),
+            start, end == null ? new Term.Indefinite() : new Term.FixedTerm(end),
+            LegalForm.ZWYKLY, new MonthlyAmount(new BigDecimal(monthlyTotal), null),
+            10, null, reference);
     }
 
     private static UUID unit() {

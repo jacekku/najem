@@ -14,7 +14,11 @@ import pl.najem.contracts.events.TenancyActivatedEvent;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
+import pl.najem.pm.domain.LegalForm;
+import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.Owner;
+import pl.najem.pm.domain.ReserveTenancy;
+import pl.najem.pm.domain.Term;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -50,29 +54,87 @@ class TenancyServiceTest {
     @Test
     void activationWritesIntegrationEventToOutbox() {
         var unitId = unitIn(UUID.randomUUID());
-        var tenancyId = service.reserve(unitId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31),
-            new BigDecimal("2500"), "NAJEM/M1/2026");
+        var tenancyId = service.reserve(command(unitId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31), "2500", "NAJEM/M1/2026")).tenancyId();
 
         service.activate(tenancyId, LocalDate.of(2026, 9, 1));
 
-        var outboxTypes = jdbc.queryForList("select event_type from outbox", String.class);
+        // scoped to this tenancy: the outbox is shared across test methods in one container
+        var outboxTypes = jdbc.queryForList(
+            "select event_type from outbox where payload::text like ?", String.class,
+            "%" + tenancyId + "%");
         assertThat(outboxTypes).containsExactly("TenancyActivatedEvent");
-        String payload = jdbc.queryForObject("select payload::text from outbox limit 1", String.class);
-        assertThat(payload).contains(tenancyId.toString()).contains("NAJEM/M1/2026").contains("2500");
+        assertThat(payloadFor(tenancyId).get("paymentReference").asText()).isEqualTo("NAJEM/M1/2026");
     }
 
     @Test
     void activationCarriesTheWorkspaceOfTheUnitNotAConstant() {
         var workspaceId = UUID.randomUUID();
-        var tenancyId = service.reserve(unitIn(workspaceId), LocalDate.of(2026, 10, 1), LocalDate.of(2027, 9, 30),
-            new BigDecimal("3000"), "NAJEM/M2/2026");
+        var tenancyId = service.reserve(command(unitIn(workspaceId), LocalDate.of(2026, 10, 1), LocalDate.of(2027, 9, 30), "3000", "NAJEM/M2/2026")).tenancyId();
 
         service.activate(tenancyId, LocalDate.of(2026, 10, 1));
 
-        String payload = jdbc.queryForObject(
+        assertThat(payloadFor(tenancyId).get("workspaceId").asText()).isEqualTo(workspaceId.toString());
+    }
+
+    /**
+     * Guards the bridge values the CCR landed with (legalForm="zwykly", depositAmount=null,
+     * componentSplitInContract=false, hardcoded). If anyone reintroduces a constant here, the
+     * ACL silently picks the wrong statutory deposit cap — so this asserts the payload carries
+     * what was actually signed.
+     */
+    @Test
+    void activationPublishesTheRealContractFactsNotDefaults() {
+        var unitId = unitIn(UUID.randomUUID());
+        var tenancyId = service.reserve(new ReserveTenancy(null, null, unitId,
+            List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 9, 1),
+            new Term.FixedTerm(LocalDate.of(2027, 8, 31)), LegalForm.INSTYTUCJONALNY,
+            new MonthlyAmount(new BigDecimal("3000"),
+                new MonthlyAmount.Breakdown(new BigDecimal("2600"), new BigDecimal("200"),
+                    new BigDecimal("200"))),
+            10, new BigDecimal("6000"), "NAJEM/M9/2026")).tenancyId();
+
+        service.activate(tenancyId, LocalDate.of(2026, 9, 1));
+
+        var payload = payloadFor(tenancyId);
+        assertThat(payload.get("legalForm").asText()).isEqualTo("instytucjonalny");
+        assertThat(payload.get("depositAmount").decimalValue()).isEqualByComparingTo("6000");
+        assertThat(payload.get("componentSplitInContract").asBoolean()).isTrue();
+        assertThat(payload.get("monthlyTotal").decimalValue()).isEqualByComparingTo("3000");
+        assertThat(payload.get("rent").decimalValue()).isEqualByComparingTo("2600");
+        assertThat(payload.get("adminFee").decimalValue()).isEqualByComparingTo("200");
+        assertThat(payload.get("mediaAdvance").decimalValue()).isEqualByComparingTo("200");
+    }
+
+    @Test
+    void anUnsplitContractPublishesNoComponentsAndSaysSoExplicitly() {
+        var tenancyId = service.reserve(command(unitIn(UUID.randomUUID()), LocalDate.of(2026, 9, 1),
+            LocalDate.of(2027, 8, 31), "2500", "NAJEM/M8/2026")).tenancyId();
+
+        service.activate(tenancyId, LocalDate.of(2026, 9, 1));
+
+        var payload = payloadFor(tenancyId);
+        assertThat(payload.get("componentSplitInContract").asBoolean()).isFalse();
+        assertThat(payload.get("rent").isNull()).isTrue();
+        assertThat(payload.get("adminFee").isNull()).isTrue();
+        assertThat(payload.get("mediaAdvance").isNull()).isTrue();
+    }
+
+    private static com.fasterxml.jackson.databind.JsonNode payloadFor(UUID tenancyId) {
+        String json = jdbc.queryForObject(
             "select payload::text from outbox where payload::text like ? limit 1",
             String.class, "%" + tenancyId + "%");
-        assertThat(payload).contains(workspaceId.toString());
+        try {
+            return new ObjectMapper().readTree(json);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unreadable outbox payload: " + json, e);
+        }
+    }
+
+    private static ReserveTenancy command(UUID unitId, LocalDate start, LocalDate end,
+                                          String monthlyTotal, String reference) {
+        return new ReserveTenancy(null, null, unitId, List.of(UUID.randomUUID()), List.of(),
+            start, new Term.FixedTerm(end), LegalForm.ZWYKLY,
+            new MonthlyAmount(new BigDecimal(monthlyTotal), null), 10, null, reference);
     }
 
     private static UUID unitIn(UUID workspaceId) {

@@ -72,9 +72,15 @@ class WalkingSkeletonTest {
         String unitId = given().contentType(ContentType.JSON)
             .body(Map.of("name", "M1", "baseRent", "2500"))
             .post("/api/pm/properties/" + propertyId + "/units").then().statusCode(200).extract().path("unitId");
+        // A tenancy needs at least one tenant contact (domain model §3) and the monthly figure
+        // is now a total with an optional component breakdown — this reservation declares none,
+        // so the collapse rule applies and the whole amount is czynsz.
         String tenancyId = given().contentType(ContentType.JSON)
-            .body(Map.of("unitId", unitId, "startDate", "2026-09-01",
-                "monthlyRent", "2500", "paymentReference", "NAJEM/M1/2026"))
+            .body(Map.of("unitId", unitId,
+                "tenantContactIds", java.util.List.of(java.util.UUID.randomUUID().toString()),
+                "startDate", "2026-09-01", "endDate", "2027-08-31",
+                "legalForm", "zwykly", "monthlyTotal", "2500",
+                "paymentReference", "NAJEM/M1/2026"))
             .post("/api/pm/tenancies").then().statusCode(200).extract().path("tenancyId");
         given().contentType(ContentType.JSON)
             .body(Map.of("activatedOn", "2026-09-01"))

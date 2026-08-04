@@ -5,10 +5,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.contracts.events.TenancyActivatedEvent;
 import pl.najem.eventstore.EventStore;
+import pl.najem.pm.domain.MonthlyAmount;
+import pl.najem.pm.domain.ReserveTenancy;
 import pl.najem.pm.domain.Tenancy;
 import pl.najem.pm.domain.Unit;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -31,22 +32,33 @@ public class TenancyService {
      * under concurrency. Two simultaneous reservations on one unit collide on the event store's
      * unique(stream_id, version) and one gets a ConcurrencyException — no read-then-check race.
      * Both appends share this method's transaction, so a failure rolls the period back.
+     *
+     * @return the new tenancy id and the soft warnings the manager should see
      */
-    public UUID reserve(UUID unitId, LocalDate startDate, LocalDate endDate,
-                        BigDecimal monthlyRent, String paymentReference) {
-        UUID tenancyId = UUID.randomUUID();
-        var unitStream = store.load(unitId);
+    public Reservation reserve(ReserveTenancy command) {
+        var unitStream = store.load(command.unitId());
         var unit = Unit.from(unitStream.events());
+        var scoped = withWorkspaceOf(unit, command);
 
-        store.append(unitId, "Unit", unitStream.version(),
-            unit.registerTenancyPeriod(tenancyId, startDate, endDate), List.of());
-        store.append(tenancyId, "Tenancy", 0,
-            Tenancy.reserve(tenancyId, unit.workspaceId(), unitId, startDate, endDate,
-                monthlyRent, paymentReference), List.of());
-        return tenancyId;
+        store.append(command.unitId(), "Unit", unitStream.version(),
+            unit.registerTenancyPeriod(scoped.tenancyId(), scoped.startDate(),
+                scoped.term().endDate()), List.of());
+
+        var events = Tenancy.reserve(scoped);
+        store.append(scoped.tenancyId(), "Tenancy", 0, events, List.of());
+        insertProjection(scoped);
+        return new Reservation(scoped.tenancyId(), Tenancy.from(events).warnings().messages());
     }
 
-    /** Reservation fell through — the unit's slot is freed (domain model §2 item 13). */
+    /** The workspace is never caller-supplied for a child — it comes from the unit. */
+    private static ReserveTenancy withWorkspaceOf(Unit unit, ReserveTenancy command) {
+        UUID tenancyId = command.tenancyId() != null ? command.tenancyId() : UUID.randomUUID();
+        return new ReserveTenancy(tenancyId, unit.workspaceId(), command.unitId(),
+            command.tenantContactIds(), command.guarantorContactIds(), command.startDate(),
+            command.term(), command.legalForm(), command.monthly(), command.rentDay(),
+            command.depositAmount(), command.paymentReference());
+    }
+
     public void cancelReservation(UUID tenancyId, String reason) {
         var stream = store.load(tenancyId);
         var tenancy = Tenancy.from(stream.events());
@@ -55,20 +67,61 @@ public class TenancyService {
         var unitStream = store.load(tenancy.unitId());
         store.append(tenancy.unitId(), "Unit", unitStream.version(),
             Unit.from(unitStream.events()).releaseTenancyPeriod(tenancyId), List.of());
+        jdbc.update("update pm_tenancy set state = 'CANCELLED' where tenancy_id = ?", tenancyId);
     }
 
+    public void addTenant(UUID tenancyId, UUID contactId) {
+        var stream = store.load(tenancyId);
+        store.append(tenancyId, "Tenancy", stream.version(),
+            Tenancy.from(stream.events()).addTenant(contactId), List.of());
+    }
+
+    public void removeTenant(UUID tenancyId, UUID contactId) {
+        var stream = store.load(tenancyId);
+        store.append(tenancyId, "Tenancy", stream.version(),
+            Tenancy.from(stream.events()).removeTenant(contactId), List.of());
+    }
+
+    /**
+     * Publishes the contract facts the Tenancy Accounting ACL needs: the agreed monthly total,
+     * whether the CONTRACT declares a component split (not inferred from nulls), the legal form
+     * that decides the statutory deposit cap, and the deposit itself. All of these are fixed at
+     * signing and only PM holds them.
+     */
     public void activate(UUID tenancyId, LocalDate on) {
         var stream = store.load(tenancyId);
         var tenancy = Tenancy.from(stream.events());
-        // The workspace comes from the unit the tenancy sits on, never from a constant.
-        UUID workspaceId = jdbc.queryForObject(
-            "select workspace_id from pm_unit where unit_id = ?", UUID.class, tenancy.unitId());
-        // v2 bridge values until Task 4 (full reservation) supplies the real contract facts:
-        // no contractual split yet (collapse rule: whole amount is rent), portfolio default
-        // legalForm "zwykly", no deposit known.
+        MonthlyAmount monthly = tenancy.monthly();
+        MonthlyAmount.Breakdown breakdown = monthly.breakdown();
+
         store.append(tenancyId, "Tenancy", stream.version(), tenancy.activate(on),
-            List.of(new TenancyActivatedEvent(workspaceId, tenancyId, tenancy.unitId(),
-                tenancy.startDate(), tenancy.monthlyRent(), false, null, null, null,
-                "zwykly", null, tenancy.paymentReference())));
+            List.of(new TenancyActivatedEvent(
+                tenancy.workspaceId(), tenancyId, tenancy.unitId(), tenancy.startDate(),
+                monthly.total(), monthly.componentSplitInContract(),
+                breakdown == null ? null : breakdown.rent(),
+                breakdown == null ? null : breakdown.adminFee(),
+                breakdown == null ? null : breakdown.mediaAdvance(),
+                tenancy.legalForm().wireName(), tenancy.depositAmount(),
+                tenancy.paymentReference())));
+        jdbc.update("update pm_tenancy set state = 'ACTIVE' where tenancy_id = ?", tenancyId);
+    }
+
+    private void insertProjection(ReserveTenancy c) {
+        var breakdown = c.monthly().breakdown();
+        jdbc.update("insert into pm_tenancy(tenancy_id, workspace_id, unit_id, start_date, end_date, "
+                + "legal_form, monthly_total, rent, admin_fee, media_advance, component_split, "
+                + "rent_day, deposit_amount, payment_reference, state) "
+                + "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            c.tenancyId(), c.workspaceId(), c.unitId(), c.startDate(), c.term().endDate(),
+            c.legalForm().name(), c.monthly().total(),
+            breakdown == null ? null : breakdown.rent(),
+            breakdown == null ? null : breakdown.adminFee(),
+            breakdown == null ? null : breakdown.mediaAdvance(),
+            c.monthly().componentSplitInContract(), c.rentDay(), c.depositAmount(),
+            c.paymentReference(), Tenancy.State.RESERVED.name());
+    }
+
+    /** A reservation and the soft warnings raised against it. */
+    public record Reservation(UUID tenancyId, List<String> warnings) {
     }
 }
