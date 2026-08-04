@@ -47,6 +47,12 @@ class SharedTenancyIdTest {
     static void start() {
         app = new SpringApplicationBuilder(NajemApplication.class).run(
             "--server.port=0",
+            // Every deployment names its bank: the fake one is opt-in and its flag has no
+            // default, so without these the app has no BankStatementPort and refuses to
+            // start. This suite never calls the bank; it only has to name one.
+            "--najem.bank.fake.enabled=true",
+            "--najem.bank.base-url=http://localhost:8081",
+            "--najem.bank.iban=PL61109010140000071219812874",
             "--spring.datasource.url=" + pg.getJdbcUrl(),
             "--spring.datasource.username=" + pg.getUsername(),
             "--spring.datasource.password=" + pg.getPassword(),

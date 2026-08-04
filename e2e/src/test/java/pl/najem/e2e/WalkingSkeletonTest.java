@@ -61,6 +61,10 @@ class WalkingSkeletonTest {
             "--spring.datasource.username=" + pg.getUsername(),
             "--spring.datasource.password=" + pg.getPassword(),
             "--spring.flyway.locations=classpath:db/eventstore,classpath:db/pm,classpath:db/acc",
+            // The fake bank is opt-in and the flag has no default: without it there is no
+            // BankStatementPort and the application refuses to start. This suite is the one
+            // deployment that genuinely wants a fake bank, so it asks for one.
+            "--najem.bank.fake.enabled=true",
             "--najem.bank.base-url=http://localhost:" + bankPort,
             "--najem.bank.iban=" + IBAN);
         RestAssured.port = Integer.parseInt(app.getEnvironment().getProperty("local.server.port"));

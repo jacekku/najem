@@ -11,9 +11,12 @@ spring:
     fail-on-missing-locations: true
 
 najem:
-  bank:
-    base-url: "http://localhost:8081"
-    iban: "PL61109010140000071219812874"
+  # najem.bank.* is deliberately absent. base-url and iban name an environment, and iban in
+  # particular answers "whose money is this?" — a packaged value answers it with one agency's
+  # account for every workspace in the system. najem.bank.fake.enabled is absent for the same
+  # reason: without it there is no BankStatementPort and the application refuses to start, which
+  # is the loud version of what used to be a clean start that reconciled nothing.
+  # Supply all three per deployment. PackagedConfigTest fails if any of them returns here.
   keycloak:
     base-url: "http://localhost:8180"
     realm: "najem"
