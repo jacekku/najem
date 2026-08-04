@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.reporting.application.ProjectionStatus;
+import pl.najem.reporting.application.PropertyBoardQuery;
 import pl.najem.reporting.application.PropertyOccupancy;
 import pl.najem.reporting.application.TimelineQuery;
 import pl.najem.reporting.application.UnitBoardQuery;
@@ -35,14 +36,17 @@ public class ReportingController {
     private final TimelineQuery timelines;
     private final PropertyOccupancy occupancy;
     private final UnitBoardQuery board;
+    private final PropertyBoardQuery properties;
     private final ProjectionStatus status;
     private final Clock clock;
 
     public ReportingController(TimelineQuery timelines, PropertyOccupancy occupancy,
-                               UnitBoardQuery board, ProjectionStatus status, Clock clock) {
+                               UnitBoardQuery board, PropertyBoardQuery properties,
+                               ProjectionStatus status, Clock clock) {
         this.timelines = timelines;
         this.occupancy = occupancy;
         this.board = board;
+        this.properties = properties;
         this.status = status;
         this.clock = clock;
     }
@@ -56,6 +60,19 @@ public class ReportingController {
     @GetMapping("/status")
     public List<ProjectionStatus.Status> status() {
         return status.all();
+    }
+
+    /**
+     * The portfolio list — the prototype's entry point, and the only endpoint that yields the
+     * {@code propertyId} that {@code GET /api/reporting/units} requires (@najem-reviewer, seq 358).
+     * <p>
+     * No {@code propertyId} parameter by design: a caller who had one would not need this.
+     */
+    @GetMapping("/properties")
+    public List<PropertyBoardQuery.Row> properties(
+        @RequestHeader("X-Workspace-Id") UUID workspaceId,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
+        return properties.forWorkspace(workspaceId, orToday(asOf));
     }
 
     @GetMapping("/tenancies/{tenancyId}/timeline")

@@ -24,8 +24,16 @@ public class ProjectionStatus {
      * {@code eventsBehind} counts only events Reporting is allowed to see — counting the whole
      * table would report permanent lag for every event on a stream the allowlist excludes, which
      * would make a healthy projector look permanently broken.
+     * <p>
+     * <b>{@code lastGlobalSeq} was here and is deliberately gone</b> (@najem-reviewer, najem-build
+     * seq 358). This endpoint is about to be called by every screen on every render, and that field
+     * is a monotonic counter over <em>all</em> tenants' writes: an agency differencing it learns the
+     * platform's total write volume and roughly when other agencies are busy. No row crosses the
+     * boundary, so it is a side channel rather than a disclosure — but it answers nothing anyone
+     * asked, and the moment to drop a field is while the shape is being chosen rather than after
+     * five screens depend on it.
      */
-    public record Status(String projection, long lastGlobalSeq, long eventsBehind) {
+    public record Status(String projection, long eventsBehind) {
 
         public boolean caughtUp() {
             return eventsBehind == 0;
@@ -49,8 +57,7 @@ public class ProjectionStatus {
             from reporting_checkpoint c
             order by c.projection_name
             """.formatted(streams),
-            (rs, i) -> new Status(rs.getString("projection_name"),
-                rs.getLong("last_global_seq"), rs.getLong("events_behind")),
+            (rs, i) -> new Status(rs.getString("projection_name"), rs.getLong("events_behind")),
             args.toArray());
     }
 }

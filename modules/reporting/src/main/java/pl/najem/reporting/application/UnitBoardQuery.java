@@ -15,6 +15,19 @@ import java.util.UUID;
  * once, so a per-unit primitive pushes an N+1 fan-out into whatever renders it — and a fan-out in a
  * controller or a template is a performance problem nobody owns. Resolving it here costs one query
  * plus two correlated sub-selects, and the caller gets rows it can render directly.
+ * <p>
+ * <b>The period predicate is the same one {@link UnitOccupancy} and {@link PropertyOccupancy} use,
+ * and it was not.</b> This query said {@code not p.released} alone, which treats a period released
+ * by <em>cancellation</em> and one released by <em>ending</em> as the same thing — so every tenancy
+ * that genuinely ran and then finished vanished from the board rather than showing as past, and
+ * {@code asOf} was meaningless for any date before the end. {@code ended_on} is the discriminator
+ * and this class set it without using it.
+ * <p>
+ * @najem-pm diagnosed it at najem-build seq 357 as three queries over one table holding two
+ * definitions of "this period counts". I had left the line knowingly wrong pending a contract
+ * change from PM that turned out never to have been needed — {@code TenancyPeriodReleased} was
+ * already published from both paths. The lesson I'd keep: <b>a known-wrong line waiting on somebody
+ * else's work should be re-checked against their code, not against my memory of the conversation.</b>
  */
 @Component
 public class UnitBoardQuery {
@@ -34,11 +47,13 @@ public class UnitBoardQuery {
         return jdbc.query("""
             select u.unit_id, u.property_id, u.name, u.base_rent, u.market_state,
               (select p.tenancy_id from reporting_unit_period p
-                 where p.workspace_id = u.workspace_id and p.unit_id = u.unit_id and not p.released
+                 where p.workspace_id = u.workspace_id and p.unit_id = u.unit_id
+                   and not p.annulled and (not p.released or p.ended_on is not null)
                    and p.starts_on <= ? and (p.ends_on is null or p.ends_on > ?)
                  order by p.starts_on limit 1) as current_tenancy_id,
               (select p.tenancy_id from reporting_unit_period p
-                 where p.workspace_id = u.workspace_id and p.unit_id = u.unit_id and not p.released
+                 where p.workspace_id = u.workspace_id and p.unit_id = u.unit_id
+                   and not p.annulled and (not p.released or p.ended_on is not null)
                    and p.starts_on > ?
                  order by p.starts_on limit 1) as next_tenancy_id
             from reporting_unit_state u

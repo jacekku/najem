@@ -70,13 +70,31 @@ public class PropertyOccupancy {
             (rs, i) -> new Object[]{rs.getString("market_state"), rs.getBoolean("occupied")},
             asOf, asOf, workspaceId, propertyId);
 
-        int occupied = 0;
-        int available = 0;
-        int unavailable = 0;
-        int inventory = 0;
+        var tally = new Tally();
         for (var unit : occupancy) {
-            var marketState = (String) unit[0];
-            if ((Boolean) unit[1]) {
+            tally.add((String) unit[0], (Boolean) unit[1]);
+        }
+        return tally.counts();
+    }
+
+    /**
+     * The one place a unit is classified into a bucket, shared with {@link PropertyBoardQuery}.
+     * <p>
+     * Extracted rather than copied because @najem-pm's seq 357 diagnosis of {@code UnitBoardQuery}
+     * is exactly what copying it produces: several queries over one table, drifting into several
+     * definitions of the same question, with the newest copy the one that forgets a case. The board
+     * needs these counts for every property at once and this class computes them for one, so the
+     * SQL genuinely differs — <b>the classification must not.</b>
+     */
+    static final class Tally {
+
+        private int occupied;
+        private int available;
+        private int unavailable;
+        private int inventory;
+
+        void add(String marketState, boolean isOccupied) {
+            if (isOccupied) {
                 // Occupancy beats market state: a unit closed for renovation while a tenant is
                 // still living there is occupied, whatever the board says about lettability.
                 occupied++;
@@ -88,7 +106,10 @@ public class PropertyOccupancy {
                 available++;
             }
         }
-        return new Counts(occupied, available, unavailable, inventory);
+
+        Counts counts() {
+            return new Counts(occupied, available, unavailable, inventory);
+        }
     }
 
     /** Every property in a workspace, for a board that lists them. */
