@@ -1,6 +1,7 @@
 package pl.najem.um.adapter.keycloak;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -11,6 +12,13 @@ import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Drives a real Keycloak. Tagged because it dominates build time — pulling and booting the image
+ * costs minutes, against seconds for every other suite in the repo — so it is opt-in locally
+ * ({@code -PkeycloakTests}) and always on in CI. Skipping it locally is a speed trade, not a
+ * coverage one: nothing else proves the adapter speaks Keycloak's actual API.
+ */
+@Tag("keycloak")
 @Testcontainers
 class KeycloakAdminAdapterTest {
 

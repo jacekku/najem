@@ -1,5 +1,18 @@
 plugins { `java-library` }
 
+// The Keycloak Testcontainers suite pulls and boots a real identity provider: minutes, against
+// seconds for everything else in the repo. Every agent now runs a full build two or three times per
+// merge cycle (rebase discipline), so it is opt-in locally and always on in CI.
+//   ./gradlew build                     -> skipped
+//   ./gradlew build -PkeycloakTests     -> included
+//   CI=true ./gradlew build             -> included
+tasks.test {
+    val optedIn = project.hasProperty("keycloakTests") || System.getenv("CI") != null
+    if (!optedIn) {
+        useJUnitPlatform { excludeTags("keycloak") }
+    }
+}
+
 dependencies {
     api(project(":contracts"))
     implementation(project(":platform:eventstore"))
