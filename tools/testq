@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+#
+# One-at-a-time test slot for the NAJEM agent fleet.
+#
+# The machine ran out of memory with six Gradle daemons and their Testcontainers
+# Postgres instances running at once (human ruling, 2026-08-04). This serialises
+# test runs without a server: the queue is one shared file, and every change to it
+# is made under a lock, because the failure this exists to prevent is precisely two
+# things happening at the same time.
+#
+#   tools/testq wait <agent> <commit> "<command>"   join, block until it is your turn
+#   tools/testq done <agent>                        release — ALWAYS, even on failure
+#   tools/testq show                                who holds it, who is waiting
+#   tools/testq evict                               drop a holder stuck over 20 minutes
+#
+# The lock is `mkdir`, which is atomic on every filesystem we care about and needs
+# no flock(1) — macOS does not ship one.
+
+set -euo pipefail
+
+QUEUE="${NAJEM_TEST_QUEUE:-$HOME/.claude/shared/najem-test-queue.md}"
+LOCK="$QUEUE.lock"
+STALE_AFTER=1200   # 20 minutes, in seconds
+
+[ -f "$QUEUE" ] || { echo "testq: no queue file at $QUEUE" >&2; exit 1; }
+
+# Serialise edits to the queue file itself. Held for milliseconds — this is not the
+# test slot, it is the lock protecting the record of who holds the test slot.
+lock() {
+  local waited=0
+  until mkdir "$LOCK" 2>/dev/null; do
+    sleep 0.2
+    waited=$((waited + 1))
+    if [ $waited -gt 150 ]; then
+      # 30s on a lock held for milliseconds means the holder died mid-edit.
+      echo "testq: breaking a stale edit lock" >&2
+      rm -rf "$LOCK"
+    fi
+  done
+}
+unlock() { rm -rf "$LOCK"; }
+
+holder()  { sed -n 's/^HOLDER: *//p' "$QUEUE" | head -1; }
+waiting() { sed -n 's/^WAITING: *//p' "$QUEUE" | head -1; }
+
+set_state() { # holder waiting
+  local tmp
+  tmp=$(mktemp)
+  # Rewrite through a temp file and move: a reader polling this file must never see
+  # it half-written, and mv within one filesystem is atomic.
+  sed -e "s|^HOLDER:.*|HOLDER: $1|" -e "s|^WAITING:.*|WAITING: $2|" "$QUEUE" > "$tmp"
+  mv "$tmp" "$QUEUE"
+}
+
+now() { date +%s; }
+
+# "agent@commit@epoch@command" — @ because a command contains spaces and a commit
+# does not contain @.
+entry() { printf '%s@%s@%s@%s' "$1" "$2" "$(now)" "${3:-}"; }
+field() { printf '%s' "$1" | cut -d@ -f"$2"; }
+
+cmd=${1:-show}
+
+case "$cmd" in
+
+wait)
+  agent=${2:?agent name required}
+  commit=${3:?commit hash required}
+  what=${4:-tests}
+  me=$(entry "$agent" "$commit" "$what")
+
+  lock
+  h=$(holder)
+  if [ -z "$h" ]; then
+    set_state "$me" "$(waiting)"
+    unlock
+    echo "GO — you hold the test slot ($agent @ $commit)"
+    exit 0
+  fi
+  w=$(waiting)
+  set_state "$h" "${w:+$w|}$me"
+  unlock
+  echo "queued behind $(field "$h" 1) — waiting…"
+
+  while :; do
+    sleep 3
+    lock
+    h=$(holder)
+
+    # Evict a holder that has plainly died rather than deadlock the fleet.
+    if [ -n "$h" ] && [ $(( $(now) - $(field "$h" 3) )) -gt $STALE_AFTER ]; then
+      echo "testq: evicting $(field "$h" 1), held for over 20 minutes" >&2
+      h=""
+    fi
+
+    if [ -z "$h" ]; then
+      w=$(waiting)
+      head=${w%%|*}
+      if [ "$head" = "$me" ]; then
+        rest=${w#"$head"}; rest=${rest#|}
+        set_state "$me" "$rest"
+        unlock
+        echo "GO — you hold the test slot ($agent @ $commit)"
+        exit 0
+      fi
+    fi
+    unlock
+  done
+  ;;
+
+done)
+  agent=${2:?agent name required}
+  lock
+  h=$(holder)
+  if [ -n "$h" ] && [ "$(field "$h" 1)" != "$agent" ]; then
+    # Releasing someone else's slot would hand the machine to two agents at once.
+    unlock
+    echo "testq: $agent does not hold the slot ($(field "$h" 1) does) — not releasing" >&2
+    exit 1
+  fi
+  set_state "" "$(waiting)"
+  unlock
+  echo "released"
+  ;;
+
+show)
+  h=$(holder); w=$(waiting)
+  if [ -n "$h" ]; then
+    printf 'holding  %s  %s  (%ds)  %s\n' \
+      "$(field "$h" 1)" "$(field "$h" 2)" "$(( $(now) - $(field "$h" 3) ))" "$(field "$h" 4)"
+  else
+    printf 'holding  nobody — the slot is free\n'
+  fi
+  if [ -n "$w" ]; then
+    printf 'waiting  '
+    printf '%s ' $(printf '%s' "$w" | tr '|' '\n' | cut -d@ -f1)
+    printf '\n'
+  else
+    printf 'waiting  nobody\n'
+  fi
+  ;;
+
+evict)
+  lock
+  h=$(holder)
+  if [ -z "$h" ]; then
+    unlock; echo "nobody holds it"; exit 0
+  fi
+  held=$(( $(now) - $(field "$h" 3) ))
+  if [ "$held" -lt $STALE_AFTER ] && [ "${FORCE:-}" != "1" ]; then
+    unlock
+    echo "testq: $(field "$h" 1) has held it ${held}s, under the 20 min threshold." >&2
+    echo "       Ask them on the topic first; FORCE=1 tools/testq evict overrides." >&2
+    exit 1
+  fi
+  set_state "" "$(waiting)"
+  unlock
+  echo "evicted $(field "$h" 1)"
+  ;;
+
+*)
+  echo "usage: testq {wait <agent> <commit> \"<command>\"|done <agent>|show|evict}" >&2
+  exit 2
+  ;;
+esac
