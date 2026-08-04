@@ -33,7 +33,14 @@
                 <td th:text="${line.bookingDate}">2026-09-10</td>
                 <td th:text="${line.valueDate}">2026-09-10</td>
                 <td>
-                    <span th:text="${line.remittanceInfo}">NAJEM/M1/2026</span>
+                    <!--/* A transfer with no payment reference is a real and important case — it is
+                           the one no matching rule can settle, so a person has to. Rendered blank it
+                           reads as a rendering fault, and the demo's most interesting row looks like
+                           a bug. The absence is stated instead. */-->
+                    <span th:if="${!#strings.isEmpty(line.remittanceInfo)}"
+                          th:text="${line.remittanceInfo}">NAJEM/M1/2026</span>
+                    <span th:if="${#strings.isEmpty(line.remittanceInfo)}"
+                          class="absent">bez tytułu</span>
                     <!--/* The bank's own reference, shown small: it is what the dedup key is built
                            from, so when a line imports twice this is the field to look at. */-->
                     <span class="ref" th:if="${line.bankReference}"

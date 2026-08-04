@@ -163,3 +163,10 @@ pre:not(:empty) {
     background: #fff;
     border: 1px solid var(--rule);
 }
+
+/* A value the bank did not send, as distinct from one this page failed to render. Italic and quiet
+   so it reads as a note about the data rather than as the data itself. */
+.absent {
+    color: var(--quiet);
+    font-style: italic;
+}

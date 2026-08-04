@@ -148,6 +148,23 @@ class BankUiControllerTest {
             .containsPattern("(?s)Wyciąg.*1/1.*Wyciąg.*2/1");
     }
 
+    /**
+     * A transfer carrying no payment reference is the case the reconciliation demo turns on — no
+     * rule can match it, so a person must. An empty cell reads as a rendering fault; the absence
+     * has to be legible as an absence.
+     */
+    @Test
+    void aTransferWithNoReferenceSaysSoRatherThanRenderingBlank() throws Exception {
+        store.add(iban, new BankTransactionDto("ui-10", new BigDecimal("4100.00"), null,
+            LocalDate.of(2026, 9, 10), "NAJEMCA BEZ TYTULU", COUNTERPARTY, "BNPui-10",
+            LocalDate.of(2026, 9, 10), "CRDT", "PLN"));
+
+        String html = mvc.perform(get("/accounts/{iban}", iban))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("bez tytułu");
+    }
+
     /** No page may offer a way to change what the bank holds; seeding stays on the API. */
     @Test
     void theScreensAreReadOnly() throws Exception {
