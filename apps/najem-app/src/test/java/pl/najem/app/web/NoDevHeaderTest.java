@@ -29,19 +29,36 @@ class NoDevHeaderTest {
 
     @Test
     void noSourceFileInTheWebPackageMentionsTheDevWorkspaceHeader() throws IOException {
-        List<Path> offenders;
-        try (Stream<Path> sources = Files.walk(webPackage())) {
-            offenders = sources
-                .filter(p -> p.toString().endsWith(".java"))
-                .filter(p -> !p.getFileName().toString().equals("NoDevHeaderTest.java"))
-                .filter(NoDevHeaderTest::mentionsTheHeader)
-                .toList();
-        }
-
-        assertThat(offenders)
+        assertThat(sourcesContaining(FORBIDDEN, "NoDevHeaderTest.java"))
             .as("%s must not appear in pl.najem.app.web — the UI resolves a workspace, "
                 + "it does not assert one", FORBIDDEN)
             .isEmpty();
+    }
+
+    /**
+     * A record's canonical constructor is public, so {@code new WebWorkspace(...)} compiles in any
+     * class in this package — including every controller. Nothing exploits that today, but the
+     * type's whole value is that holding one proves a membership check happened, and a forged one
+     * is indistinguishable from a resolved one. This is the guard that makes the javadoc true.
+     */
+    @Test
+    void onlyTheResolverConstructsAWorkspace() throws IOException {
+        assertThat(sourcesContaining("new WebWorkspace(",
+            "WebWorkspaceResolver.java", "NoDevHeaderTest.java"))
+            .as("only WebWorkspaceResolver may construct a WebWorkspace — one built anywhere else "
+                + "is an unchecked workspace wearing a checked one's type")
+            .isEmpty();
+    }
+
+    private static List<Path> sourcesContaining(String needle, String... exempt) throws IOException {
+        var exemptions = List.of(exempt);
+        try (Stream<Path> sources = Files.walk(webPackage())) {
+            return sources
+                .filter(p -> p.toString().endsWith(".java"))
+                .filter(p -> !exemptions.contains(p.getFileName().toString()))
+                .filter(p -> contains(p, needle))
+                .toList();
+        }
     }
 
     /** Fails loudly rather than passing vacuously if the sources move. */
@@ -56,9 +73,9 @@ class NoDevHeaderTest {
         return resolved;
     }
 
-    private static boolean mentionsTheHeader(Path file) {
+    private static boolean contains(Path file, String needle) {
         try {
-            return Files.readString(file).contains(FORBIDDEN);
+            return Files.readString(file).contains(needle);
         } catch (IOException e) {
             throw new IllegalStateException("could not read " + file, e);
         }

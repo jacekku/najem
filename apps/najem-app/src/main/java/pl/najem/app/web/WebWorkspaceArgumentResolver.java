@@ -37,7 +37,10 @@ public class WebWorkspaceArgumentResolver implements HandlerMethodArgumentResolv
     public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mav,
                                   NativeWebRequest request, WebDataBinderFactory binderFactory) {
         var servletRequest = request.getNativeRequest(HttpServletRequest.class);
-        return resolver.resolve(jwt(), servletRequest == null ? null : servletRequest.getSession(true));
+        // getSession(false): this only ever READS a chosen workspace. Creating one would mint a
+        // JSESSIONID on every screen hit, including the ones refused a line later for having no
+        // memberships — free to avoid now, awkward once anything depends on the session existing.
+        return resolver.resolve(jwt(), servletRequest == null ? null : servletRequest.getSession(false));
     }
 
     private static Jwt jwt() {
