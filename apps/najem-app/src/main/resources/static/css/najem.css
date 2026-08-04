@@ -27,3 +27,83 @@ body {
 main {
     padding: 1.25rem;
 }
+
+/* Anything not yet wired to a backend says so, in a tone that reads as unfinished rather than
+   broken. A screen showing plausible content from nowhere is worse in front of a person than in
+   a test (najem-build seq 314). */
+.provisional,
+.muted,
+.entry__pending {
+    color: #6b6660;
+}
+
+.provisional code {
+    font-size: 0.85em;
+}
+
+.entry {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+}
+
+.entry__pending {
+    font-style: italic;
+}
+
+.board {
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 60rem;
+}
+
+.board th,
+.board td {
+    text-align: left;
+    padding: 0.4rem 0.75rem 0.4rem 0;
+    border-bottom: 1px solid var(--rule);
+}
+
+.board .amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Three states, not two — see units.html. The colours only differ; they never decide. */
+.state--open {
+    color: #1f6b3a;
+}
+
+.state--closed {
+    color: #8a4b12;
+}
+
+.state--inventory {
+    color: #6b6660;
+}
+
+.vacant,
+.upcoming,
+.empty {
+    color: #6b6660;
+}
+
+.timeline {
+    list-style: none;
+    padding: 0;
+    max-width: 50rem;
+}
+
+.timeline li {
+    display: grid;
+    grid-template-columns: 7rem 10rem 1fr;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--rule);
+}
+
+.timeline__kind {
+    color: #6b6660;
+    font-variant: small-caps;
+}

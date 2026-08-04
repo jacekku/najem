@@ -71,6 +71,28 @@ class WebScaffoldTest {
     }
 
     /**
+     * The units screen and the timeline screen it links to, wired end to end: controller, the
+     * reporting query they call, and the template. Asked about a property with nothing in it, so
+     * no PM events need seeding — what this proves is that the three parts connect and that an
+     * empty answer renders as an empty screen rather than an error.
+     *
+     * <p>Shares this class's context deliberately. Every one of these boots the whole application,
+     * and on this machine a second context costs a second Postgres container (najem-build seq 328).
+     */
+    @Test
+    void theUnitsAndTimelineScreensRenderForAPropertyWithNothingInIt() throws Exception {
+        java.util.UUID nothing = java.util.UUID.randomUUID();
+
+        mvc.perform(get("/properties/" + nothing + "/units"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("nie ma jeszcze")));
+
+        mvc.perform(get("/tenancies/" + nothing + "/timeline"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Brak zapisów")));
+    }
+
+    /**
      * A page that pulls its script from a third party is a page whose render depends on that party
      * being reachable, in an application handling tenancy-scoped financial data (plan decision E).
      */

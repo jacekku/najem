@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Historia — NAJEM', ~{::main})}">
+<body>
+<main>
+    <h1 th:text="'Historia — ' + ${heading}">Historia</h1>
+
+    <!--/*
+      An empty timeline is a real answer, not a failure — a tenancy signed today has nothing behind
+      it yet. It is also what a stalled projector looks like, which is why the wording says the
+      projection is empty rather than claiming nothing happened.
+    */-->
+    <p class="empty" th:if="${entries.isEmpty()}">
+        Brak zapisów w historii dla tej pozycji.
+    </p>
+
+    <ol class="timeline" th:unless="${entries.isEmpty()}">
+        <li th:each="entry : ${entries}">
+            <time th:text="${entry.occurredOn()}">—</time>
+            <span class="timeline__kind" th:text="${entry.kind()}">—</span>
+            <span class="timeline__summary" th:text="${entry.summary()}">—</span>
+        </li>
+    </ol>
+</main>
+</body>
+</html>

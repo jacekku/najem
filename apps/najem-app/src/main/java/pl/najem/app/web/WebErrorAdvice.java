@@ -21,4 +21,15 @@ public class WebErrorAdvice {
     public String refused() {
         return "error/forbidden";
     }
+
+    /**
+     * Not a 403. A person who has been invited but not yet added belongs to no agency, and that is
+     * an ordinary state of the product rather than a refusal — so it renders a screen that explains
+     * it. The response carries no agency's data, so nothing is opened by answering 200.
+     */
+    @ExceptionHandler(NoAgencyException.class)
+    @ResponseStatus(HttpStatus.OK)
+    public String noAgencyYet() {
+        return "error/no-agency";
+    }
 }

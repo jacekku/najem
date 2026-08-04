@@ -5,11 +5,14 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
 /**
- * The first workspace-scoped screen: it shows which workspace the request resolved to and what the
- * acting user may do in it.
+ * The agency screen under its older route.
  *
- * <p>Thin on purpose. Its job is to prove the seam end to end — that a screen is handed a checked
- * workspace rather than asking for one — and to be the shell the switcher (plan task 4b) extends.
+ * <p>It used to render a second, near-identical template of its own. It renders {@code home} now:
+ * the human ruled that {@code /} routes straight to the agency, which made the two screens the same
+ * screen, and two templates showing the same facts drift apart rather than stay in step.
+ *
+ * <p>Kept as a route rather than deleted because the switcher (plan task 4b) extends it, and
+ * because the seam tests address it.
  */
 @Controller
 public class WorkspaceScreenController {
@@ -18,6 +21,6 @@ public class WorkspaceScreenController {
     public String show(WebWorkspace workspace, Model model) {
         model.addAttribute("workspaceId", workspace.workspaceId());
         model.addAttribute("role", workspace.role().name());
-        return "workspace";
+        return "home";
     }
 }

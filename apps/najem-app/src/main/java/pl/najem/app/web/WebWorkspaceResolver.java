@@ -44,9 +44,11 @@ public class WebWorkspaceResolver {
 
         var memberships = access.forSubject(subject);
         if (memberships.isEmpty()) {
-            // Not a state to render around: matches WorkspaceCaller's rule that a request must
-            // never end up acting as somebody it cannot substantiate.
-            throw new AccessDeniedException("this user belongs to no workspace");
+            // A substantiated person who belongs to nothing yet — an invitee, most often. Still no
+            // workspace, so still no data; but this is a state of the product rather than a
+            // denial, and it used to throw AccessDeniedException, which told a new user they had
+            // no access to an agency they had never asked for.
+            throw new NoAgencyException("this user belongs to no agency yet");
         }
 
         var active = chosen(session)

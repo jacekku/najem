@@ -1,20 +1,45 @@
 <!DOCTYPE html>
+<!--/*
+  The agency screen, and the application's entry point.
+
+  "Agencja", never "przestrzeń robocza" — the second is a calque of an English implementation word
+  for something our own domain model already names, and no Polish estate agent says it. The human's
+  founding ruling was workspace = agency = the hard tenancy boundary; the interface uses the word
+  the domain uses (najem-build seq 309).
+*/-->
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
       th:replace="~{layout :: page('Agencja — NAJEM', ~{::main})}">
 <body>
 <main>
     <h1>Agencja</h1>
-    <dl class="facts">
-        <dt>Identyfikator</dt>
-        <dd th:text="${workspaceId}">—</dd>
-        <dt>Twoja rola</dt>
-        <dd th:text="${role}">—</dd>
-    </dl>
+
+    <!--/*
+      The agency's NAME belongs here. It exists in `um_workspace.name` but no read model hands it
+      to a screen yet (asked at najem-build seq 333), so this shows the identifier and SAYS that it
+      is standing in for the name. Rendering a raw UUID under a label like "Identyfikator" — as this
+      screen did — presents an internal as though it were a fact about the agency.
+    */-->
+    <p class="provisional">
+        Nazwa agencji nie jest jeszcze podłączona. Tymczasowy identyfikator:
+        <code th:text="${workspaceId}">—</code>
+    </p>
+
+    <p class="role">
+        Twoja rola: <strong th:switch="${role}">
+            <span th:case="'ADMIN'">Administrator</span>
+            <span th:case="'MANAGER'">Zarządca</span>
+            <span th:case="*" th:text="${role}">—</span>
+        </strong>
+    </p>
 
     <nav class="entry">
-        <a th:href="@{/properties}">Nieruchomości</a>
-        <a th:href="@{/bank}">Bank</a>
-        <a th:href="@{/report}">Raport</a>
+        <!--/*
+          Only what is wired is a link. A screen that offers a route to nothing is the same failure
+          as a number that came from nowhere, and it is worse in front of a person than in a test.
+        */-->
+        <span class="entry__pending">Nieruchomości — wkrótce</span>
+        <span class="entry__pending">Bank — wkrótce</span>
+        <span class="entry__pending">Raport — wkrótce</span>
     </nav>
 </main>
 </body>
