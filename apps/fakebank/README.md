@@ -63,7 +63,24 @@ payer has their own, equally stable, different account.
 The first four fields (`id`, `amount`, `title`, `bookingDate`) are always present — that is the
 Phase 0 shape. The other six are nullable and omitted from the JSON when null.
 
-## Not here
+## Exporting a statement
 
-MT940 export is Phase 2, landing together with its parser so producer and consumer are written
-against each other rather than a guess.
+The same seeded lines, in the format a bank would hand over:
+
+```
+GET /api/accounts/{iban}/statement.mt940?since=YYYY-MM-DD   →   text/plain
+```
+
+One statement per currency, alphabetically, numbered `1/1`, `2/1`, … — MT940 states the currency
+once on the balance fields, so a `foreign-currency` seed cannot share a statement with a PLN one.
+Exporting the same seed twice yields byte-identical text.
+
+The title travels in `:86:~20`, the counterparty in `~32`/`~38`, and the bank's own reference after
+the `//` in `:61:`. Direction is the `C`/`D` mark; amounts stay positive, as everywhere else here.
+
+**External ids do not survive the trip, by design.** `on-time/NAJEM-M1-2026/0` is a property of this
+service's JSON transport, not of the transaction — a real bank has never heard of it. An ingested
+MT940 line gets its id from the importing side. `StatementRoundTripTest` therefore compares
+amounts, dates, remittance, counterparty and direction, and deliberately not ids.
+
+The parser is `platform/mt940`, a dependency-free library shared with the ingesting side.
