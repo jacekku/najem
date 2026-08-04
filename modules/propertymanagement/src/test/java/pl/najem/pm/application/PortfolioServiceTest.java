@@ -17,6 +17,7 @@ import pl.najem.pm.domain.Unit;
 import pl.najem.pm.domain.UnitEvents;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -103,6 +104,46 @@ class PortfolioServiceTest {
         service.closeUnitToRent(unitId, "renovation");
 
         assertThat(marketStateOf(unitId)).isEqualTo("CLOSED");
+    }
+
+    /**
+     * The removal path existed on the aggregate from Task 2 with no command able to reach it, so
+     * REMOVED was a state nothing in the system could produce — and Reporting had already built a
+     * filter for it (najem-reporting, seq 133).
+     */
+    @Test
+    void aremovedUnitReachesBothTheStreamAndTheProjection() {
+        var propertyId = service.createProperty(UUID.randomUUID(), "Testowa 1", owners());
+        var unitId = service.addUnit(propertyId, "M3", new BigDecimal("2500"));
+        service.openUnitToRent(unitId, "listed");
+
+        service.removeUnit(unitId, "sold");
+
+        assertThat(marketStateOf(unitId)).isEqualTo("REMOVED");
+        assertThat(Unit.from(store.load(unitId, "Unit").events()).marketState())
+            .isEqualTo(Unit.MarketState.REMOVED);
+    }
+
+    /**
+     * A flat sold with a sitting tenant is an ordinary transaction, so removal warns nobody and
+     * blocks nothing — the one hard invariant is period overlap, and a removed unit keeps its
+     * periods, so it is untouched.
+     */
+    @Test
+    void aunitCanBeRemovedWhileATenancyStillOccupiesIt() {
+        var propertyId = service.createProperty(UUID.randomUUID(), "Testowa 1", owners());
+        var unitId = service.addUnit(propertyId, "M4", new BigDecimal("2500"));
+        var unit = Unit.from(store.load(unitId, "Unit").events());
+        var tenancyId = UUID.randomUUID();
+        store.append(unitId, "Unit", store.load(unitId, "Unit").version(),
+            unit.registerTenancyPeriod(tenancyId, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1)),
+            List.of());
+
+        service.removeUnit(unitId, "sold with sitting tenant");
+
+        var after = Unit.from(store.load(unitId, "Unit").events());
+        assertThat(after.marketState()).isEqualTo(Unit.MarketState.REMOVED);
+        assertThat(after.periods()).hasSize(1);
     }
 
     @Test

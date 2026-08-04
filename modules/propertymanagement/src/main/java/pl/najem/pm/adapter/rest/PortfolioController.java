@@ -70,6 +70,12 @@ public class PortfolioController {
         portfolio.closeUnitToRent(unitId, reasonOf(request));
     }
 
+    @PostMapping("/units/{unitId}/remove")
+    public void removeUnit(@PathVariable UUID unitId,
+                           @RequestBody(required = false) ReasonRequest request) {
+        portfolio.removeUnit(unitId, request == null ? "" : request.reason());
+    }
+
     private static String reasonOf(ReasonRequest request) {
         return request == null || request.reason() == null ? "" : request.reason();
     }

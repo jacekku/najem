@@ -70,6 +70,19 @@ public class PortfolioService {
         applyMarketTransition(unitId, reason, false);
     }
 
+    /**
+     * Sold, demolished, or entered by mistake. Nothing is blocked and nothing is warned: the one
+     * hard invariant is period overlap, and a removed unit keeps its calendar, so removing a flat
+     * that still has a sitting tenant is a transaction the manager may legitimately be recording.
+     */
+    public void removeUnit(UUID unitId, String reason) {
+        var stream = store.load(unitId, "Unit");
+        store.append(unitId, "Unit", stream.version(),
+            Unit.from(stream.events()).remove(reason), List.of());
+        jdbc.update("update pm_unit set market_state = ? where unit_id = ?",
+            Unit.MarketState.REMOVED.name(), unitId);
+    }
+
     private void applyMarketTransition(UUID unitId, String reason, boolean open) {
         var stream = store.load(unitId, "Unit");
         var unit = Unit.from(stream.events());

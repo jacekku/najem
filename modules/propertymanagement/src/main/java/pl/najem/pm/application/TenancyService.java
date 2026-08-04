@@ -38,7 +38,9 @@ public class TenancyService {
      * Hard reservation = agreement signed. Registers the period on the Unit's calendar FIRST,
      * at the version the unit was read at: that is what makes the no-overlap invariant safe
      * under concurrency. Two simultaneous reservations on one unit collide on the event store's
-     * unique(stream_id, version) and one gets a ConcurrencyException — no read-then-check race.
+     * unique(stream_id, stream_type, version) and one gets a ConcurrencyException — no
+     * read-then-check race. Both writers are (unitId, "Unit"), same id AND same type, so stream
+     * identity moving into the constraint (V10) leaves this guarantee exactly as it was.
      * Both appends share this method's transaction, so a failure rolls the period back.
      *
      * @return the new tenancy id and the soft warnings the manager should see
