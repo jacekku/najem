@@ -6,6 +6,24 @@ The same request always produces identical lines — no clock, no randomness, no
 
 Runs standalone on port 8081: `./gradlew :apps:fakebank:bootRun`
 
+## Looking at what it holds
+
+`http://localhost:8081/` lists the seeded accounts; each links to its statements and their lines.
+
+The screens render through the same `StatementRenderer` the MT940 export uses, rather than reading
+`TransactionStore` a second way — a page with its own view of the statements could disagree with
+the file accounting actually imports, and seeing what the other side receives is the only reason to
+look. **Pokaz plik MT940** goes further and serves `GET /api/accounts/{iban}/statement.mt940`
+itself, so what appears is byte-for-byte the export.
+
+They are read-only. Seeding stays on the API, so nothing on a screen can put a demonstration into a
+state the API did not — a test asserts the pages contain no form.
+
+The accounts list's last column sums credits less debits **across currencies**, which is arithmetic
+nonsense and labelled as such on the page: it is a direction-of-travel figure. FakeBank knows no
+opening balance, so a real balance cannot be computed from what it has, and showing a plausible one
+would be a number from nowhere.
+
 ## Seeding a scenario
 
 ```
@@ -20,7 +38,12 @@ POST /api/scenarios
 ```
 
 `anchorDate` is the charge's due date; every scenario expresses its dates relative to it, so tests
-never hardcode a calendar. An unknown `name` is a 400.
+never hardcode a calendar.
+
+Every field above except `secondReference` is required, and a request missing one is a **400**
+naming the field. The names matter: `scenario` and `dueDate` are the plausible guesses and bind to
+nothing. They used to leave the record half-built and surface as a 500 — which tells a caller the
+server is broken when their request was. An unknown `name` is likewise a 400.
 
 `secondReference` is optional and read by `lump-sum-two-tenancies` alone, which is refused without
 it. It is not derived from `reference` on purpose: a derived reference would share a segment with
