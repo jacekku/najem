@@ -13,6 +13,11 @@ dependencies {
     implementation(project(":modules:reporting"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
+    // Already on the runtime classpath via modules:usermanagement, which declares it at
+    // `implementation` scope so it does not leak to consumers. Declared here only so the web layer
+    // can name the types it already runs against — Jwt, AccessDeniedException. Nothing about the
+    // running application changes; SecurityConfig stays UserManagement's and stays untouched.
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.flywaydb:flyway-core")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")

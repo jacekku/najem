@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Przestrzeń robocza — NAJEM', ~{::main})}">
+<body>
+<main>
+    <h1>Przestrzeń robocza</h1>
+    <dl class="facts">
+        <dt>Identyfikator</dt>
+        <dd th:text="${workspaceId}">—</dd>
+        <dt>Twoja rola</dt>
+        <dd th:text="${role}">—</dd>
+    </dl>
+</main>
+</body>
+</html>
