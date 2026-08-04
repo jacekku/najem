@@ -52,21 +52,28 @@ public class PropertyOccupancy {
      * A test pins this behaviour so it cannot drift into being accidentally relied upon.
      */
     public Counts countsFor(UUID workspaceId, UUID propertyId, LocalDate asOf) {
-        var units = jdbc.query("""
-            select unit_id, market_state from reporting_unit_state
-            where workspace_id = ? and property_id = ? and not removed
+        // One query, not one per unit. A board asks this for every property on the screen, so a
+        // per-unit occupancy check multiplies into hundreds of round trips on the page a manager
+        // hits most. The correlated `exists` uses reporting_unit_period_by_unit.
+        var occupancy = jdbc.query("""
+            select u.market_state,
+                   exists (select 1 from reporting_unit_period p
+                             where p.workspace_id = u.workspace_id and p.unit_id = u.unit_id
+                               and not p.annulled and (not p.released or p.ended_on is not null)
+                               and p.starts_on <= ? and (p.ends_on is null or p.ends_on > ?)) as occupied
+            from reporting_unit_state u
+            where u.workspace_id = ? and u.property_id = ? and not u.removed
             """,
-            (rs, i) -> new Object[]{UUID.fromString(rs.getString("unit_id")), rs.getString("market_state")},
-            workspaceId, propertyId);
+            (rs, i) -> new Object[]{rs.getString("market_state"), rs.getBoolean("occupied")},
+            asOf, asOf, workspaceId, propertyId);
 
         int occupied = 0;
         int available = 0;
         int unavailable = 0;
         int inventory = 0;
-        for (var unit : units) {
-            var unitId = (UUID) unit[0];
-            var marketState = (String) unit[1];
-            if (isOccupiedOn(workspaceId, unitId, asOf)) {
+        for (var unit : occupancy) {
+            var marketState = (String) unit[0];
+            if ((Boolean) unit[1]) {
                 // Occupancy beats market state: a unit closed for renovation while a tenant is
                 // still living there is occupied, whatever the board says about lettability.
                 occupied++;
@@ -86,14 +93,5 @@ public class PropertyOccupancy {
         return jdbc.queryForList(
             "select property_id from reporting_property where workspace_id = ? order by address",
             UUID.class, workspaceId);
-    }
-
-    private boolean isOccupiedOn(UUID workspaceId, UUID unitId, LocalDate asOf) {
-        Integer count = jdbc.queryForObject("""
-            select count(*) from reporting_unit_period
-            where workspace_id = ? and unit_id = ? and not annulled and (not released or ended_on is not null)
-              and starts_on <= ? and (ends_on is null or ends_on > ?)
-            """, Integer.class, workspaceId, unitId, asOf, asOf);
-        return count != null && count > 0;
     }
 }

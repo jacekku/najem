@@ -145,6 +145,35 @@ class AnnulledTenancyTest {
             .isEqualTo(endedTenancy);
     }
 
+    /**
+     * Asserts the marker itself, because occupancy alone does not exercise it.
+     * <p>
+     * A mutation revealed this: removing {@code not annulled} from the occupancy queries changes
+     * nothing today, since PM's {@code end()} also releases the unit's period, and a released
+     * period with no {@code ended_on} is already excluded. The flag is therefore redundant for
+     * occupancy <em>at present</em> and kept for two reasons — it records WHY the period does not
+     * count, which the release alone does not, and it holds if PM ever stops releasing on end.
+     * Stating that here rather than leaving a line no test can move.
+     */
+    @Test
+    void marksTheAnnulledPeriodAsAnnulledRatherThanMerelyReleased() {
+        assertThat(jdbc.queryForObject("""
+            select annulled from reporting_unit_period where tenancy_id = ?
+            """, Boolean.class, annulledTenancy)).isTrue();
+        assertThat(jdbc.queryForObject("""
+            select ended_on from reporting_unit_period where tenancy_id = ?
+            """, LocalDate.class, annulledTenancy))
+            .as("an annulment is not an ending, so it records no end date")
+            .isNull();
+
+        assertThat(jdbc.queryForObject("""
+            select annulled from reporting_unit_period where tenancy_id = ?
+            """, Boolean.class, endedTenancy)).isFalse();
+        assertThat(jdbc.queryForObject("""
+            select ended_on from reporting_unit_period where tenancy_id = ?
+            """, LocalDate.class, endedTenancy)).isEqualTo(LocalDate.of(2026, 6, 30));
+    }
+
     @Test
     void leavesTheAnnulledUnitOutOfThePropertysOccupiedCount() {
         var counts = propertyOccupancy.countsFor(workspace, propertyId, LocalDate.of(2026, 3, 1));
