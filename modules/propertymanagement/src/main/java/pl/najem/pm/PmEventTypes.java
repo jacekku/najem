@@ -37,7 +37,10 @@ public class PmEventTypes {
             TenancyEvents.TenancyActivated.class,
             TenancyEvents.ChecklistItemAdded.class,
             TenancyEvents.ChecklistItemCompleted.class,
-            TenancyEvents.HandoverProtocolRecorded.class);
+            TenancyEvents.HandoverProtocolRecorded.class,
+            TenancyEvents.RentChangeScheduled.class,
+            TenancyEvents.RentChangeCancelled.class,
+            TenancyEvents.RentChangeApplied.class);
     }
 
     public static void register(EventTypeRegistry registry) {

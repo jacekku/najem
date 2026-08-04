@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.TenancyService;
+import pl.najem.pm.domain.ChangeType;
 import pl.najem.pm.domain.LegalForm;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.ReserveTenancy;
@@ -33,6 +34,10 @@ public class TenancyController {
     public record CancelRequest(String reason) {}
 
     public record ContactRequest(UUID contactId) {}
+
+    public record RentChangeRequest(LocalDate decidedOn, LocalDate effectiveFrom, String changeType,
+                                    BigDecimal monthlyTotal, BigDecimal rent, BigDecimal adminFee,
+                                    BigDecimal mediaAdvance) {}
 
     /** Default rent day, per the domain model's stated assumption (hotspot #3). */
     private static final int DEFAULT_RENT_DAY = 10;
@@ -67,6 +72,25 @@ public class TenancyController {
     @PostMapping("/{tenancyId}/tenants/{contactId}/remove")
     public void removeTenant(@PathVariable UUID tenancyId, @PathVariable UUID contactId) {
         tenancies.removeTenant(tenancyId, contactId);
+    }
+
+    @PostMapping("/{tenancyId}/rent-changes")
+    public void scheduleRentChange(@PathVariable UUID tenancyId,
+                                   @RequestBody RentChangeRequest request) {
+        MonthlyAmount.Breakdown breakdown = null;
+        if (request.rent() != null || request.adminFee() != null || request.mediaAdvance() != null) {
+            breakdown = new MonthlyAmount.Breakdown(
+                orZero(request.rent()), orZero(request.adminFee()), orZero(request.mediaAdvance()));
+        }
+        tenancies.scheduleRentChange(tenancyId, request.decidedOn(), request.effectiveFrom(),
+            new MonthlyAmount(request.monthlyTotal(), breakdown),
+            ChangeType.valueOf(request.changeType().toUpperCase().replace('-', '_')));
+    }
+
+    @PostMapping("/{tenancyId}/rent-changes/{effectiveFrom}/cancel")
+    public void cancelRentChange(@PathVariable UUID tenancyId,
+                                 @PathVariable LocalDate effectiveFrom) {
+        tenancies.cancelRentChange(tenancyId, effectiveFrom);
     }
 
     private static ReserveTenancy toCommand(ReserveRequest request) {

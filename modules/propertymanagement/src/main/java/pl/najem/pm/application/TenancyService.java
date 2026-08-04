@@ -3,8 +3,10 @@ package pl.najem.pm.application;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.najem.contracts.events.RentChangeAppliedEvent;
 import pl.najem.contracts.events.TenancyActivatedEvent;
 import pl.najem.eventstore.EventStore;
+import pl.najem.pm.domain.ChangeType;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.ReserveTenancy;
 import pl.najem.pm.domain.Tenancy;
@@ -109,6 +111,64 @@ public class TenancyService {
                 tenancy.paymentReference())));
         jdbc.update("update pm_tenancy set state = 'ACTIVE', activated_on = ? where tenancy_id = ?",
             on, tenancyId);
+    }
+
+    public void scheduleRentChange(UUID tenancyId, LocalDate decidedOn, LocalDate effectiveFrom,
+                                   MonthlyAmount newMonthly, ChangeType type) {
+        var stream = store.load(tenancyId);
+        var tenancy = Tenancy.from(stream.events());
+        store.append(tenancyId, "Tenancy", stream.version(),
+            tenancy.scheduleRentChange(decidedOn, effectiveFrom, newMonthly, type), List.of());
+        // Arm the EARLIEST pending change, not this one: due rows are keyed (kind, subject_id),
+        // so scheduling a later change would otherwise overwrite an earlier change's timer and
+        // strand it. Fires the day before it takes effect, not at schedule time (§5).
+        armNextRentChange(tenancyId);
+    }
+
+    public void cancelRentChange(UUID tenancyId, LocalDate effectiveFrom) {
+        var stream = store.load(tenancyId);
+        var tenancy = Tenancy.from(stream.events());
+        store.append(tenancyId, "Tenancy", stream.version(),
+            tenancy.cancelRentChange(effectiveFrom), List.of());
+        armNextRentChange(tenancyId);
+    }
+
+    private void armNextRentChange(UUID tenancyId) {
+        Tenancy.from(store.load(tenancyId).events()).nextPendingRentChange()
+            .ifPresentOrElse(
+                next -> due.arm(RentChangeProcess.KIND, tenancyId,
+                    next.effectiveFrom().minusDays(1)),
+                () -> due.disarm(RentChangeProcess.KIND, tenancyId));
+    }
+
+    /**
+     * Publishes the new rent WITH its component breakdown. Deposit valorization is computed on
+     * the rent component alone, so a flat total would silently corrupt every later valorization
+     * (najem-accounting, seq 48).
+     */
+    public void applyRentChange(UUID tenancyId, LocalDate effectiveFrom) {
+        var stream = store.load(tenancyId);
+        var tenancy = Tenancy.from(stream.events());
+        var change = tenancy.pendingRentChange(effectiveFrom).orElseThrow(
+            () -> new IllegalStateException("No rent change pending for " + effectiveFrom));
+        var monthly = change.monthly();
+        var breakdown = monthly.breakdown();
+
+        store.append(tenancyId, "Tenancy", stream.version(),
+            tenancy.applyRentChange(effectiveFrom),
+            List.of(new RentChangeAppliedEvent(tenancy.workspaceId(), tenancyId, effectiveFrom,
+                monthly.total(),
+                breakdown == null ? null : breakdown.rent(),
+                breakdown == null ? null : breakdown.adminFee(),
+                breakdown == null ? null : breakdown.mediaAdvance(),
+                change.type().wireName())));
+        jdbc.update("update pm_tenancy set monthly_total = ?, rent = ?, admin_fee = ?, "
+                + "media_advance = ?, component_split = ? where tenancy_id = ?",
+            monthly.total(),
+            breakdown == null ? null : breakdown.rent(),
+            breakdown == null ? null : breakdown.adminFee(),
+            breakdown == null ? null : breakdown.mediaAdvance(),
+            monthly.componentSplitInContract(), tenancyId);
     }
 
     private void insertProjection(ReserveTenancy c) {

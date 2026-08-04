@@ -40,4 +40,17 @@ public final class TenancyEvents {
     public record HandoverProtocolRecorded(UUID workspaceId, UUID tenancyId,
                                            HandoverProtocol protocol) {
     }
+
+    public record RentChangeScheduled(UUID workspaceId, UUID tenancyId, LocalDate decidedOn,
+                                      LocalDate effectiveFrom, MonthlyAmount monthly,
+                                      ChangeType type) {
+    }
+
+    public record RentChangeCancelled(UUID workspaceId, UUID tenancyId, LocalDate effectiveFrom) {
+    }
+
+    /** The moment the new rent becomes the rent in force — what Accounting charges against. */
+    public record RentChangeApplied(UUID workspaceId, UUID tenancyId, LocalDate effectiveFrom,
+                                    MonthlyAmount monthly, ChangeType type) {
+    }
 }

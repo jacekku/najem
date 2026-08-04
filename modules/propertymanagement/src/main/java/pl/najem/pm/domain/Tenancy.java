@@ -3,6 +3,7 @@ package pl.najem.pm.domain;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -42,6 +43,7 @@ public class Tenancy {
         new EnumMap<>(ChecklistPhase.class);
     /** Set by TenancyDocumentAttached(NOTARIAL_DECLARATION) — Task 9. */
     private boolean notarialDeclarationAttached;
+    private final Map<LocalDate, RentChange> pendingChanges = new LinkedHashMap<>();
 
     private Tenancy() {
     }
@@ -116,6 +118,36 @@ public class Tenancy {
         return legalForm != LegalForm.INSTYTUCJONALNY || notarialDeclarationAttached;
     }
 
+    public List<Object> scheduleRentChange(LocalDate decidedOn, LocalDate effectiveFrom,
+                                           MonthlyAmount newMonthly, ChangeType type) {
+        return List.of(new TenancyEvents.RentChangeScheduled(workspaceId, id, decidedOn,
+            effectiveFrom, newMonthly, type));
+    }
+
+    public List<Object> cancelRentChange(LocalDate effectiveFrom) {
+        return List.of(new TenancyEvents.RentChangeCancelled(workspaceId, id, effectiveFrom));
+    }
+
+    /** Only applies a change that still stands — an edited or cancelled one sends nothing. */
+    public List<Object> applyRentChange(LocalDate effectiveFrom) {
+        RentChange change = pendingChanges.get(effectiveFrom);
+        if (change == null) {
+            throw new IllegalStateException(
+                "No rent change pending for " + effectiveFrom + " on tenancy " + id);
+        }
+        return List.of(new TenancyEvents.RentChangeApplied(workspaceId, id, effectiveFrom,
+            change.monthly(), change.type()));
+    }
+
+    public Optional<RentChange> pendingRentChange(LocalDate effectiveFrom) {
+        return Optional.ofNullable(pendingChanges.get(effectiveFrom));
+    }
+
+    /** The earliest change still pending — the process manager arms against this one. */
+    public Optional<RentChange> nextPendingRentChange() {
+        return pendingChanges.values().stream().min(Comparator.comparing(RentChange::effectiveFrom));
+    }
+
     /**
      * Soft checks only — the manager confirms; nothing here blocks. The authoritative
      * statutory gate lives in the Tenancy Accounting ACL; these exist to catch the mistake
@@ -136,6 +168,13 @@ public class Tenancy {
                     + " (" + plain(cap) + ")");
             }
         }
+        // art. 8a/9: a unilateral increase needs 3 months' notice. Warn, don't block —
+        // the ACL's compliance seat is the authoritative gate.
+        pendingChanges.values().stream()
+            .filter(change -> change.type() == ChangeType.UNILATERAL_INCREASE)
+            .filter(change -> change.decidedOn().plusMonths(3).isAfter(change.effectiveFrom()))
+            .forEach(change -> warnings.add("Unilateral increase effective "
+                + change.effectiveFrom() + " gives less than 3 months notice (art. 8a/9)"));
         if (endDate != null && startDate.plusYears(10).isBefore(endDate)) {
             warnings.add("Fixed term longer than 10 years");
         }
@@ -177,6 +216,13 @@ public class Tenancy {
             case TenancyEvents.ChecklistItemCompleted e -> completedItems.add(e.key());
             case TenancyEvents.HandoverProtocolRecorded e ->
                 handoverProtocols.put(e.protocol().type(), e.protocol());
+            case TenancyEvents.RentChangeScheduled e -> pendingChanges.put(e.effectiveFrom(),
+                new RentChange(e.decidedOn(), e.effectiveFrom(), e.monthly(), e.type()));
+            case TenancyEvents.RentChangeCancelled e -> pendingChanges.remove(e.effectiveFrom());
+            case TenancyEvents.RentChangeApplied e -> {
+                monthly = e.monthly();
+                pendingChanges.remove(e.effectiveFrom());
+            }
             default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
         }
     }
