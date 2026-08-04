@@ -42,13 +42,25 @@ public class IngestionService {
             List.of(new PaymentIngested(paymentId, line.externalId(), line.amount(),
                 line.title(), line.bookingDate())), List.of());
         jdbc.update("""
-            insert into acc_payment(payment_id, workspace_id, external_id, amount, title, booking_date, status)
-            values (?,?,?,?,?,?,'unmatched')
-            """, paymentId, workspaceId, line.externalId(), line.amount(), line.title(), line.bookingDate());
+            insert into acc_payment(payment_id, workspace_id, external_id, amount, title, booking_date,
+                                    status, counterparty_name, counterparty_iban, bank_reference,
+                                    value_date, direction, currency)
+            values (?,?,?,?,?,?,'unmatched',?,?,?,?,?,?)
+            """, paymentId, workspaceId, line.externalId(), line.amount(), line.title(), line.bookingDate(),
+            line.counterpartyName(), line.counterpartyIban(), line.bankReference(), line.valueDate(),
+            line.creditDebitIndicator(), line.currency());
         suggestExactMatch(workspaceId, paymentId, line);
     }
 
+    /**
+     * A line only reaches the ladder if it is money coming in, in the currency this ledger holds.
+     * An outgoing debit or a euro transfer is recorded as the bank fact it is and left for a human —
+     * it must never settle a charge, however exactly its reference and amount line up.
+     */
     private void suggestExactMatch(UUID workspaceId, UUID paymentId, BankLine line) {
+        if (!line.isCredit() || !line.isZloty()) {
+            return;
+        }
         var chargeIds = jdbc.queryForList("""
             select charge_id from acc_charge
             where workspace_id = ? and payment_reference = ? and amount = ? and not allocated and active

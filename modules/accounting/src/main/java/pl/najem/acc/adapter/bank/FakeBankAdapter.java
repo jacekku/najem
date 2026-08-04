@@ -14,8 +14,13 @@ import java.util.List;
 @Component
 public class FakeBankAdapter implements BankStatementPort {
 
-    /** Wire shape of the FakeBank transactions endpoint. */
-    record FakeBankTransaction(String id, BigDecimal amount, String title, LocalDate bookingDate) {}
+    /**
+     * Wire shape of the FakeBank transactions endpoint. The last six are omitted from the JSON when
+     * the bank has nothing to say, so they arrive null and stay null — they are not defaults.
+     */
+    record FakeBankTransaction(String id, BigDecimal amount, String title, LocalDate bookingDate,
+                               String counterpartyName, String counterpartyIban, String bankReference,
+                               LocalDate valueDate, String creditDebitIndicator, String currency) {}
 
     private final RestClient client;
     private final String iban;
@@ -36,7 +41,9 @@ public class FakeBankAdapter implements BankStatementPort {
             return List.of();
         }
         return transactions.stream()
-            .map(tx -> new BankLine(tx.id(), tx.amount(), tx.title(), tx.bookingDate()))
+            .map(tx -> new BankLine(tx.id(), tx.amount(), tx.title(), tx.bookingDate(),
+                tx.counterpartyName(), tx.counterpartyIban(), tx.bankReference(), tx.valueDate(),
+                tx.creditDebitIndicator(), tx.currency()))
             .toList();
     }
 }
