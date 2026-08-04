@@ -93,7 +93,25 @@ else
 fi
 export NAJEM_TESTQ_POLL=1 NAJEM_TESTQ_WAITER_STALE=6
 
-# --- 4. Nobody may release somebody else's slot -------------------------------
+# --- 4. `show` must report every waiter, including the last one ---------------
+# najem-reviewer, seq 365: the entry list has no trailing newline, so `read`
+# returned false on the final entry after reading it and the loop dropped it.
+# With exactly one agent queued, `show` reported an empty queue — so the command
+# that exists to reveal contention concealed it, and every agent read "nobody
+# waiting" and took the slot.
+echo "show reports the last waiter"
+fresh_queue
+"$TESTQ" wait alice deadbeef "build A" >/dev/null
+"$TESTQ" wait bob cafe1234 "build B" >/dev/null & BOB=$!
+sleep 2
+SHOWN=$("$TESTQ" show)
+kill -9 $BOB 2>/dev/null
+case "$SHOWN" in
+  *"waiting  bob"*) report "a single queued agent appears in show" pass ;;
+  *)                report "a single queued agent appears in show — got: $(printf '%s' "$SHOWN" | tr '\n' ';')" fail ;;
+esac
+
+# --- 5. Nobody may release somebody else's slot -------------------------------
 echo "releasing a slot you do not hold"
 fresh_queue
 "$TESTQ" wait alice deadbeef "build A" >/dev/null

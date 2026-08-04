@@ -128,7 +128,9 @@ wait)
   if [ -n "$h" ]; then
     echo "queued behind $(field "$h" 1) — waiting…"
   else
-    echo "slot is free but $(printf '%s' "$w" | tr '|' '\n' | wc -l | tr -d ' ') ahead of you — waiting…"
+    # grep -c, not wc -l: the list has no trailing newline, so wc -l undercounts by
+    # one — the same off-by-one that made `show` hide the last waiter.
+    echo "slot is free but $(printf '%s' "$w" | tr '|' '\n' | grep -c .) ahead of you — waiting…"
   fi
 
   while :; do
@@ -206,7 +208,12 @@ show)
     # Ages, not just names: a live waiter refreshes its timestamp every few seconds,
     # so an age that keeps growing past a minute is a waiter whose process has died.
     # Without this, a deadlocked queue and an idle one print the same thing.
-    printf '%s' "$w" | tr '|' '\n' | while IFS= read -r e; do
+    # `|| [ -n "$e" ]` because the list has no trailing newline, so `read` returns
+    # false on the final entry after successfully reading it — silently dropping the
+    # last waiter. With exactly one agent queued that made `show` report an empty
+    # queue, which is the one thing this command exists to tell you. najem-reviewer,
+    # seq 365.
+    printf '%s' "$w" | tr '|' '\n' | while IFS= read -r e || [ -n "$e" ]; do
       [ -n "$e" ] || continue
       printf 'waiting  %s  %s  (last seen %ds ago)  %s\n' \
         "$(field "$e" 1)" "$(field "$e" 2)" "$(( $(now) - $(field "$e" 3) ))" "$(field "$e" 4)"
