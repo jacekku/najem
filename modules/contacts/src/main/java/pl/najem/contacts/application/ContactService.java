@@ -61,8 +61,20 @@ public class ContactService {
     /**
      * Right-to-be-forgotten: delete the personal data, keep the event stream.
      * Refuses while any retention hold is unreleased (tax / civil prescription).
+     * <p>
+     * A contact that is not yours is a 404, not a silent 204. I argued the opposite when the gate
+     * landed — that deleting nothing is the correct outcome of an erase command, so there was
+     * nothing to report — and @najem-reviewer contested it at najem-build seq 266 on grounds I
+     * could not answer: <b>a 204 means erased</b>, so a manager who mistypes an id, or whose client
+     * is pointed at the wrong workspace, is told the person's data is gone while it is still there.
+     * Under a right-to-be-forgotten request the controller has to be able to demonstrate the
+     * erasure, and "the database correctly deleted nothing" does not discharge that.
+     * <p>
+     * The oracle objection I raised does not apply, because {@link ContactDirectory#requireIn}
+     * already answers unknown and foreign identically for the other four commands.
      */
     public void erase(UUID workspaceId, UUID contactId, LocalDate erasedOn) {
+        directory.requireErasable(workspaceId, contactId);
         var holds = retention.activeHolds(workspaceId, contactId);
         if (!holds.isEmpty()) {
             throw new RetentionHoldActiveException(contactId, holds);
@@ -70,7 +82,8 @@ public class ContactService {
         int erased = jdbc.update("delete from contacts_person where workspace_id = ? and contact_id = ?",
             workspaceId, contactId);
         if (erased == 0) {
-            // Unknown here, or another workspace's contact: erase nothing, claim nothing.
+            // Already erased by this workspace: the gate let it through, so this is the idempotent
+            // repeat rather than a foreign contact. Claim nothing a second time.
             return;
         }
         var stream = store.load(contactId, "Contact");

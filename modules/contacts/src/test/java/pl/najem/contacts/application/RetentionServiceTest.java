@@ -213,11 +213,17 @@ class RetentionServiceTest {
         assertThat(retention.dueForErasure(OTHER_AGENCY, LocalDate.of(2026, 8, 3))).doesNotContain(stale);
     }
 
+    /**
+     * The data-unchanged half is unchanged; the call now refuses rather than returning quietly.
+     * See {@code CrossWorkspaceContactTest} for why — a 204 asserts the person's data is gone, and
+     * a caller who mistyped an id was being told exactly that (najem-reviewer, seq 266).
+     */
     @Test
     void doesNotEraseAContactBelongingToAnotherWorkspace() {
         var contactId = aContactRetainedUntil(LocalDate.of(2027, 8, 3));
 
-        contacts.erase(OTHER_AGENCY, contactId, LocalDate.of(2027, 9, 1));
+        assertThatThrownBy(() -> contacts.erase(OTHER_AGENCY, contactId, LocalDate.of(2027, 9, 1)))
+            .isInstanceOf(NoSuchContactException.class);
 
         assertThat(directory.find(AGENCY, contactId)).isPresent();
         assertThat(jdbc.queryForObject(

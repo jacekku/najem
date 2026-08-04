@@ -170,19 +170,62 @@ class CrossWorkspaceContactTest {
     }
 
     /**
-     * Erasure already returned quietly for a foreign contact, and that stays the behaviour rather
-     * than becoming a throw. Deleting nothing IS the correct outcome of an erase command, so there
-     * is no failure to report — and a caller learning "that id exists elsewhere" from a 404-versus-
-     * 204 difference would make this endpoint an existence oracle over other agencies' contacts.
+     * Erasing somebody else's contact is a refusal, not a quiet success.
+     * <p>
+     * This test asserted the opposite until @najem-reviewer contested it at najem-build seq 266.
+     * My reasoning was that deleting nothing is the correct outcome of an erase command so there is
+     * nothing to report, and that a 404-versus-204 difference would make this an existence oracle.
+     * The second half was already answered by the other four commands, which merge unknown and
+     * foreign into one status — so this endpoint discloses nothing they do not. The first half is
+     * the actual error: <b>a 204 tells the caller the person's data is gone.</b> A mistyped id, or
+     * a client pointed at the wrong workspace, produced that answer while the data remained.
      */
     @Test
-    void erasingSomebodyElsesContactStaysASilentNoOp() {
+    void refusesToEraseSomebodyElsesContactRatherThanReportingSuccess() {
         var contactId = aContactOfTheOwner(LocalDate.of(2027, 8, 3));
         var before = eventCount(contactId);
 
-        contacts.erase(INTRUDER, contactId, LocalDate.of(2027, 9, 1));
+        assertThatThrownBy(() -> contacts.erase(INTRUDER, contactId, LocalDate.of(2027, 9, 1)))
+            .isInstanceOf(NoSuchContactException.class);
 
         assertThat(directory.find(OWNER, contactId)).isPresent();
         assertThat(eventCount(contactId)).isEqualTo(before);
+        assertThat(jdbc.queryForObject(
+            "select count(*) from contacts_erasure_log where contact_id = ?", Integer.class, contactId))
+            .as("a refused erasure must not leave a tombstone claiming it happened")
+            .isZero();
+    }
+
+    /**
+     * The wrinkle @najem-reviewer named before I hit it: erasure deletes the {@code contacts_person}
+     * row, so a gate that only asks "is this contact yours" would 404 on the second erasure of a
+     * contact you had just legitimately erased. The erasure log is what keeps it yours.
+     */
+    @Test
+    void erasingYourOwnContactTwiceStaysIdempotentRatherThanBecomingA404() {
+        var contactId = aContactOfTheOwner(LocalDate.of(2027, 8, 3));
+        contacts.erase(OWNER, contactId, LocalDate.of(2027, 9, 1));
+        var eventsAfterFirst = eventCount(contactId);
+
+        contacts.erase(OWNER, contactId, LocalDate.of(2027, 9, 2));
+
+        assertThat(directory.find(OWNER, contactId)).isEmpty();
+        assertThat(eventCount(contactId))
+            .as("the repeat must not append a second ContactErased")
+            .isEqualTo(eventsAfterFirst);
+        assertThat(jdbc.queryForObject(
+            "select erased_on from contacts_erasure_log where contact_id = ?", LocalDate.class, contactId))
+            .as("and must not rewrite the date the erasure actually happened")
+            .isEqualTo(LocalDate.of(2027, 9, 1));
+    }
+
+    /** And a stranger may not use the log as an oracle either: already-erased-elsewhere is the same 404. */
+    @Test
+    void refusesToEraseAContactAnotherWorkspaceHasAlreadyErased() {
+        var contactId = aContactOfTheOwner(LocalDate.of(2027, 8, 3));
+        contacts.erase(OWNER, contactId, LocalDate.of(2027, 9, 1));
+
+        assertThatThrownBy(() -> contacts.erase(INTRUDER, contactId, LocalDate.of(2027, 9, 2)))
+            .isInstanceOf(NoSuchContactException.class);
     }
 }

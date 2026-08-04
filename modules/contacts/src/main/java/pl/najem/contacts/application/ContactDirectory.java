@@ -45,6 +45,33 @@ public class ContactDirectory {
         }
     }
 
+    /**
+     * The gate for erasure specifically: known-and-yours, <em>or</em> already-erased-by-you.
+     * <p>
+     * {@link #requireIn} cannot serve this one endpoint, because erasure deletes the
+     * {@code contacts_person} row — so a legitimate second erasure of your own contact would 404 on
+     * a contact you had just successfully erased, and idempotency would be gone. The erasure log is
+     * the record that it was yours, and it survives.
+     * <p>
+     * Both halves are workspace-scoped, so the status is identical for unknown, foreign, and
+     * foreign-already-erased. That undifferentiated 404 is what keeps this from being an oracle —
+     * @najem-reviewer's point at najem-build seq 266, and the reason the argument I made for
+     * silence does not hold: the other four commands already merge unknown with foreign, so a 404
+     * here discloses nothing they do not.
+     */
+    public void requireErasable(UUID workspaceId, UUID contactId) {
+        Integer known = jdbc.queryForObject("""
+            select count(*) from (
+                select contact_id from contacts_person where workspace_id = ? and contact_id = ?
+                union all
+                select contact_id from contacts_erasure_log where workspace_id = ? and contact_id = ?
+            ) mine
+            """, Integer.class, workspaceId, contactId, workspaceId, contactId);
+        if (known == null || known == 0) {
+            throw new NoSuchContactException(contactId);
+        }
+    }
+
     /** Candidates for "do we already know this person?" — the manager judges, no uniqueness enforced. */
     public List<UUID> findByEmail(UUID workspaceId, String email) {
         return jdbc.queryForList("""
