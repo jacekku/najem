@@ -22,6 +22,35 @@ body {
     font-weight: 500;
 }
 
+.masthead__search {
+    display: inline-block;
+    margin-left: 1rem;
+}
+
+.masthead__search input {
+    font: inherit;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: #fff;
+}
+
+.hits {
+    list-style: none;
+    padding: 0;
+}
+
+.hits li {
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--rule);
+}
+
+.search input {
+    font: inherit;
+    padding: 0.3rem 0.5rem;
+    min-width: 18rem;
+}
+
 .masthead__stale {
     margin-left: 1rem;
     color: #8a4b12;

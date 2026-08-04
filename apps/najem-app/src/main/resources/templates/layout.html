@@ -32,6 +32,9 @@
       something and cannot see it has no way to tell "not yet" from "it didn't work". Saying so is
       the condition najem-pm attached to accepting an eventually consistent board (seq 110).
     */-->
+    <form class="masthead__search" th:if="${activeAgency}" th:action="@{/search}" method="get">
+        <input type="search" name="q" placeholder="Szukaj">
+    </form>
     <span class="masthead__stale" th:if="${projectionsBehind}"
           title="Widok nadąża za zapisami z opóźnieniem — odśwież za chwilę">aktualizacja…</span>
 </header>
