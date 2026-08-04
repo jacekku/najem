@@ -125,7 +125,7 @@ class WalkingSkeletonTest {
         given().header("X-Workspace-Id", DEV_WORKSPACE)
             .post("/api/acc/ingest/fetch").then().statusCode(200);
 
-        String paymentId = given().get("/api/acc/suggestions")
+        String paymentId = given().header("X-Workspace-Id", DEV_WORKSPACE).get("/api/acc/suggestions")
             .then().statusCode(200).extract().path("[0].paymentId");
         assertThat(paymentId).isNotNull();
         given().header("X-Workspace-Id", DEV_WORKSPACE)
@@ -135,7 +135,7 @@ class WalkingSkeletonTest {
     }
 
     private static String boardStatus(String tenancyId) {
-        var board = given().get("/api/acc/board").then().statusCode(200)
+        var board = given().header("X-Workspace-Id", DEV_WORKSPACE).get("/api/acc/board").then().statusCode(200)
             .extract().jsonPath().getList("", Map.class);
         return board.stream()
             .filter(row -> tenancyId.equals(String.valueOf(row.get("tenancyId"))))

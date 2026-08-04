@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import pl.najem.acc.WorkspaceContext;
 import pl.najem.acc.application.SuspenseEntry;
 import pl.najem.acc.application.SuspenseService;
 
@@ -35,8 +34,8 @@ public class SuspenseController {
 
     @GetMapping("/suspense")
     public List<Map<String, Object>> waiting(
-        @RequestHeader(value = "X-Workspace-Id", required = false) UUID workspaceId) {
-        return suspense.waiting(workspaceOf(workspaceId)).stream()
+        @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        return suspense.waiting(workspaceId).stream()
             .map(SuspenseController::asWire)
             .toList();
     }
@@ -69,10 +68,5 @@ public class SuspenseController {
         wire.put("daysWaiting", entry.daysWaiting());
         wire.put("age", entry.age().wireName());
         return wire;
-    }
-
-    /** Reads only. A write must never reach this — the guard test enforces it for every mapping. */
-    private static UUID workspaceOf(UUID header) {
-        return header == null ? WorkspaceContext.DEV_WORKSPACE_ID : header;
     }
 }

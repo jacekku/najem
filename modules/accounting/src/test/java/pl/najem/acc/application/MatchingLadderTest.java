@@ -11,7 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
-import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.MatchTier;
 import pl.najem.acc.domain.WarningKind;
 import pl.najem.eventstore.EventTypeRegistry;
@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 class MatchingLadderTest {
 
-    private static final UUID WS = WorkspaceContext.DEV_WORKSPACE_ID;
+    private static final UUID WS = TestWorkspace.ID;
     private static final UUID OTHER_WS = UUID.fromString("00000000-0000-0000-0000-0000000000ee");
     private static final LocalDate DUE = LocalDate.of(2027, 5, 10);
     /** Each test uses its own account: tier 3 learns, so a shared one would leak between them. */

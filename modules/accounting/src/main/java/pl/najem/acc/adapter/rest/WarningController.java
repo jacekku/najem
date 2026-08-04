@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import pl.najem.acc.WorkspaceContext;
 import pl.najem.acc.application.WarningService;
 
 import java.util.List;
@@ -26,8 +25,8 @@ public class WarningController {
 
     @GetMapping("/warnings")
     public List<Map<String, Object>> unseen(
-        @RequestHeader(value = "X-Workspace-Id", required = false) UUID workspaceId) {
-        return warnings.unseen(workspaceOf(workspaceId)).stream()
+        @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        return warnings.unseen(workspaceId).stream()
             .map(w -> Map.<String, Object>of(
                 "warningId", w.warningId(),
                 "tenancyId", w.tenancyId(),
@@ -50,10 +49,5 @@ public class WarningController {
     public void markSeen(@PathVariable UUID warningId,
                          @RequestHeader("X-Workspace-Id") UUID workspaceId) {
         warnings.markSeen(workspaceId, warningId);
-    }
-
-    /** Reads only. A write must never reach this — see {@link #markSeen}. */
-    private static UUID workspaceOf(UUID header) {
-        return header == null ? WorkspaceContext.DEV_WORKSPACE_ID : header;
     }
 }

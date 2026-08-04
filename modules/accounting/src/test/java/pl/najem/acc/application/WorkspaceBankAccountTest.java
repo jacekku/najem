@@ -11,7 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
-import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.TestWorkspace;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 
@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Testcontainers
 class WorkspaceBankAccountTest {
 
-    private static final UUID AGENCY_A = WorkspaceContext.DEV_WORKSPACE_ID;
+    private static final UUID AGENCY_A = TestWorkspace.ID;
     private static final UUID AGENCY_B = UUID.fromString("00000000-0000-0000-0000-0000000000bb");
     private static final String IBAN_A = "PL11111111111111111111111111";
     private static final String IBAN_B = "PL22222222222222222222222222";

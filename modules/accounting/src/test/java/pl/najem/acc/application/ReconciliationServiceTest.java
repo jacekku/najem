@@ -11,7 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
-import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.PaymentAllocated;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -52,14 +52,14 @@ class ReconciliationServiceTest {
     @Test
     void confirmingSuggestionAllocatesAndTurnsBoardGreen() {
         var tenancyId = UUID.randomUUID();
-        var chargeId = ledger.postRentCharge(WorkspaceContext.DEV_WORKSPACE_ID, tenancyId, new BigDecimal("2500"),
+        var chargeId = ledger.postRentCharge(TestWorkspace.ID, tenancyId, new BigDecimal("2500"),
             LocalDate.of(2026, 9, 10), "NAJEM/T9/2026");
-        ingestion.ingest(WorkspaceContext.DEV_WORKSPACE_ID, new BankLine("tx-c1", new BigDecimal("2500"), "NAJEM/T9/2026",
+        ingestion.ingest(TestWorkspace.ID, new BankLine("tx-c1", new BigDecimal("2500"), "NAJEM/T9/2026",
             LocalDate.of(2026, 9, 3)));
         UUID paymentId = jdbc.queryForObject(
             "select payment_id from acc_payment where external_id = 'tx-c1'", UUID.class);
 
-        reconciliation.confirm(WorkspaceContext.DEV_WORKSPACE_ID, paymentId);
+        reconciliation.confirm(TestWorkspace.ID, paymentId);
 
         assertThat(store.load(paymentId, "Payment").events())
             .anySatisfy(e -> assertThat(e).isInstanceOf(PaymentAllocated.class));

@@ -11,7 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
-import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.ChargePosted;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -55,7 +55,7 @@ class LedgerServiceTest {
     void postsRentChargeWithProjectionAndPutsTheTenancyOnTheBoard() {
         var tenancyId = UUID.randomUUID();
 
-        var chargeId = service.postRentCharge(WorkspaceContext.DEV_WORKSPACE_ID, tenancyId, new BigDecimal("2500"),
+        var chargeId = service.postRentCharge(TestWorkspace.ID, tenancyId, new BigDecimal("2500"),
             LocalDate.of(2026, 9, 1), "NAJEM/M1/2026");
 
         assertThat(store.load(tenancyId, "TenancyLedger").events())

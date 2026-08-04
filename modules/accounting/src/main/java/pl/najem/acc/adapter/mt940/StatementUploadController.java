@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import pl.najem.acc.WorkspaceContext;
 import pl.najem.mt940.Mt940FormatException;
 
 import java.util.Map;
@@ -27,12 +26,11 @@ public class StatementUploadController {
     }
 
     /**
-     * The workspace header is <strong>required</strong> here, unlike on this module's read
-     * endpoints, which fall back to {@link WorkspaceContext#DEV_WORKSPACE_ID}.
+     * The workspace header is <strong>required</strong> here, as it now is on every mapping in this
+     * module — the read endpoints that used to fall back to a dev workspace no longer do.
      *
-     * <p>The fallback is a Phase 1 stand-in, and its direction matters: a read with no header shows
-     * the wrong data and the caller notices. A write with no header puts a real bank statement into
-     * books nobody named, returns 201, and says nothing — and per-workspace uniqueness on
+     * <p>It has always mattered most on this one. A write with no header puts a real bank statement
+     * into books nobody named, returns 201, and says nothing — and per-workspace uniqueness on
      * {@code external_id} means the misplaced copy never collides with the correct import, so it
      * persists after the mistake is found. A missing header is a 400 rather than a guess.
      *

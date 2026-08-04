@@ -11,7 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
-import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.WarningKind;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 class WarningPersistenceTest {
 
-    private static final UUID WS = WorkspaceContext.DEV_WORKSPACE_ID;
+    private static final UUID WS = TestWorkspace.ID;
     private static final UUID OTHER_WS = UUID.fromString("00000000-0000-0000-0000-0000000000dd");
     private static final LocalDate DUE = LocalDate.of(2027, 1, 10);
 

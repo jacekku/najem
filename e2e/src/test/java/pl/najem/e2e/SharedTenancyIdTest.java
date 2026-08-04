@@ -90,7 +90,7 @@ class SharedTenancyIdTest {
         // Activation reaches accounting through the outbox, which posts the first charge against
         // the SAME id under stream type TenancyLedger. Wait for it: the collision only exists once
         // accounting has actually written, so asserting before that would pass either way.
-        await().atMost(Duration.ofSeconds(10)).until(() -> !given().get("/api/acc/board")
+        await().atMost(Duration.ofSeconds(10)).until(() -> !given().header("X-Workspace-Id", DEV_WORKSPACE).get("/api/acc/board")
             .then().statusCode(200).extract().jsonPath().getList("").isEmpty());
 
         given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON)

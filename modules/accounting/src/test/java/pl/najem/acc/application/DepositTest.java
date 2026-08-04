@@ -11,7 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
-import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.adapter.pm.TenancyActivatedHandler;
 import pl.najem.acc.domain.WarningKind;
 import pl.najem.contracts.events.TenancyActivatedEvent;
@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 class DepositTest {
 
-    private static final UUID WS = WorkspaceContext.DEV_WORKSPACE_ID;
+    private static final UUID WS = TestWorkspace.ID;
     private static final LocalDate START = LocalDate.of(2027, 8, 1);
 
     @Container

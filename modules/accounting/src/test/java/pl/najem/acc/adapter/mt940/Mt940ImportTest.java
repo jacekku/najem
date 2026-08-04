@@ -12,7 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
-import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.application.IngestionService;
 import pl.najem.acc.application.LedgerService;
 import pl.najem.acc.application.WarningService;
@@ -45,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Testcontainers
 class Mt940ImportTest {
 
-    private static final UUID WORKSPACE = WorkspaceContext.DEV_WORKSPACE_ID;
+    private static final UUID WORKSPACE = TestWorkspace.ID;
 
     /** A credit and a debit on one statement, in the shape a Polish bank sends. */
     private static final String STATEMENT = """

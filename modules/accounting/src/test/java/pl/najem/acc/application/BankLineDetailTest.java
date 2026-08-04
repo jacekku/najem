@@ -11,7 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
-import pl.najem.acc.WorkspaceContext;
+import pl.najem.acc.TestWorkspace;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 
@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 class BankLineDetailTest {
 
-    private static final UUID WS = WorkspaceContext.DEV_WORKSPACE_ID;
+    private static final UUID WS = TestWorkspace.ID;
     private static final LocalDate BOOKED = LocalDate.of(2027, 3, 10);
 
     @Container
