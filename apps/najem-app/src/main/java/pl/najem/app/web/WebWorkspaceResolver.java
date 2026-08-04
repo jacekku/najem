@@ -35,12 +35,21 @@ public class WebWorkspaceResolver {
         this.currentUser = currentUser;
     }
 
+    /**
+     * The agencies the acting user belongs to, for the chooser.
+     *
+     * <p>Deliberately here rather than in the chooser controller: the controller cannot ask for a
+     * {@link WebWorkspace}, because the case it exists to handle is precisely the one where no
+     * workspace can be resolved. Resolving the subject a second time in the controller would be a
+     * second implementation of "who is acting", and the two would drift.
+     */
+    public java.util.List<WorkspaceAccess.Membership> membershipsOf(Jwt jwt) {
+        return access.forSubject(subjectOf(jwt));
+    }
+
     public WebWorkspace resolve(Jwt jwt, HttpSession session) {
         UUID userId = caller.resolveWithoutWorkspace(jwt);
-        UUID subject = jwt != null
-            ? currentUser.subject(jwt)
-            : access.subjectOf(userId).orElseThrow(
-                () -> new AccessDeniedException("no Keycloak subject for the acting user"));
+        UUID subject = subjectOf(jwt);
 
         var memberships = access.forSubject(subject);
         if (memberships.isEmpty()) {
@@ -66,13 +75,36 @@ public class WebWorkspaceResolver {
                 }
                 // Several, and nobody has said which. Picking one would be a default deciding
                 // WHOSE data a request acts on — roadmap rule 7 forbids exactly that, and a
-                // misdirected write is sticky because uniqueness is per workspace. The switcher
-                // (plan task 4b) is what supplies the answer; until then this is a refusal.
-                throw new AccessDeniedException(
-                    "this user belongs to several workspaces and none has been chosen");
+                // misdirected write is sticky because uniqueness is per workspace. Still a
+                // refusal to proceed; but being ASKED to choose is not being denied, so this
+                // sends the person to the chooser rather than to "Brak dostępu".
+                throw new ChoiceRequiredException(
+                    "this user belongs to several agencies and none has been chosen");
             });
 
         return new WebWorkspace(active.workspaceId(), active.name(), userId, subject, active.role());
+    }
+
+    /**
+     * Remembers the chosen agency, having checked the acting user is a member of it.
+     *
+     * <p>The check here is not what makes the session value safe — {@link #resolve} re-checks it on
+     * every request, because membership can be revoked between one request and the next. This one
+     * exists so that choosing an agency you do not belong to is refused at the moment you do it,
+     * rather than accepted and then silently failing on the next page.
+     */
+    public void choose(Jwt jwt, HttpSession session, UUID workspaceId) {
+        if (!access.canAccess(subjectOf(jwt), workspaceId)) {
+            throw new AccessDeniedException("not a member of the chosen agency");
+        }
+        session.setAttribute(SESSION_KEY, workspaceId);
+    }
+
+    private UUID subjectOf(Jwt jwt) {
+        return jwt != null
+            ? currentUser.subject(jwt)
+            : access.subjectOf(caller.resolveWithoutWorkspace(jwt)).orElseThrow(
+                () -> new AccessDeniedException("no Keycloak subject for the acting user"));
     }
 
     private java.util.Optional<UUID> chosen(HttpSession session) {

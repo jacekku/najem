@@ -32,4 +32,14 @@ public class WebErrorAdvice {
     public String noAgencyYet() {
         return "error/no-agency";
     }
+
+    /**
+     * Also not a 403. Belonging to two agencies and having named neither is a question, not a
+     * refusal — telling someone with legitimate access to both that they have access to neither
+     * would be false. Nothing is resolved and nothing is served until they answer.
+     */
+    @ExceptionHandler(ChoiceRequiredException.class)
+    public String chooseFirst() {
+        return "redirect:/agencies";
+    }
 }

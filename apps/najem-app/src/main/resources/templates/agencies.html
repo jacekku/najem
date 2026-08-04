@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Wybierz agencję — NAJEM', ~{::main})}">
+<body>
+<main>
+    <h1>Wybierz agencję</h1>
+    <p class="muted">
+        Należysz do kilku agencji. Wskaż tę, w której chcesz teraz pracować — możesz ją zmienić
+        w każdej chwili.
+    </p>
+
+    <!--/*
+      A POST per choice, not a link. Choosing decides which agency every later request acts in,
+      and a state change reachable by a GET is reachable by a prefetch or a restored tab.
+    */-->
+    <ul class="agencies">
+        <li th:each="m : ${memberships}">
+            <form th:action="@{/agencies/{id}(id=${m.workspaceId()})}" method="post">
+                <button type="submit" th:text="${m.name()}">—</button>
+                <span class="agencies__role" th:switch="${m.role().name()}">
+                    <span th:case="'ADMIN'">Administrator</span>
+                    <span th:case="'MANAGER'">Zarządca</span>
+                    <span th:case="*" th:text="${m.role().name()}">—</span>
+                </span>
+            </form>
+        </li>
+    </ul>
+</main>
+</body>
+</html>

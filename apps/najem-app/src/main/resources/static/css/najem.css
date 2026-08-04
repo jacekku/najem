@@ -91,6 +91,22 @@ main {
     color: #6b6660;
 }
 
+.agencies {
+    list-style: none;
+    padding: 0;
+}
+
+.agencies li form {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.35rem 0;
+}
+
+.agencies__role {
+    color: #6b6660;
+}
+
 .timeline {
     list-style: none;
     padding: 0;

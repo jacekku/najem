@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
  * What happens when the workspace is ambiguous or disputed. Every case here resolves to DENIED,
@@ -50,8 +51,14 @@ class WebWorkspaceChoiceTest {
     @Autowired
     WorkspaceService workspaces;
 
-    UUID first;
-    UUID second;
+    /**
+     * Static, because JUnit builds a new test instance per method: as instance fields the
+     * {@code if (first == null)} guard was true every time and each test created two MORE
+     * agencies for the same operator. Nothing failed, which is the problem — the fixture grew
+     * silently and every later test ran against a different database than the one it read like.
+     */
+    static UUID first;
+    static UUID second;
 
     @BeforeEach
     void twoWorkspaces() {
@@ -71,10 +78,49 @@ class WebWorkspaceChoiceTest {
      */
     @Test
     void severalMembershipsAndNoChoiceIsRefusedRatherThanGuessed() throws Exception {
-        int status = mvc.perform(get("/workspace"))
+        var response = mvc.perform(get("/workspace")).andReturn().getResponse();
+
+        // Still no workspace resolved and still no data served — but the person is ASKED rather
+        // than refused. Somebody with legitimate access to two agencies being told "Brak dostępu"
+        // would be false, and the guess this avoids is the same guess either way.
+        assertThat(response.getStatus()).isEqualTo(302);
+        assertThat(response.getRedirectedUrl()).isEqualTo("/agencies");
+    }
+
+    @Test
+    void theChooserListsBothAgenciesByName() throws Exception {
+        String html = mvc.perform(get("/agencies"))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("Agencja A").contains("Agencja B");
+    }
+
+    @Test
+    void choosingAnAgencyTheSubjectDoesNotBelongToIsRefused() throws Exception {
+        int status = mvc.perform(post("/agencies/" + UUID.randomUUID()))
             .andReturn().getResponse().getStatus();
 
         assertThat(status).isEqualTo(403);
+    }
+
+    /**
+     * The choice sticks, and what it selects is the agency asked for rather than whichever one the
+     * resolver would have reached for. Deliberately chooses {@code first} — the one an
+     * earliest-joined default would also have returned is {@code first}, so this asserts on
+     * {@code second} elsewhere ({@link #aChosenWorkspaceTheSubjectBelongsToIsHonoured}) and the
+     * pair together distinguish "honoured the choice" from "happened to agree with it".
+     */
+    @Test
+    void choosingAnAgencyThenActsInIt() throws Exception {
+        var session = new MockHttpSession();
+
+        mvc.perform(post("/agencies/" + first).session(session))
+            .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isEqualTo("/"));
+
+        String html = mvc.perform(get("/workspace").session(session))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("Agencja A").doesNotContain("Agencja B");
     }
 
     /**
