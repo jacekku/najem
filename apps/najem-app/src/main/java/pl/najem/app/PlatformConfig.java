@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 import pl.najem.contracts.events.IntegrationEventHandler;
 import pl.najem.contracts.events.MoveOutProtocolRecordedEvent;
 import pl.najem.contracts.events.RentChangeAppliedEvent;
@@ -38,7 +39,8 @@ public class PlatformConfig {
 
     @Bean
     OutboxDispatcher outboxDispatcher(JdbcTemplate jdbc, ObjectMapper mapper, EventTypeRegistry registry,
+                                      PlatformTransactionManager transactionManager,
                                       List<IntegrationEventHandler<?>> handlers) {
-        return new OutboxDispatcher(jdbc, mapper, registry, handlers);
+        return new OutboxDispatcher(jdbc, mapper, registry, transactionManager, handlers);
     }
 }

@@ -71,12 +71,23 @@ public class InvitationService {
     }
 
     public void revoke(UUID workspaceId, UUID invitationId, LocalDate on) {
+        // Scope the row by workspace, and check before appending. The workspace used to pick the
+        // event stream and nothing else, so an admin of one agency holding another's invitation
+        // id revoked it -- while the victim's stream recorded nothing, leaving them an invitation
+        // that had silently stopped working and no audit trail saying why.
+        int revoked = jdbc.update("""
+            update um_invitation set status = 'REVOKED'
+            where invitation_id = ? and workspace_id = ? and status = 'PENDING'
+            """, invitationId, workspaceId);
+        if (revoked == 0) {
+            // Not-found and not-yours are deliberately the same answer: telling the caller which
+            // one it was confirms the existence of an invitation in someone else's workspace.
+            throw new IllegalStateException("no pending invitation " + invitationId + " in this workspace");
+        }
+        jdbc.update("delete from um_invitation_recipient where invitation_id = ?", invitationId);
         var stream = store.load(workspaceId, "Workspace");
         store.append(workspaceId, "Workspace", stream.version(),
             List.of(new InvitationRevoked(workspaceId, invitationId, on)), List.of());
-        jdbc.update("update um_invitation set status = 'REVOKED' where invitation_id = ? and status = 'PENDING'",
-            invitationId);
-        jdbc.update("delete from um_invitation_recipient where invitation_id = ?", invitationId);
     }
 
     /** Returns the accepting user's id, provisioning them in Keycloak on first acceptance. */

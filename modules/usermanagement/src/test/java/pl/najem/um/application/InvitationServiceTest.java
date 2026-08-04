@@ -116,6 +116,31 @@ class InvitationServiceTest {
             Integer.class, issued.invitationId())).isZero();
     }
 
+    // workspaceId picked the event stream but never scoped the rows, so an admin of one agency
+    // holding another agency's invitation id revoked it -- and the victim's own stream recorded
+    // nothing, so their audit log showed an invitation that silently stopped working.
+    @Test
+    void revokingCannotReachAnotherWorkspacesInvitation() {
+        var mine = workspaceWithAdmin("Agencja Moja");
+        var theirs = workspaceWithAdmin("Agencja Obca");
+        var victim = invitations.invite(theirs, "ofiara@example.com", Role.MANAGER,
+            admin(theirs), TODAY, EXPIRY);
+
+        assertThatThrownBy(() -> invitations.revoke(mine, victim.invitationId(), LocalDate.of(2026, 8, 5)))
+            .isInstanceOf(IllegalStateException.class);
+
+        assertThat(jdbc.queryForObject("select status from um_invitation where invitation_id = ?",
+            String.class, victim.invitationId())).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject(
+            "select count(*) from um_invitation_recipient where invitation_id = ?",
+            Integer.class, victim.invitationId())).isOne();
+        // The refusal must also leave no trace in the caller's stream: appending first and
+        // checking afterwards would record a revocation that never happened.
+        assertThat(jdbc.queryForList("select payload::text from events where stream_id = ?",
+            String.class, mine))
+            .noneSatisfy(p -> assertThat(p).contains(victim.invitationId().toString()));
+    }
+
     @Test
     void anInvitationCannotExpireBeforeItIsIssued() {
         var workspaceId = workspaceWithAdmin("Agencja Daty");

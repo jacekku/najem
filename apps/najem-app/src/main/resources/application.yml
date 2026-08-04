@@ -4,8 +4,11 @@ spring:
     username: najem
     password: najem
   flyway:
-    locations: "classpath:db/eventstore,classpath:db/pm,classpath:db/acc,classpath:db/contacts,classpath:db/um"
-    fail-on-missing-locations: false
+    locations: "classpath:db/eventstore,classpath:db/pm,classpath:db/acc,classpath:db/contacts,classpath:db/um,classpath:db/reporting"
+    # A missing location is a silent no-op in Flyway: reporting's five tables were absent from
+    # every deployment while its own tests provisioned them and stayed green. Failing loudly is
+    # the only way a module dropping off the classpath is distinguishable from one that is wired.
+    fail-on-missing-locations: true
 
 najem:
   bank:
