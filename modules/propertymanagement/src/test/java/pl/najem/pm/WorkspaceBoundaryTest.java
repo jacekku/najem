@@ -89,6 +89,12 @@ class WorkspaceBoundaryTest {
      * A write endpoint that takes no workspace cannot check one, whatever the service does. This
      * is the gap that let POST /api/pm/repairs/{id}/complete finish a repair in any agency.
      *
+     * <p>Reads as well as writes, which is not where this started. The rule was written for write
+     * mappings and it let {@code GET /api/pm/attention/tenancies/&#123;id&#125;/warnings} through —
+     * no header, no guard, any tenancy id in any agency, disclosing another manager's statutory
+     * position on their tenancy. A read that leaks is quieter than a write that corrupts and it is
+     * the same omission, so it is the same rule: no endpoint in PM without a workspace.
+     *
      * <p>Per mapping, not per file (najem-reviewer, seq 243). A file-wide {@code contains} passes
      * a controller the moment one of its methods takes the header, so the twelfth endpoint added
      * to {@code TenancyController} taking none at all would have been green — and the two
@@ -97,14 +103,14 @@ class WorkspaceBoundaryTest {
      * not have caught the thing it was written for.
      */
     @Test
-    void everyWriteMappingTakesTheWorkspaceHeader() throws IOException {
-        var offenders = writeMappings()
+    void everyMappingTakesTheWorkspaceHeader() throws IOException {
+        var offenders = mappings(ANY_MAPPING)
             .filter(mapping -> !mapping.source().contains("@RequestHeader(WorkspaceHeader.NAME)"))
             .map(Mapping::name)
             .toList();
 
         assertThat(offenders)
-            .as("a write mapping with no workspace header cannot check one")
+            .as("a mapping with no workspace header cannot check one")
             .isEmpty();
     }
 
@@ -173,6 +179,10 @@ class WorkspaceBoundaryTest {
     private static final Pattern WRITE_MAPPING =
         Pattern.compile("@(?:Post|Put|Delete|Patch)Mapping");
 
+    /** Reads included: the header rule is about every endpoint, the guard rule about writes. */
+    private static final Pattern ANY_MAPPING =
+        Pattern.compile("@(?:Get|Post|Put|Delete|Patch)Mapping");
+
     private static final Pattern METHOD_NAME = Pattern.compile("(\\w+)\\s*\\(");
 
     private static final Pattern PRIVATE_METHOD =
@@ -195,18 +205,22 @@ class WorkspaceBoundaryTest {
     }
 
     private static Stream<Mapping> writeMappings() throws IOException {
+        return mappings(WRITE_MAPPING);
+    }
+
+    private static Stream<Mapping> mappings(Pattern kind) throws IOException {
         return javaSources(MAIN.resolve("adapter/rest"))
             // Opt-in test scaffolding that sweeps every workspace by design — see
             // TestEndpointsEnabled; it does not exist unless a property turns it on.
             .filter(path -> !path.getFileName().toString().equals("ProcessRunnerController.java"))
-            .flatMap(WorkspaceBoundaryTest::writeMappingsIn);
+            .flatMap(path -> mappingsIn(path, kind));
     }
 
-    private static Stream<Mapping> writeMappingsIn(Path path) {
+    private static Stream<Mapping> mappingsIn(Path path, Pattern kind) {
         String source = read(path);
         String file = path.getFileName().toString().replace(".java", "");
         Set<String> helpers = guardCallingHelpers(source);
-        return WRITE_MAPPING.matcher(source).results()
+        return kind.matcher(source).results()
             .map(hit -> methodAt(source, hit.start()))
             .map(method -> new Mapping(file, nameOf(method), method, helpers));
     }

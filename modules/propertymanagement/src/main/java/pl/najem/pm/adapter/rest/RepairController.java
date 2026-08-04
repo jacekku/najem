@@ -11,6 +11,7 @@ import pl.najem.pm.application.WorkspaceGuard;
 import pl.najem.pm.domain.RepairScope;
 import pl.najem.pm.domain.StatutoryDutyHint;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
@@ -27,10 +28,12 @@ public class RepairController {
 
     private final RepairService repairs;
     private final WorkspaceGuard guard;
+    private final Clock clock;
 
-    public RepairController(RepairService repairs, WorkspaceGuard guard) {
+    public RepairController(RepairService repairs, WorkspaceGuard guard, Clock clock) {
         this.repairs = repairs;
         this.guard = guard;
+        this.clock = clock;
     }
 
     @PostMapping
@@ -39,7 +42,7 @@ public class RepairController {
         requireAsset(workspaceId, scopeOf(request.scope()), request.assetId());
         return Map.of("repairId", repairs.report(scopeOf(request.scope()), request.assetId(),
             request.description(), request.causedByTenancy(), hintOf(request.statutoryDutyHint()),
-            request.reportedOn() == null ? LocalDate.now() : request.reportedOn()));
+            request.reportedOn() == null ? LocalDate.now(clock) : request.reportedOn()));
     }
 
     @PostMapping("/{repairId}/complete")

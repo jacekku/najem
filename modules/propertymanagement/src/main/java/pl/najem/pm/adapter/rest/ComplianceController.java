@@ -12,6 +12,7 @@ import pl.najem.pm.application.ComplianceService;
 import pl.najem.pm.application.WorkspaceGuard;
 import pl.najem.pm.domain.InspectionType;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -26,10 +27,12 @@ public class ComplianceController {
 
     private final ComplianceService compliance;
     private final WorkspaceGuard guard;
+    private final Clock clock;
 
-    public ComplianceController(ComplianceService compliance, WorkspaceGuard guard) {
+    public ComplianceController(ComplianceService compliance, WorkspaceGuard guard, Clock clock) {
         this.compliance = compliance;
         this.guard = guard;
+        this.clock = clock;
     }
 
     @PostMapping("/properties/{propertyId}/inspections")
@@ -47,7 +50,7 @@ public class ComplianceController {
     public List<ComplianceService.OverdueInspection> overdue(
             @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
-        return compliance.overdue(workspaceId, on == null ? LocalDate.now() : on);
+        return compliance.overdue(workspaceId, on == null ? LocalDate.now(clock) : on);
     }
 
     private static InspectionType typeOf(String wireName) {

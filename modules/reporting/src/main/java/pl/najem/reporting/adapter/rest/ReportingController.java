@@ -17,6 +17,7 @@ import pl.najem.reporting.application.PropertyOccupancy;
 import pl.najem.reporting.application.TimelineQuery;
 import pl.najem.reporting.application.UnitBoardQuery;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -38,15 +39,17 @@ public class ReportingController {
     private final UnitBoardQuery board;
     private final ProjectionRunner runner;
     private final ProjectionStatus status;
+    private final Clock clock;
 
     public ReportingController(TimelineQuery timelines, PropertyOccupancy occupancy,
                                UnitBoardQuery board, ProjectionRunner runner,
-                               ProjectionStatus status) {
+                               ProjectionStatus status, Clock clock) {
         this.timelines = timelines;
         this.occupancy = occupancy;
         this.board = board;
         this.runner = runner;
         this.status = status;
+        this.clock = clock;
     }
 
     /**
@@ -113,7 +116,7 @@ public class ReportingController {
         runner.rebuild(name);
     }
 
-    private static LocalDate orToday(LocalDate asOf) {
-        return asOf == null ? LocalDate.now() : asOf;
+    private LocalDate orToday(LocalDate asOf) {
+        return asOf == null ? LocalDate.now(clock) : asOf;
     }
 }

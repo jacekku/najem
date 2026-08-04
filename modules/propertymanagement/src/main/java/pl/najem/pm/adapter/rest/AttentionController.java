@@ -9,7 +9,9 @@ import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.AttentionListsQuery;
 import pl.najem.pm.application.ComplianceService;
 import pl.najem.pm.application.TenancyService;
+import pl.najem.pm.application.WorkspaceGuard;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -29,12 +31,16 @@ public class AttentionController {
     private final AttentionListsQuery attention;
     private final ComplianceService compliance;
     private final TenancyService tenancies;
+    private final WorkspaceGuard guard;
+    private final Clock clock;
 
     public AttentionController(AttentionListsQuery attention, ComplianceService compliance,
-                               TenancyService tenancies) {
+                               TenancyService tenancies, WorkspaceGuard guard, Clock clock) {
         this.attention = attention;
         this.compliance = compliance;
         this.tenancies = tenancies;
+        this.guard = guard;
+        this.clock = clock;
     }
 
     @GetMapping("/starting-soon")
@@ -81,11 +87,14 @@ public class AttentionController {
      * Callers render these verbatim and must never recompute them.
      */
     @GetMapping("/tenancies/{tenancyId}/warnings")
-    public Map<String, List<String>> warnings(@PathVariable UUID tenancyId) {
+    public Map<String, List<String>> warnings(
+            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+            @PathVariable UUID tenancyId) {
+        guard.requireTenancy(workspaceId, tenancyId);
         return Map.of("warnings", tenancies.warnings(tenancyId));
     }
 
-    private static LocalDate orToday(LocalDate on) {
-        return on == null ? LocalDate.now() : on;
+    private LocalDate orToday(LocalDate on) {
+        return on == null ? LocalDate.now(clock) : on;
     }
 }
