@@ -23,29 +23,49 @@ public class RetentionService {
         this.jdbc = jdbc;
     }
 
+    /** A hold set by a manager by hand: it answers to nobody but the manager. */
+    public static final String MANUAL = "manual";
+
     public void setHold(UUID workspaceId, UUID contactId, String reason, LocalDate setOn) {
+        setHold(workspaceId, contactId, reason, MANUAL, setOn);
+    }
+
+    /**
+     * Raises {@code reason} on behalf of {@code sourceRef}. Re-asserting an existing
+     * (contact, reason, source) is deliberately idempotent — a trigger re-fanning-out over a
+     * changed roster will send the same hold repeatedly, and that is normal traffic, not an error.
+     */
+    public void setHold(UUID workspaceId, UUID contactId, String reason, String sourceRef, LocalDate setOn) {
         var stream = store.load(contactId);
         store.append(contactId, "Contact", stream.version(),
-            List.of(new RetentionHoldSet(workspaceId, contactId, reason, setOn)), List.of());
+            List.of(new RetentionHoldSet(workspaceId, contactId, reason, sourceRef, setOn)), List.of());
         jdbc.update("""
-            insert into contacts_retention_hold(contact_id, workspace_id, reason, set_on) values (?,?,?,?)
-            on conflict (contact_id, reason) do update set set_on = excluded.set_on, released_on = null
-            """, contactId, workspaceId, reason, setOn);
+            insert into contacts_retention_hold(contact_id, workspace_id, reason, source_ref, set_on)
+            values (?,?,?,?,?)
+            on conflict (contact_id, reason, source_ref)
+              do update set set_on = excluded.set_on, released_on = null
+            """, contactId, workspaceId, reason, sourceRef, setOn);
     }
 
     public void releaseHold(UUID workspaceId, UUID contactId, String reason, LocalDate releasedOn) {
-        var stream = store.load(contactId);
-        store.append(contactId, "Contact", stream.version(),
-            List.of(new RetentionHoldReleased(workspaceId, contactId, reason, releasedOn)), List.of());
-        jdbc.update("""
-            update contacts_retention_hold set released_on = ?
-            where workspace_id = ? and contact_id = ? and reason = ?
-            """, releasedOn, workspaceId, contactId, reason);
+        releaseHold(workspaceId, contactId, reason, MANUAL, releasedOn);
     }
 
+    /** Releases only {@code sourceRef}'s hold. Another source's hold on the same reason survives. */
+    public void releaseHold(UUID workspaceId, UUID contactId, String reason, String sourceRef, LocalDate releasedOn) {
+        var stream = store.load(contactId);
+        store.append(contactId, "Contact", stream.version(),
+            List.of(new RetentionHoldReleased(workspaceId, contactId, reason, sourceRef, releasedOn)), List.of());
+        jdbc.update("""
+            update contacts_retention_hold set released_on = ?
+            where workspace_id = ? and contact_id = ? and reason = ? and source_ref = ?
+            """, releasedOn, workspaceId, contactId, reason, sourceRef);
+    }
+
+    /** The reasons erasure is currently blocked for — distinct, because a caller needs causes, not rows. */
     public List<String> activeHolds(UUID workspaceId, UUID contactId) {
         return jdbc.queryForList("""
-            select reason from contacts_retention_hold
+            select distinct reason from contacts_retention_hold
             where workspace_id = ? and contact_id = ? and released_on is null order by reason
             """, String.class, workspaceId, contactId);
     }

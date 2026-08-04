@@ -115,6 +115,83 @@ class RetentionServiceTest {
             .hasMessageContaining("tax-5y");
     }
 
+    /**
+     * A guarantor on two flats is the ordinary case, not the exotic one. Releasing one
+     * tenancy's hold must not free a contact the other tenancy's ledger still justifies —
+     * and the failure would be silent, so it is asserted rather than reasoned about.
+     */
+    @Test
+    void releasingOneSourcesHoldLeavesAnotherSourcesHoldStanding() {
+        var contactId = aContactRetainedUntil(LocalDate.of(2027, 8, 3));
+        var tenancyA = UUID.randomUUID();
+        var tenancyB = UUID.randomUUID();
+        retention.setHold(AGENCY, contactId, "ledger-referenced", tenancyA.toString(), LocalDate.of(2026, 8, 3));
+        retention.setHold(AGENCY, contactId, "ledger-referenced", tenancyB.toString(), LocalDate.of(2026, 8, 3));
+
+        retention.releaseHold(AGENCY, contactId, "ledger-referenced", tenancyA.toString(), LocalDate.of(2032, 1, 1));
+
+        assertThatThrownBy(() -> contacts.erase(AGENCY, contactId, LocalDate.of(2032, 1, 2)))
+            .isInstanceOf(RetentionHoldActiveException.class)
+            .hasMessageContaining("ledger-referenced");
+        assertThat(directory.find(AGENCY, contactId)).isPresent();
+    }
+
+    @Test
+    void erasureIsAllowedOnceEverySourcesHoldIsReleased() {
+        var contactId = aContactRetainedUntil(LocalDate.of(2027, 8, 3));
+        var tenancyA = UUID.randomUUID();
+        var tenancyB = UUID.randomUUID();
+        retention.setHold(AGENCY, contactId, "ledger-referenced", tenancyA.toString(), LocalDate.of(2026, 8, 3));
+        retention.setHold(AGENCY, contactId, "ledger-referenced", tenancyB.toString(), LocalDate.of(2026, 8, 3));
+
+        retention.releaseHold(AGENCY, contactId, "ledger-referenced", tenancyA.toString(), LocalDate.of(2032, 1, 1));
+        retention.releaseHold(AGENCY, contactId, "ledger-referenced", tenancyB.toString(), LocalDate.of(2032, 1, 1));
+
+        contacts.erase(AGENCY, contactId, LocalDate.of(2032, 1, 2));
+
+        assertThat(directory.find(AGENCY, contactId)).isEmpty();
+    }
+
+    /** The same source re-asserting a hold it already holds is normal traffic under a re-fan-out, not an error. */
+    @Test
+    void reAssertingTheSameSourcesHoldIsIdempotent() {
+        var contactId = aContactRetainedUntil(LocalDate.of(2027, 8, 3));
+        var tenancyA = UUID.randomUUID();
+        retention.setHold(AGENCY, contactId, "ledger-referenced", tenancyA.toString(), LocalDate.of(2026, 8, 3));
+        retention.setHold(AGENCY, contactId, "ledger-referenced", tenancyA.toString(), LocalDate.of(2026, 9, 3));
+
+        retention.releaseHold(AGENCY, contactId, "ledger-referenced", tenancyA.toString(), LocalDate.of(2032, 1, 1));
+
+        contacts.erase(AGENCY, contactId, LocalDate.of(2032, 1, 2));
+
+        assertThat(directory.find(AGENCY, contactId)).isEmpty();
+    }
+
+    /** The manual API carries no source; it must keep working exactly as before. */
+    @Test
+    void aManuallySetHoldStillBlocksErasureAndReleasesOnItsOwn() {
+        var contactId = aContactRetainedUntil(LocalDate.of(2027, 8, 3));
+        retention.setHold(AGENCY, contactId, "manager-judgement", LocalDate.of(2026, 8, 3));
+
+        assertThatThrownBy(() -> contacts.erase(AGENCY, contactId, LocalDate.of(2027, 9, 1)))
+            .isInstanceOf(RetentionHoldActiveException.class);
+
+        retention.releaseHold(AGENCY, contactId, "manager-judgement", LocalDate.of(2032, 1, 1));
+        contacts.erase(AGENCY, contactId, LocalDate.of(2032, 1, 2));
+
+        assertThat(directory.find(AGENCY, contactId)).isEmpty();
+    }
+
+    /** One reason held by two sources is one reason to a caller — the message names causes, not rows. */
+    @Test
+    void reportsEachBlockingReasonOnceHoweverManySourcesRaisedIt() {
+        var contactId = aContactRetainedUntil(LocalDate.of(2027, 8, 3));
+        retention.setHold(AGENCY, contactId, "ledger-referenced", UUID.randomUUID().toString(), LocalDate.of(2026, 8, 3));
+        retention.setHold(AGENCY, contactId, "ledger-referenced", UUID.randomUUID().toString(), LocalDate.of(2026, 8, 3));
+
+        assertThat(retention.activeHolds(AGENCY, contactId)).containsExactly("ledger-referenced");
+    }
+
     @Test
     void reportsContactsPastTheirRetentionDateWithoutDeletingThem() {
         var stale = aContactRetainedUntil(LocalDate.of(2026, 1, 1));
