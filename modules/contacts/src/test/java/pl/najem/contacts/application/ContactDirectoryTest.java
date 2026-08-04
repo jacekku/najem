@@ -103,6 +103,76 @@ class ContactDirectoryTest {
             .noneSatisfy(payload -> assertThat(payload).containsAnyOf("Anna", "Kowalska", "anna@example.com"));
     }
 
+    private static UUID person(UUID workspaceId, String given, String surname) {
+        return service.register(new NewContact(workspaceId,
+            new ContactDetails(given, surname, given.toLowerCase() + "@example.com", null),
+            "legitimate-interest", LocalDate.of(2026, 8, 3), null));
+    }
+
+    @Test
+    void searchFindsAPersonByAFragmentOfEitherName() {
+        var found = person(AGENCY, "Bogumiła", "Szukalska");
+
+        assertThat(directory.search(AGENCY, "szukal")).extracting(ContactDirectory.Match::contactId)
+            .as("surname fragment, case-insensitively")
+            .contains(found);
+        assertThat(directory.search(AGENCY, "Bogumi")).extracting(ContactDirectory.Match::contactId)
+            .as("given-name fragment")
+            .contains(found);
+        assertThat(directory.search(AGENCY, "Bogumiła Szuka")).extracting(ContactDirectory.Match::contactId)
+            .as("a manager types the whole name, which is in neither column on its own")
+            .contains(found);
+    }
+
+    /**
+     * The third of @najem-reviewer's three scoping assertions (najem-build seq 350). The other two
+     * are on {@code SearchQuery} in reporting; this one is here because Reporting has never seen a
+     * name to search — see {@link ContactDirectory#search}.
+     * <p>
+     * Both people carry the SAME surname, so a missing predicate has something to return: with one
+     * distinctive name per workspace the query would look scoped while matching on nothing.
+     */
+    @Test
+    void searchDoesNotFindAPersonInAnotherWorkspace() {
+        var mine = person(AGENCY, "Halina", "Szukanowska");
+        var theirs = person(OTHER_AGENCY, "Halina", "Szukanowska");
+
+        assertThat(directory.search(AGENCY, "Szukanowska"))
+            .extracting(ContactDirectory.Match::contactId)
+            .containsExactly(mine);
+        assertThat(directory.search(OTHER_AGENCY, "Szukanowska"))
+            .extracting(ContactDirectory.Match::contactId)
+            .containsExactly(theirs);
+    }
+
+    /**
+     * The reason search is served from this table rather than from a projection: erasure is a row
+     * deletion, so an erased person leaves search at the instant they are erased. A copy of the name
+     * in a read model would still be answering this query afterwards, which is the
+     * right-to-be-forgotten defect that placing search anywhere else would build.
+     */
+    @Test
+    void anErasedPersonIsGoneFromSearchImmediately() {
+        var contactId = person(AGENCY, "Zofia", "Zapomniana");
+        assertThat(directory.search(AGENCY, "Zapomniana")).isNotEmpty();
+
+        service.erase(AGENCY, contactId, LocalDate.of(2026, 8, 4));
+
+        assertThat(directory.search(AGENCY, "Zapomniana")).isEmpty();
+    }
+
+    @Test
+    void searchRefusesToActAsADirectoryDump() {
+        person(AGENCY, "Ewa", "Wildcardowa");
+
+        assertThat(directory.search(AGENCY, "")).isEmpty();
+        assertThat(directory.search(AGENCY, "  ")).isEmpty();
+        assertThat(directory.search(AGENCY, null)).isEmpty();
+        assertThat(directory.search(AGENCY, "%"))
+            .as("a wildcard typed into a search box is a character, not everyone we hold")
+            .isEmpty();
+    }
+
     /**
      * The data-unchanged property this test was written for is unchanged; what changed is that the
      * command now REFUSES rather than quietly succeeding.

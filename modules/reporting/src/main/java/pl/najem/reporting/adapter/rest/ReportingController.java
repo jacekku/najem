@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import pl.najem.reporting.application.ProjectionStatus;
 import pl.najem.reporting.application.PropertyBoardQuery;
 import pl.najem.reporting.application.PropertyOccupancy;
+import pl.najem.reporting.application.SearchQuery;
 import pl.najem.reporting.application.TimelineQuery;
 import pl.najem.reporting.application.UnitBoardQuery;
 
@@ -37,16 +38,18 @@ public class ReportingController {
     private final PropertyOccupancy occupancy;
     private final UnitBoardQuery board;
     private final PropertyBoardQuery properties;
+    private final SearchQuery search;
     private final ProjectionStatus status;
     private final Clock clock;
 
     public ReportingController(TimelineQuery timelines, PropertyOccupancy occupancy,
                                UnitBoardQuery board, PropertyBoardQuery properties,
-                               ProjectionStatus status, Clock clock) {
+                               SearchQuery search, ProjectionStatus status, Clock clock) {
         this.timelines = timelines;
         this.occupancy = occupancy;
         this.board = board;
         this.properties = properties;
+        this.search = search;
         this.status = status;
         this.clock = clock;
     }
@@ -73,6 +76,18 @@ public class ReportingController {
         @RequestHeader("X-Workspace-Id") UUID workspaceId,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
         return properties.forWorkspace(workspaceId, orToday(asOf));
+    }
+
+    /**
+     * Properties and units matching {@code q}. <b>People are not here</b> — Reporting holds no
+     * personal data by design, so the person half of search lives at
+     * {@code GET /api/contacts/search}, over the table erasure empties. See {@link SearchQuery}.
+     */
+    @GetMapping("/search")
+    public List<SearchQuery.Hit> search(
+        @RequestHeader("X-Workspace-Id") UUID workspaceId,
+        @RequestParam(required = false) String q) {
+        return search.search(workspaceId, q);
     }
 
     @GetMapping("/tenancies/{tenancyId}/timeline")

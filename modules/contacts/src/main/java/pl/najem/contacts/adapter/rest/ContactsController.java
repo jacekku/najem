@@ -77,6 +77,17 @@ public class ContactsController {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
+    /**
+     * The people half of the prototype's search box. Served here and not from Reporting because a
+     * projected copy of a name would outlive the erasure that deletes the row — see
+     * {@link ContactDirectory#search}.
+     */
+    @GetMapping("/search")
+    public List<ContactDirectory.Match> search(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+                                               @RequestParam(required = false) String q) {
+        return directory.search(workspaceId, q);
+    }
+
     @GetMapping(params = "email")
     public List<UUID> findByEmail(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                                   @RequestParam String email) {

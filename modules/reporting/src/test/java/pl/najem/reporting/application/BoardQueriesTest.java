@@ -47,6 +47,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <b>{@code UnitBoardQuery} had no test whatsoever before this.</b> That is why a predicate serving
  * the prototype's main screen stayed wrong for hours while I waited on a contract change that had
  * already landed — nothing could have told me.
+ * <p>
+ * {@link SearchQuery} is tested here too, at the bottom: it reads the same two tables, and the one
+ * fixture already holds two workspaces each owning a property and a unit — with a unit name
+ * deliberately shared between them, which is what makes the scoping assertions non-vacuous.
  */
 @Testcontainers
 class BoardQueriesTest {
@@ -58,6 +62,7 @@ class BoardQueriesTest {
     static PropertyBoardQuery board;
     static PropertyOccupancy occupancy;
     static UnitBoardQuery units;
+    static SearchQuery search;
 
     static UUID workspace;
     static UUID otherWorkspace;
@@ -68,6 +73,8 @@ class BoardQueriesTest {
     static UUID endedTenancy;
     static UUID currentTenancy;
     static UUID occupiedUnit;
+    static UUID otherProperty;
+    static UUID otherUnit;
 
     @BeforeAll
     static void aPortfolio() {
@@ -118,13 +125,17 @@ class BoardQueriesTest {
         emptyProperty = portfolio.createProperty(workspace, "ul. Pusta 3, Gdańsk",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
 
-        // Another agency's portfolio entirely.
-        portfolio.createProperty(otherWorkspace, "ul. Cudza 9, Sopot",
+        // Another agency's portfolio entirely. Its unit is named "m. 2" ON PURPOSE — the same name
+        // as one of this workspace's units, so a search for that name has something to leak.
+        otherProperty = portfolio.createProperty(otherWorkspace, "ul. Cudza 9, Sopot",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+        otherUnit = portfolio.addUnit(otherProperty, "m. 2", new BigDecimal("2000"));
+        portfolio.openUnitToRent(otherUnit, "ready");
 
         board = new PropertyBoardQuery(jdbc);
         occupancy = new PropertyOccupancy(jdbc);
         units = new UnitBoardQuery(jdbc);
+        search = new SearchQuery(jdbc);
         new ProjectionRunner(new EventFeed(jdbc, json), jdbc,
             new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
             List.of(new PropertyProjection(jdbc), new UnitTimelineProjection(jdbc)), 500).runOnce();
@@ -201,8 +212,13 @@ class BoardQueriesTest {
     @Test
     void agreesWithThePerPropertyQueryForEveryProperty() {
         var asOf = LocalDate.of(2026, 3, 1);
+        var rows = board.forWorkspace(workspace, asOf);
 
-        for (var row : board.forWorkspace(workspace, asOf)) {
+        // @najem-reviewer, seq 387: a for-loop over a query result passes trivially if the query
+        // returns nothing, and this test is a DRIFT GUARD meant to survive edits nobody has made
+        // yet. Without this line, a future change that empties the board turns the guard green.
+        assertThat(rows).hasSize(3);
+        for (var row : rows) {
             assertThat(row.occupancy())
                 .as("list and per-property counts disagree for %s", row.address())
                 .isEqualTo(occupancy.countsFor(workspace, row.propertyId(), asOf));
@@ -247,8 +263,10 @@ class BoardQueriesTest {
     @Test
     void theTwoBoardsAgreeOnHowManyUnitsAreOccupied() {
         var asOf = LocalDate.of(2026, 3, 1);
+        var properties = board.forWorkspace(workspace, asOf);
 
-        for (var property : board.forWorkspace(workspace, asOf)) {
+        assertThat(properties).hasSize(3);   // as above: the loop below is now known to have run
+        for (var property : properties) {
             long occupiedPerUnit = units.forProperty(workspace, property.propertyId(), asOf).stream()
                 .filter(u -> u.currentTenancyId() != null)
                 .count();
@@ -262,6 +280,115 @@ class BoardQueriesTest {
     @Test
     void theUnitBoardTellsAnotherWorkspaceNothing() {
         assertThat(units.forProperty(otherWorkspace, letProperty, LocalDate.of(2026, 3, 1))).isEmpty();
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // search. Here rather than in a class of its own because a second @Testcontainers class is a
+    // second postgres, and this fixture already holds the two things search must not confuse: two
+    // workspaces, each owning a property and a unit, with one unit name deliberately shared.
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    void findsAPropertyByAFragmentOfItsAddress() {
+        assertThat(search.search(workspace, "Portfelowa"))
+            .containsExactly(new SearchQuery.Hit("property", letProperty, "ul. Portfelowa 1, Gdańsk", letProperty));
+    }
+
+    @Test
+    void findsAUnitAndLabelsItWithItsProperty() {
+        assertThat(search.search(workspace, "m. 3"))
+            .singleElement()
+            .satisfies(hit -> {
+                assertThat(hit.kind()).isEqualTo("unit");
+                assertThat(hit.propertyId())
+                    .as("a hit is only useful if the caller can navigate to it")
+                    .isEqualTo(letProperty);
+                assertThat(hit.label())
+                    .as("\"m. 3\" alone names nothing on a portfolio-wide search")
+                    .isEqualTo("ul. Portfelowa 1, Gdańsk — m. 3");
+            });
+    }
+
+    @Test
+    void matchesRegardlessOfCase() {
+        assertThat(search.search(workspace, "pORTFELOWA")).hasSize(1);
+    }
+
+    /**
+     * The first of @najem-reviewer's three scoping assertions (najem-build seq 350): a PROPERTY
+     * belonging to another workspace must be absent. Asserted as a gated population rather than as
+     * "the foreign row is missing" — {@code containsExactlyInAnyOrder} fails both if B's property
+     * leaks in and if any of A's stop being found, so it cannot pass vacuously.
+     */
+    @Test
+    void aPropertyInAnotherWorkspaceIsNotFound() {
+        assertThat(search.search(workspace, "ul."))
+            .extracting(SearchQuery.Hit::label)
+            .as("every address in the fixture contains \"ul.\", including the other agency's")
+            .contains("ul. Portfelowa 1, Gdańsk", "ul. Historyczna 2, Gdańsk", "ul. Pusta 3, Gdańsk")
+            .doesNotContain("ul. Cudza 9, Sopot");
+
+        assertThat(search.search(otherWorkspace, "ul."))
+            .extracting(SearchQuery.Hit::label)
+            .as("and the other agency sees its own property and nothing of ours")
+            .contains("ul. Cudza 9, Sopot")
+            .doesNotContain("ul. Portfelowa 1, Gdańsk", "ul. Historyczna 2, Gdańsk", "ul. Pusta 3, Gdańsk");
+    }
+
+    /**
+     * The second: a UNIT belonging to another workspace, with <b>the same name</b> as one of ours.
+     * A shared name is what makes this non-vacuous — if the unit branch dropped its predicate, the
+     * property branch would still be scoped correctly and every other test here would pass.
+     */
+    @Test
+    void aUnitInAnotherWorkspaceIsNotFound() {
+        assertThat(search.search(workspace, "m. 2"))
+            .extracting(SearchQuery.Hit::id)
+            .as("both workspaces have a unit named \"m. 2\"; only ours may come back")
+            .containsExactly(unitNamed("m. 2"))
+            .doesNotContain(otherUnit);
+
+        assertThat(search.search(otherWorkspace, "m. 2"))
+            .extracting(SearchQuery.Hit::id)
+            .containsExactly(otherUnit);
+    }
+
+    /**
+     * The label is built by a join, so it is a second place a foreign address could appear.
+     * <p>
+     * <b>This does not guard the join's workspace predicate, and I checked rather than assuming.</b>
+     * Removing {@code pr.workspace_id = u.workspace_id} leaves every test here green — {@code
+     * property_id} is a globally unique primary key, so the join can only reach the right row. What
+     * this test does cover is the unit branch's own predicate: it fails alongside
+     * {@link #aUnitInAnotherWorkspaceIsNotFound()} when that one is removed. Recorded this way
+     * because the name reads like a guard on the join, and it is not one.
+     */
+    @Test
+    void aUnitIsNeverLabelledWithAnotherWorkspacesAddress() {
+        assertThat(search.search(workspace, "m."))
+            .extracting(SearchQuery.Hit::label)
+            .isNotEmpty()
+            .allSatisfy(label -> assertThat(label).doesNotContain("Cudza"));
+    }
+
+    @Test
+    void aBlankTermIsNotAnInvitationToListEverything() {
+        assertThat(search.search(workspace, "")).isEmpty();
+        assertThat(search.search(workspace, "   ")).isEmpty();
+        assertThat(search.search(workspace, null)).isEmpty();
+    }
+
+    /** A wildcard typed into a search box is a character, not a query for the whole portfolio. */
+    @Test
+    void aPercentSignIsATermRatherThanAWildcard() {
+        assertThat(search.search(workspace, "%")).isEmpty();
+        assertThat(search.search(workspace, "_")).isEmpty();
+    }
+
+    private static UUID unitNamed(String name) {
+        return jdbc.queryForObject(
+            "select unit_id from reporting_unit_state where workspace_id = ? and name = ?",
+            UUID.class, workspace, name);
     }
 
     private static UnitBoardQuery.Row unitRow(UUID unitId, LocalDate asOf) {

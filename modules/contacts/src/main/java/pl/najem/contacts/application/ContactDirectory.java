@@ -72,6 +72,53 @@ public class ContactDirectory {
         }
     }
 
+    /**
+     * A hit in the people half of search. {@code contactId} is what every other contacts endpoint
+     * takes, so a hit is navigable rather than merely informative.
+     */
+    public record Match(UUID contactId, String givenName, String surname, String email) {
+    }
+
+    /** A search box is a browse aid, not an export. */
+    private static final int SEARCH_LIMIT = 50;
+
+    /**
+     * The people half of {@code search}, served here rather than from Reporting.
+     * <p>
+     * <b>It has to live here, and that is a design consequence rather than a convenience.</b>
+     * Reporting cannot search people: the PII lookaside means events carry identifiers only, so
+     * Reporting has never seen a name to project. If it had one, that projection would be a second
+     * copy of personal data surviving the {@code contacts_person} row deletion that <em>is</em>
+     * erasure — so the erasure this module implements would stop being complete the moment search
+     * was built anywhere else. Reading the live table instead means an erased person leaves search
+     * at the instant they are erased, with no projector to catch up.
+     * <p>
+     * Matches a name fragment across given name and surname, workspace-scoped like every other read
+     * here: a blank term returns nothing rather than the whole directory.
+     */
+    public List<Match> search(UUID workspaceId, String term) {
+        if (term == null || term.isBlank()) {
+            return List.of();
+        }
+        var pattern = "%" + escapeLike(term.strip()) + "%";
+        return jdbc.query("""
+            select contact_id, given_name, surname, email from contacts_person
+            where workspace_id = ?
+              and (given_name ilike ? escape '\\' or surname ilike ? escape '\\'
+                   or (given_name || ' ' || surname) ilike ? escape '\\')
+            order by surname, given_name
+            limit %d
+            """.formatted(SEARCH_LIMIT),
+            (rs, i) -> new Match(UUID.fromString(rs.getString(1)),
+                rs.getString(2), rs.getString(3), rs.getString(4)),
+            workspaceId, pattern, pattern, pattern);
+    }
+
+    /** A term containing {@code %} is a term, not a wildcard that returns the whole directory. */
+    private static String escapeLike(String term) {
+        return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
     /** Candidates for "do we already know this person?" — the manager judges, no uniqueness enforced. */
     public List<UUID> findByEmail(UUID workspaceId, String email) {
         return jdbc.queryForList("""
