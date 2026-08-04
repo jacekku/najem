@@ -18,8 +18,8 @@ BASE="${BASE:-http://localhost:8080}"
 BANK="${BANK:-http://localhost:8081}"
 WORKSPACE="${WORKSPACE:-}"
 
-# Must match the app's --najem.bank.iban, or the app fetches from an account this
-# script never seeded and every payment silently fails to arrive.
+# Registered as this agency's own account below. There is no deployment-wide IBAN
+# any more, so the account the app fetches from is the one seeded here by name.
 IBAN="${IBAN:-PL61109010140000071219812874}"
 
 command -v jq >/dev/null || { echo "seed-demo needs jq"; exit 1; }
@@ -45,7 +45,7 @@ if [ -z "$WORKSPACE" ]; then
   # the only legitimate way an agency comes into being (invite-only, human ruling).
   # It needs najem.bootstrap.operator-subject set on the running app.
   WORKSPACE=$(curl -sS -X POST "$BASE/api/um/workspaces" -H "Content-Type: application/json" \
-    -d '{"name":"Nieruchomosci Sródmiescie"}' | jq -r '.workspaceId // empty')
+    -d '{"name":"Nieruchomości Śródmieście"}' | jq -r '.workspaceId // empty')
   [ -n "$WORKSPACE" ] || {
     echo "Could not create an agency. Start the app with --najem.bootstrap.operator-subject=<uuid>,"
     echo "or pass WORKSPACE=<existing-id> to seed into one that already exists."
@@ -87,12 +87,12 @@ tenancy() { # unitId contactId rent start ref -> tenancyId
 echo "contacts…"
 KOWALSKI=$(contact "Anna"   "Kowalska"    "a.kowalska@example.com")
 NOWAK=$(contact    "Piotr"  "Nowak"       "p.nowak@example.com")
-WISNIEWSKI=$(contact "Marta" "Wisniewska" "m.wisniewska@example.com")
-ZIELINSKI=$(contact "Tomasz" "Zielinski"  "t.zielinski@example.com")
+WISNIEWSKI=$(contact "Marta" "Wiśniewska" "m.wisniewska@example.com")
+ZIELINSKI=$(contact "Tomasz" "Zieliński"  "t.zielinski@example.com")
 
 echo "properties and units…"
-P1=$(property "ul. Marszalkowska 12, 00-026 Warszawa")
-P2=$(property "ul. Hoza 45/7, 00-681 Warszawa")
+P1=$(property "ul. Marszałkowska 12, 00-026 Warszawa")
+P2=$(property "ul. Hoża 45/7, 00-681 Warszawa")
 P3=$(property "al. Jerozolimskie 101, 02-011 Warszawa")
 
 P1M1=$(unit "$P1" "m. 1" 3200); P1M2=$(unit "$P1" "m. 2" 2850); P1M3=$(unit "$P1" "m. 3" 4100)
