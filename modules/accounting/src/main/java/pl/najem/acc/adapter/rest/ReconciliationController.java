@@ -1,6 +1,5 @@
 package pl.najem.acc.adapter.rest;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -9,7 +8,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.acc.application.IngestionService;
 import pl.najem.acc.application.ReconciliationService;
+import pl.najem.acc.application.SuggestionQuery;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,13 +21,13 @@ public class ReconciliationController {
 
     private final IngestionService ingestion;
     private final ReconciliationService reconciliation;
-    private final JdbcTemplate jdbc;
+    private final SuggestionQuery suggestions;
 
     public ReconciliationController(IngestionService ingestion, ReconciliationService reconciliation,
-                                    JdbcTemplate jdbc) {
+                                    SuggestionQuery suggestions) {
         this.ingestion = ingestion;
         this.reconciliation = reconciliation;
-        this.jdbc = jdbc;
+        this.suggestions = suggestions;
     }
 
     /**
@@ -48,12 +49,42 @@ public class ReconciliationController {
         ingestion.fetchAndIngest(workspaceId);
     }
 
+    /**
+     * The suggestions awaiting a decision, each with the evidence its tier is asserting.
+     *
+     * <p>This used to return two identifiers and nothing else, so confirming a match meant
+     * confirming an opaque pair of UUIDs. The tier is the point of the ladder — a tier-1 certainty
+     * and a tier-4 guess are not worth the same confidence — but a tier with nothing to check it
+     * against is just a number, so the amounts, dates and references come with it.
+     *
+     * <p>{@code isPartPayment} is computed here rather than left to the caller: tiers 2 and above do
+     * not constrain the amount, so a suggestion may settle only part of the charge, and that has to
+     * be visible before the click.
+     */
     @GetMapping("/suggestions")
     public List<Map<String, Object>> suggestions(
         @RequestHeader("X-Workspace-Id") UUID workspaceId) {
-        return jdbc.query("select payment_id, charge_id from acc_suggestion where workspace_id = ?",
-            (rs, i) -> Map.of("paymentId", rs.getObject(1), "chargeId", rs.getObject(2)),
-            workspaceId);
+        return suggestions.forWorkspace(workspaceId).stream().map(row -> {
+            // LinkedHashMap rather than Map.of: fourteen entries exceeds its overloads, and the
+            // field order is what a human reads when they curl this.
+            var wire = new LinkedHashMap<String, Object>();
+            wire.put("paymentId", row.paymentId());
+            wire.put("chargeId", row.chargeId());
+            wire.put("tenancyId", row.tenancyId());
+            wire.put("tier", row.tier());
+            wire.put("paidAmount", row.paidAmount());
+            wire.put("chargedAmount", row.chargedAmount());
+            wire.put("outstanding", row.outstanding());
+            wire.put("isPartPayment", row.isPartPayment());
+            wire.put("paidOn", row.paidOn());
+            wire.put("dueDate", row.dueDate());
+            wire.put("component", row.component());
+            wire.put("quotedReference", row.quotedReference());
+            wire.put("expectedReference", row.expectedReference());
+            wire.put("payerName", row.payerName());
+            wire.put("payerIban", row.payerIban());
+            return (Map<String, Object>) wire;
+        }).toList();
     }
 
     @PostMapping("/payments/{paymentId}/confirm")

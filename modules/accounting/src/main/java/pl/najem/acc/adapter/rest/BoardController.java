@@ -1,10 +1,10 @@
 package pl.najem.acc.adapter.rest;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import pl.najem.acc.application.ArrearsBoardQuery;
 
 import java.util.List;
 import java.util.Map;
@@ -14,10 +14,10 @@ import java.util.UUID;
 @RequestMapping("/api/acc")
 public class BoardController {
 
-    private final JdbcTemplate jdbc;
+    private final ArrearsBoardQuery board;
 
-    public BoardController(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public BoardController(ArrearsBoardQuery board) {
+        this.board = board;
     }
 
     /**
@@ -27,10 +27,10 @@ public class BoardController {
      */
     @GetMapping("/board")
     public List<Map<String, Object>> board(@RequestHeader("X-Workspace-Id") UUID workspaceId) {
-        return jdbc.query("""
-            select tenancy_id, status from acc_tenancy_status
-            where workspace_id = ? order by tenancy_id
-            """, (rs, i) -> Map.of("tenancyId", rs.getObject(1), "status", rs.getString(2)),
-            workspaceId);
+        return board.forWorkspace(workspaceId).stream()
+            .map(row -> Map.<String, Object>of(
+                "tenancyId", row.tenancyId(),
+                "status", row.colour().wireName()))
+            .toList();
     }
 }
