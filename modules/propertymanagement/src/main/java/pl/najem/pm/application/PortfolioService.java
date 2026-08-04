@@ -97,6 +97,10 @@ public class PortfolioService {
      * caller-supplied workspaceId — that makes cross-workspace writes structurally impossible
      * rather than merely validated.
      */
+    public UUID workspaceOfUnit(UUID unitId) {
+        return Unit.from(store.load(unitId, "Unit").events()).workspaceId();
+    }
+
     public UUID workspaceOf(UUID propertyId) {
         return Property.from(store.load(propertyId, "Property").events()).workspaceId();
     }

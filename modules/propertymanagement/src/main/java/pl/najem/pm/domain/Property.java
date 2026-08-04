@@ -1,8 +1,11 @@
 package pl.najem.pm.domain;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Identity and ownership of a building. workspaceId is fixed at creation and never changes. */
@@ -13,6 +16,8 @@ public class Property {
     private String address;
     private List<Owner> owners = List.of();
     private BigDecimal rentTarget;
+    /** Latest statutory deadline per type; a re-inspection moves it. */
+    private final Map<InspectionType, LocalDate> nextDueByType = new EnumMap<>(InspectionType.class);
 
     private Property() {
     }
@@ -35,6 +40,25 @@ public class Property {
     }
 
     /** Soft check: shares should total 100% — confirm, don't block. */
+    /**
+     * Statutory inspection (art. 62). The next deadline is computed from the type's interval and
+     * carried on the event, so the property can answer "what is overdue" without knowing the
+     * statute at read time.
+     */
+    public List<Object> recordInspection(InspectionType type, LocalDate performedOn,
+                                         String reportDoc, String findings) {
+        if (type == null) {
+            throw new IllegalArgumentException("An inspection needs an explicit type");
+        }
+        return List.of(new PropertyEvents.InspectionCompleted(workspaceId, id, type, performedOn,
+            type.nextDue(performedOn), reportDoc, findings));
+    }
+
+    /** Empty when this type has never been inspected — absence is not an overdue deadline. */
+    public Optional<LocalDate> nextDue(InspectionType type) {
+        return Optional.ofNullable(nextDueByType.get(type));
+    }
+
     public Warnings warnings() {
         var warnings = new Warnings();
         var total = owners.stream().map(Owner::sharePercent).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -53,6 +77,8 @@ public class Property {
 
     private void apply(Object event) {
         switch (event) {
+            case PropertyEvents.InspectionCompleted e ->
+                nextDueByType.put(e.type(), e.nextDueOn());
             case PropertyEvents.PropertyCreated e -> {
                 id = e.propertyId();
                 workspaceId = e.workspaceId();

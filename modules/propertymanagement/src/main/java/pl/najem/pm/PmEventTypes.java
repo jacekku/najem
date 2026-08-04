@@ -3,6 +3,7 @@ package pl.najem.pm;
 import org.springframework.stereotype.Component;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.pm.domain.PropertyEvents;
+import pl.najem.pm.domain.RepairEvents;
 import pl.najem.pm.domain.TenancyEvents;
 import pl.najem.pm.domain.UnitEvents;
 
@@ -46,7 +47,10 @@ public class PmEventTypes {
             TenancyEvents.TenancyEnded.class,
             TenancyEvents.TenancyCommentAdded.class,
             TenancyEvents.TenancyDetailsCorrected.class,
-            TenancyEvents.TenancyDocumentAttached.class);
+            TenancyEvents.TenancyDocumentAttached.class,
+            RepairEvents.RepairReported.class,
+            RepairEvents.RepairCompleted.class,
+            PropertyEvents.InspectionCompleted.class);
     }
 
     public static void register(EventTypeRegistry registry) {
