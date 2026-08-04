@@ -19,7 +19,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * a module whose beans stop being constructible fails here as well as in e2e, which is the second
  * reason the UI lives in the composition root (najem-build seq 130).
  */
-@SpringBootTest(properties = "najem.security.permit-all=true")
+@SpringBootTest(properties = {
+    "najem.security.permit-all=true",
+    "najem.bank.fake.enabled=true",
+    "najem.bank.base-url=http://localhost:8081",
+    "najem.bank.iban=PL61109010140000071219812874"})
 @AutoConfigureMockMvc
 @Testcontainers
 class WebScaffoldTest {

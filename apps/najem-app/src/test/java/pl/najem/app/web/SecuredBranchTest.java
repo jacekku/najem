@@ -38,8 +38,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
     // @Primary bean would not help: SecurityConfig's decoder is eager on purpose, so a bad issuer
     // fails at boot rather than on the first request, and it would still try OIDC discovery
     // against issuer.invalid before anything could out-prioritise it.
-    "spring.main.allow-bean-definition-overriding=true"
-})
+    "spring.main.allow-bean-definition-overriding=true",
+    "najem.bank.fake.enabled=true",
+    "najem.bank.base-url=http://localhost:8081",
+    "najem.bank.iban=PL61109010140000071219812874"})
 @AutoConfigureMockMvc
 @Testcontainers
 class SecuredBranchTest {

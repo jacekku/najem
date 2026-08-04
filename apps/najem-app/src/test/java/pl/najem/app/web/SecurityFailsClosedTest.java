@@ -77,7 +77,13 @@ class SecurityFailsClosedTest {
             "--server.port=0",
             "--spring.datasource.url=" + pg.getJdbcUrl(),
             "--spring.datasource.username=" + pg.getUsername(),
-            "--spring.datasource.password=" + pg.getPassword()
+            "--spring.datasource.password=" + pg.getPassword(),
+            // A test is a deployment like any other and names its own bank: without these there is
+            // no BankStatementPort and the context refuses to start for a reason that has nothing
+            // to do with the security posture under test here.
+            "--najem.bank.fake.enabled=true",
+            "--najem.bank.base-url=http://localhost:8081",
+            "--najem.bank.iban=PL61109010140000071219812874"
         };
     }
 

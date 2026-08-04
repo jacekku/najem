@@ -32,8 +32,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  */
 @SpringBootTest(properties = {
     "najem.bootstrap.operator-subject=" + WebWorkspaceTest.OPERATOR,
-    "najem.security.permit-all=true"
-})
+    "najem.security.permit-all=true",
+    "najem.bank.fake.enabled=true",
+    "najem.bank.base-url=http://localhost:8081",
+    "najem.bank.iban=PL61109010140000071219812874"})
 @AutoConfigureMockMvc
 @Testcontainers
 class WebWorkspaceTest {
