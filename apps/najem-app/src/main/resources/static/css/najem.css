@@ -1,0 +1,29 @@
+/* Minimal, deliberately: styling decisions belong with the screens that need them. */
+:root {
+    --ink: #1c1b19;
+    --paper: #fbfaf8;
+    --rule: #d8d4cd;
+}
+
+body {
+    margin: 0;
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+}
+
+.masthead {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--rule);
+}
+
+.masthead__brand {
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    color: inherit;
+}
+
+main {
+    padding: 1.25rem;
+}

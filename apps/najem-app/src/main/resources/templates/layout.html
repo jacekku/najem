@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!--/*
+  The shell every screen renders into.
+
+  htmx is served from this application, never from a CDN: a page that pulls its script from a
+  third party is a page whose render depends on that party being reachable, in an application
+  handling tenancy-scoped financial data. Pinned and verifiable — see static/vendor/README.md.
+
+  This layout holds no workspace and no data. Screens receive a workspace; they never resolve one.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org" lang="pl" th:fragment="page(title, content)">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title}">NAJEM</title>
+    <script th:src="@{/vendor/htmx.min.js}" defer></script>
+    <link rel="stylesheet" th:href="@{/css/najem.css}">
+</head>
+<body>
+<header class="masthead">
+    <a class="masthead__brand" th:href="@{/}">NAJEM</a>
+</header>
+<main th:replace="${content}">
+    <p>Screen content renders here.</p>
+</main>
+</body>
+</html>
