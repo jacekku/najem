@@ -91,6 +91,43 @@ main {
     color: #6b6660;
 }
 
+/* The tier is shown, never averaged into a confidence of our own — the colours only differ. */
+.tier--1 {
+    color: #1f6b3a;
+}
+
+.tier--2,
+.tier--3 {
+    color: #8a4b12;
+}
+
+.tier--4 {
+    color: #6b6660;
+}
+
+.part {
+    color: #8a4b12;
+    font-size: 0.85em;
+}
+
+.warnings {
+    list-style: none;
+    padding: 0;
+}
+
+.warnings li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--rule);
+}
+
+.warnings__kind {
+    color: #6b6660;
+    font-variant: small-caps;
+}
+
 .agencies {
     list-style: none;
     padding: 0;

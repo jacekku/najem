@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Nieruchomości — NAJEM', ~{::main})}">
+<body>
+<main>
+    <h1>Nieruchomości</h1>
+
+    <p class="empty" th:if="${properties.isEmpty()}">
+        Ta agencja nie ma jeszcze żadnych nieruchomości.
+    </p>
+
+    <table class="board" th:unless="${properties.isEmpty()}">
+        <thead>
+        <tr>
+            <th>Adres</th>
+            <th>Wynajęte</th>
+            <th>Wolne</th>
+            <th>Wyłączone</th>
+            <th>Nieogłoszone</th>
+            <th>Razem</th>
+        </tr>
+        </thead>
+        <tbody>
+        <!--/*
+          A property with no units shows zeros rather than being left out — a manager created it,
+          and a list that silently drops it looks like the write failed. The counts come from
+          Reporting in the same query as the row; nothing here adds anything up except the total,
+          which the record computes itself.
+        */-->
+        <tr th:each="p : ${properties}">
+            <td>
+                <a th:href="@{/properties/{id}/units(id=${p.propertyId()})}"
+                   th:text="${p.address()}">—</a>
+            </td>
+            <td class="amount" th:text="${p.occupancy().occupied()}">—</td>
+            <td class="amount" th:text="${p.occupancy().available()}">—</td>
+            <td class="amount" th:text="${p.occupancy().unavailable()}">—</td>
+            <td class="amount" th:text="${p.occupancy().inventory()}">—</td>
+            <td class="amount" th:text="${p.occupancy().total()}">—</td>
+        </tr>
+        </tbody>
+    </table>
+</main>
+</body>
+</html>
