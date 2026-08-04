@@ -4,15 +4,12 @@ dependencies {
     api(project(":contracts"))
     implementation(project(":platform:eventstore"))
     implementation(project(":platform:mt940"))
-    implementation("jakarta.servlet:jakarta.servlet-api:6.0.0")
     implementation("org.springframework:spring-web")
     implementation("org.springframework:spring-context")
     implementation("org.springframework:spring-tx")
     implementation("org.springframework:spring-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
-    // MockHttpServletRequest/Response, for testing the upload size filter where the decision is made
-    testImplementation("org.springframework:spring-test")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.flywaydb:flyway-core")

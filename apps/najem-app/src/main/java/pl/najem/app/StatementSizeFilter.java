@@ -1,4 +1,4 @@
-package pl.najem.acc.adapter.mt940;
+package pl.najem.app;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,6 +21,12 @@ import java.io.IOException;
  * <p>A request with no {@code Content-Length} — chunked transfer — is refused for the same reason:
  * an unknown length cannot be checked, and accepting it would make the limit bypassable by setting
  * a header. Real bank exports are ordinary sized bodies.
+ *
+ * <p>It lives in the composition root rather than in {@code modules/accounting} deliberately.
+ * {@code OncePerRequestFilter} would drag {@code jakarta.servlet} into that module, which today
+ * knows Spring MVC's annotations and nothing about the container it runs in — a new kind of
+ * coupling rather than more of an existing one. HTTP-level guards over module endpoints belong
+ * where the application is assembled, alongside the workspace interceptor.
  */
 @Component
 public class StatementSizeFilter extends OncePerRequestFilter {
