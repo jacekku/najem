@@ -1,10 +1,20 @@
 package pl.najem.um.adapter.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtDecoders;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
@@ -39,6 +49,9 @@ public class SecurityConfig {
     /** Explicit, test-and-local-only opt-in. Absent or false means "refuse", never "permit". */
     static final String PERMIT_ALL = "najem.security.permit-all";
 
+    /** Which {@code aud} this deployment accepts. Required whenever an issuer is configured. */
+    static final String AUDIENCE = "najem.security.audience";
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, Environment environment) throws Exception {
         String issuer = environment.getProperty(ISSUER_URI);
@@ -59,6 +72,20 @@ public class SecurityConfig {
             return http.build();
         }
 
+        // Boot's default validator checks signature, exp/nbf and iss — but NOT aud. Without this,
+        // ANY token the realm mints for ANY client authenticates against NAJEM, so the day that
+        // realm hosts a second application, that application's tokens are NAJEM tokens
+        // (najem-reviewer finding #5). Required rather than optional: an issuer configured without
+        // an audience is a deployment that believes it is secured and is not.
+        String audience = environment.getProperty(AUDIENCE, "").trim();
+        if (audience.isEmpty()) {
+            throw new IllegalStateException(
+                "Refusing to start: '" + ISSUER_URI + "' is set but '" + AUDIENCE + "' is not. "
+                    + "Without an expected audience, every token this issuer mints for any client "
+                    + "is accepted as a NAJEM token. Set '" + AUDIENCE + "' to this deployment's "
+                    + "client id.");
+        }
+
         http
             .authorizeHttpRequests(auth -> auth
                 // Public by design: the invitation token IS the credential (decision D4) and the
@@ -67,5 +94,41 @@ public class SecurityConfig {
                 .anyRequest().authenticated())
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));
         return http.build();
+    }
+
+    /**
+     * Adds audience checking to whatever validation the configured issuer already implies.
+     *
+     * <p>Only registered when an issuer is set: under permit-all there is no decoder to customise,
+     * and a bean that quietly did nothing would be worse than no bean.
+     */
+    @Bean
+    @ConditionalOnProperty(ISSUER_URI)
+    JwtDecoder audienceCheckingJwtDecoder(Environment environment) {
+        String issuer = environment.getProperty(ISSUER_URI);
+        String audience = environment.getProperty(AUDIENCE, "").trim();
+
+        NimbusJwtDecoder decoder = JwtDecoders.fromIssuerLocation(issuer);
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+            JwtValidators.createDefaultWithIssuer(issuer),
+            new AudienceValidator(audience)));
+        return decoder;
+    }
+
+    /** A token that does not name this deployment is not for this deployment. */
+    record AudienceValidator(String expected) implements OAuth2TokenValidator<Jwt> {
+
+        @Override
+        public OAuth2TokenValidatorResult validate(Jwt token) {
+            var audiences = token.getAudience();
+            // Absent, empty and not-containing all fail. Uncertainty is never a permission.
+            if (audiences != null && audiences.contains(expected)) {
+                return OAuth2TokenValidatorResult.success();
+            }
+            return OAuth2TokenValidatorResult.failure(new OAuth2Error(
+                "invalid_token",
+                "the required audience '" + expected + "' is missing from this token",
+                "https://tools.ietf.org/html/rfc6750#section-3.1"));
+        }
     }
 }
