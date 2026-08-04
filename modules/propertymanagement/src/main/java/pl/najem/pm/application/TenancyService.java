@@ -261,6 +261,11 @@ public class TenancyService {
         return true;
     }
 
+    /** The soft checks on one tenancy, computed live — see AttentionController. */
+    public List<String> warnings(UUID tenancyId) {
+        return Tenancy.from(store.load(tenancyId, "Tenancy").events()).warnings().messages();
+    }
+
     public void addComment(UUID tenancyId, String text) {
         var stream = store.load(tenancyId, "Tenancy");
         store.append(tenancyId, "Tenancy", stream.version(),
@@ -290,6 +295,12 @@ public class TenancyService {
         store.append(tenancyId, "Tenancy", stream.version(),
             Tenancy.from(stream.events()).attachDocument(type, s3Ref, validFrom, validTo, date),
             List.of());
+        // The aggregate decides which policy is current (a renewal supersedes), so the
+        // projection copies its answer rather than reimplementing "latest".
+        Tenancy.from(store.load(tenancyId, "Tenancy").events()).insuranceExpiry()
+            .ifPresent(expiry -> jdbc.update(
+                "update pm_tenancy set insurance_valid_to = ? where tenancy_id = ?",
+                expiry, tenancyId));
     }
 
     /** One sweep item as its own unit of work — see {@link SweepResult}. */
