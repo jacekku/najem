@@ -3,6 +3,7 @@ plugins { `java-library` }
 dependencies {
     api(project(":contracts"))
     implementation(project(":platform:eventstore"))
+    implementation(project(":platform:mt940"))
     implementation("org.springframework:spring-web")
     implementation("org.springframework:spring-context")
     implementation("org.springframework:spring-tx")
