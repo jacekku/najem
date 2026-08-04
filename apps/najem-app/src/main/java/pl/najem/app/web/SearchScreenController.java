@@ -6,6 +6,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import pl.najem.reporting.application.SearchQuery;
 
+import java.util.List;
+
 /**
  * One box in the masthead, results grouped by what they are.
  *
@@ -29,9 +31,21 @@ public class SearchScreenController {
     @GetMapping("/search")
     public String search(@RequestParam(name = "q", required = false) String term,
                          WebWorkspace workspace, Model model) {
+        var hits = search.search(workspace.workspaceId(), term);
         model.addAttribute("term", term);
         model.addAttribute("asked", term != null && !term.isBlank());
-        model.addAttribute("hits", search.search(workspace.workspaceId(), term));
+        // Grouped HERE rather than by a selection expression in the template. The first version
+        // wrote `hits.?[kind == 'property']`, which cannot resolve `kind` on a record and threw at
+        // render time — and every test passed, because the only guard around it is
+        // `!hits.isEmpty()` and no test ever produced a hit. An expression that fails only when
+        // there is something to show is the worst place to put one.
+        model.addAttribute("properties", ofKind(hits, "property"));
+        model.addAttribute("units", ofKind(hits, "unit"));
         return "search";
+    }
+
+    /** Package-private so it can be tested without a database — see {@code SearchGroupingTest}. */
+    static List<SearchQuery.Hit> ofKind(List<SearchQuery.Hit> hits, String kind) {
+        return hits.stream().filter(hit -> kind.equals(hit.kind())).toList();
     }
 }

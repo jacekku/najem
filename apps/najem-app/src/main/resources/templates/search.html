@@ -19,38 +19,38 @@
         Wpisz fragment adresu albo nazwę lokalu.
     </p>
 
-    <p class="empty" th:if="${asked and hits.isEmpty()}">
+    <p class="empty" th:if="${asked and properties.isEmpty() and units.isEmpty()}">
         Nic nie pasuje do „<span th:text="${term}">—</span>”.
     </p>
 
     <!--/*
       Grouped by kind, not ranked. Reporting deliberately does not rank, and an order invented here
-      would be the UI asserting a relevance it has no basis for.
+      would be the UI asserting a relevance it has no basis for. The grouping is done in the
+      controller: doing it with a selection expression here threw at render time and no test could
+      see it, because the expression is only reached when there is something to show.
     */-->
-    <div th:if="${asked and !hits.isEmpty()}">
-        <section th:with="properties=${hits.?[kind == 'property']}" th:unless="${properties.isEmpty()}">
-            <h2>Nieruchomości</h2>
-            <ul class="hits">
-                <li th:each="hit : ${properties}">
-                    <a th:href="@{/properties/{id}/units(id=${hit.id()})}" th:text="${hit.label()}">—</a>
-                </li>
-            </ul>
-        </section>
+    <section th:unless="${properties.isEmpty()}">
+        <h2>Nieruchomości</h2>
+        <ul class="hits">
+            <li th:each="hit : ${properties}">
+                <a th:href="@{/properties/{id}/units(id=${hit.id()})}" th:text="${hit.label()}">—</a>
+            </li>
+        </ul>
+    </section>
 
-        <section th:with="units=${hits.?[kind == 'unit']}" th:unless="${units.isEmpty()}">
-            <h2>Lokale</h2>
-            <ul class="hits">
-                <!--/*
-                  A unit hit links to its property's unit list — Reporting sends the parent id for
-                  exactly this reason, since a unit on its own is not somewhere a person can go.
-                */-->
-                <li th:each="hit : ${units}">
-                    <a th:href="@{/properties/{id}/units(id=${hit.propertyId()})}"
-                       th:text="${hit.label()}">—</a>
-                </li>
-            </ul>
-        </section>
-    </div>
+    <section th:unless="${units.isEmpty()}">
+        <h2>Lokale</h2>
+        <ul class="hits">
+            <!--/*
+              A unit hit links to its property's unit list — Reporting sends the parent id for
+              exactly this reason, since a unit on its own is not somewhere a person can go.
+            */-->
+            <li th:each="hit : ${units}">
+                <a th:href="@{/properties/{id}/units(id=${hit.propertyId()})}"
+                   th:text="${hit.label()}">—</a>
+            </li>
+        </ul>
+    </section>
 </main>
 </body>
 </html>
