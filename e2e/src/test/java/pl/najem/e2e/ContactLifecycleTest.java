@@ -21,8 +21,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The lead lifecycle from the domain walkthrough: Anna calls, is captured as a lead
  * interested in two units, goes cold, and finally asks to be forgotten.
- * No X-Workspace-Id header is sent, so the dev-workspace default is exercised —
- * what the app runs on until UserManagement lands Keycloak claims.
+ * <p>
+ * Every request names the workspace, reads included. The dev-workspace fallback this test used to
+ * exercise on reads is deleted (najem-build seq 248) — omitting the header served workspace
+ * {@code …0001}'s personal data and erasure worklist to a caller who named no agency.
  */
 @Testcontainers
 class ContactLifecycleTest {
@@ -33,14 +35,19 @@ class ContactLifecycleTest {
     static ConfigurableApplicationContext app;
 
     /**
-     * The dev workspace, sent explicitly on every write. The DEV_WORKSPACE_ID fallback is now
-     * reads-only: a write with no header is refused rather than landing in a workspace nobody
-     * named. {@link #aWriteWithoutAWorkspaceIsRefused()} pins that.
+     * The workspace every request in this test names. It is no longer a fallback anybody can reach
+     * by omission — there is no fallback; {@link #aRequestWithoutAWorkspaceIsRefused()} pins that
+     * for both a write and a read.
      */
     private static final String DEV_WORKSPACE = "00000000-0000-0000-0000-000000000001";
 
     private static io.restassured.specification.RequestSpecification writing() {
         return given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON);
+    }
+
+    /** Reads name the workspace too, now that omitting it is refused rather than defaulted. */
+    private static io.restassured.specification.RequestSpecification reading() {
+        return given().header("X-Workspace-Id", DEV_WORKSPACE);
     }
 
     @BeforeAll
@@ -78,7 +85,7 @@ class ContactLifecycleTest {
                 "retainUntil", "2026-08-04"))
             .post("/api/contacts").then().statusCode(201).extract().path("contactId");
 
-        given().get("/api/contacts/" + contactId).then().statusCode(200)
+        reading().get("/api/contacts/" + contactId).then().statusCode(200)
             .body("givenName", org.hamcrest.Matchers.equalTo("Anna"));
 
         String unit12 = UUID.randomUUID().toString();
@@ -90,16 +97,16 @@ class ContactLifecycleTest {
             .body(Map.of("unitId", unit14, "willingToPay", "2400", "desiredStart", "2026-10-01"))
             .post("/api/contacts/" + contactId + "/interests").then().statusCode(201);
 
-        assertThat(given().get("/api/contacts/units/" + unit12 + "/interests")
+        assertThat(reading().get("/api/contacts/units/" + unit12 + "/interests")
             .then().statusCode(200).extract().jsonPath().getList("")).hasSize(1);
 
         // The manager checks whether this person is already known before capturing again.
-        assertThat(given().get("/api/contacts?email=anna@example.com")
+        assertThat(reading().get("/api/contacts?email=anna@example.com")
             .then().statusCode(200).extract().jsonPath().getList("", String.class))
             .contains(contactId);
 
         // The lead goes cold and surfaces on the erasure-due report — reported, not deleted.
-        assertThat(given().get("/api/contacts/erasure-due?asOf=2026-08-05")
+        assertThat(reading().get("/api/contacts/erasure-due?asOf=2026-08-05")
             .then().statusCode(200).extract().jsonPath().getList("", String.class))
             .contains(contactId);
 
@@ -107,8 +114,8 @@ class ContactLifecycleTest {
         writing().body(Map.of("reason", "ledger-referenced"))
             .post("/api/contacts/" + contactId + "/retention-holds").then().statusCode(204);
         writing().delete("/api/contacts/" + contactId + "?on=2026-08-05").then().statusCode(409);
-        given().get("/api/contacts/" + contactId).then().statusCode(200);
-        assertThat(given().get("/api/contacts/erasure-due?asOf=2026-08-05")
+        reading().get("/api/contacts/" + contactId).then().statusCode(200);
+        assertThat(reading().get("/api/contacts/erasure-due?asOf=2026-08-05")
             .then().statusCode(200).extract().jsonPath().getList("", String.class))
             .doesNotContain(contactId);
 
@@ -117,24 +124,30 @@ class ContactLifecycleTest {
             .then().statusCode(204);
         writing().delete("/api/contacts/" + contactId + "?on=2026-08-05").then().statusCode(204);
 
-        given().get("/api/contacts/" + contactId).then().statusCode(404);
-        assertThat(given().get("/api/contacts/units/" + unit12 + "/interests")
+        reading().get("/api/contacts/" + contactId).then().statusCode(404);
+        assertThat(reading().get("/api/contacts/units/" + unit12 + "/interests")
             .then().statusCode(200).extract().jsonPath().getList("")).isEmpty();
-        assertThat(given().get("/api/contacts?email=anna@example.com")
+        assertThat(reading().get("/api/contacts?email=anna@example.com")
             .then().statusCode(200).extract().jsonPath().getList("", String.class))
             .doesNotContain(contactId);
     }
 
     /**
-     * A write that names no workspace is refused, not defaulted.
+     * Any request that names no workspace is refused — writes and reads alike.
      * <p>
-     * The releasing case is the one that decides it: a retention hold is what stops an erasure, so
-     * a release aimed at nowhere would leave the real hold standing while the operator believes
-     * they lifted it — a silent failure whose only symptom is data that quietly refuses to be
-     * erased. Reads keep the dev fallback; nothing is lost by showing a caller an empty list.
+     * The releasing case decides it for writes: a retention hold is what stops an erasure, so a
+     * release aimed at nowhere would leave the real hold standing while the operator believes they
+     * lifted it — a silent failure whose only symptom is data that quietly refuses to be erased.
+     * <p>
+     * <b>The read assertion here used to expect 200, and inverting it is the point of the change.</b>
+     * The old comment read "reads are unaffected: no header still means the dev workspace", and the
+     * justification alongside it was that nothing is lost by showing a caller an empty list. That
+     * was wrong on its own terms — the caller was not shown an empty list, they were shown workspace
+     * {@code …0001}'s. For {@code erasure-due} that is a list of named people whose retention has
+     * expired, served to a request that identified no agency and carried no credential.
      */
     @Test
-    void aWriteWithoutAWorkspaceIsRefused() {
+    void aRequestWithoutAWorkspaceIsRefused() {
         given().contentType(ContentType.JSON)
             .body(Map.of("givenName", "Nobody", "surname", "Nowhere", "lawfulBasis", "consent"))
             .post("/api/contacts").then().statusCode(400);
@@ -142,7 +155,7 @@ class ContactLifecycleTest {
         given().delete("/api/contacts/" + UUID.randomUUID() + "/retention-holds/ledger-referenced")
             .then().statusCode(400);
 
-        // Reads are unaffected: no header still means the dev workspace.
-        given().get("/api/contacts/erasure-due?asOf=2026-08-05").then().statusCode(200);
+        given().get("/api/contacts/erasure-due?asOf=2026-08-05").then().statusCode(400);
+        given().get("/api/contacts?email=anna@example.com").then().statusCode(400);
     }
 }

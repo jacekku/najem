@@ -10,8 +10,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import pl.najem.reporting.WorkspaceContext;
-import pl.najem.reporting.application.ProjectionRunner;
 import pl.najem.reporting.application.ProjectionStatus;
 import pl.najem.reporting.application.PropertyOccupancy;
 import pl.najem.reporting.application.TimelineQuery;
@@ -37,17 +35,14 @@ public class ReportingController {
     private final TimelineQuery timelines;
     private final PropertyOccupancy occupancy;
     private final UnitBoardQuery board;
-    private final ProjectionRunner runner;
     private final ProjectionStatus status;
     private final Clock clock;
 
     public ReportingController(TimelineQuery timelines, PropertyOccupancy occupancy,
-                               UnitBoardQuery board, ProjectionRunner runner,
-                               ProjectionStatus status, Clock clock) {
+                               UnitBoardQuery board, ProjectionStatus status, Clock clock) {
         this.timelines = timelines;
         this.occupancy = occupancy;
         this.board = board;
-        this.runner = runner;
         this.status = status;
         this.clock = clock;
     }
@@ -65,24 +60,24 @@ public class ReportingController {
 
     @GetMapping("/tenancies/{tenancyId}/timeline")
     public List<TimelineQuery.Entry> tenancyTimeline(
-        @RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+        @RequestHeader("X-Workspace-Id") UUID workspaceId,
         @PathVariable UUID tenancyId) {
-        return timelines.forSubject(WorkspaceContext.resolve(workspaceId), "tenancy", tenancyId);
+        return timelines.forSubject(workspaceId, "tenancy", tenancyId);
     }
 
     @GetMapping("/units/{unitId}/timeline")
     public List<TimelineQuery.Entry> unitTimeline(
-        @RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+        @RequestHeader("X-Workspace-Id") UUID workspaceId,
         @PathVariable UUID unitId) {
-        return timelines.forSubject(WorkspaceContext.resolve(workspaceId), "unit", unitId);
+        return timelines.forSubject(workspaceId, "unit", unitId);
     }
 
     @GetMapping("/properties/{propertyId}/occupancy")
     public PropertyOccupancy.Counts propertyOccupancy(
-        @RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+        @RequestHeader("X-Workspace-Id") UUID workspaceId,
         @PathVariable UUID propertyId,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
-        return occupancy.countsFor(WorkspaceContext.resolve(workspaceId), propertyId, orToday(asOf));
+        return occupancy.countsFor(workspaceId, propertyId, orToday(asOf));
     }
 
     /**
@@ -95,25 +90,10 @@ public class ReportingController {
      */
     @GetMapping("/units")
     public List<UnitBoardQuery.Row> unitsInProperty(
-        @RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+        @RequestHeader("X-Workspace-Id") UUID workspaceId,
         @RequestParam UUID propertyId,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
-        return board.forProperty(WorkspaceContext.resolve(workspaceId), propertyId, orToday(asOf));
-    }
-
-    /**
-     * Discards a projection and replays it from the beginning of history — the operator action that
-     * makes a read model safe to change shape.
-     * <p>
-     * Deliberately unauthenticated only because nothing here is yet: it must be behind an admin role
-     * the moment an issuer is configured, since replaying every projection is a denial of service
-     * anyone could trigger. Flagged rather than gated, because inventing a role here would duplicate
-     * a decision UserManagement owns.
-     */
-    @PostMapping("/projections/{name}/rebuild")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void rebuild(@PathVariable String name) {
-        runner.rebuild(name);
+        return board.forProperty(workspaceId, propertyId, orToday(asOf));
     }
 
     private LocalDate orToday(LocalDate asOf) {

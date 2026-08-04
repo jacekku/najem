@@ -19,8 +19,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-import static pl.najem.contacts.adapter.rest.ContactsController.workspace;
-
 @RestController
 @RequestMapping("/api/contacts")
 public class RetentionController {
@@ -57,9 +55,9 @@ public class RetentionController {
     }
 
     @GetMapping("/erasure-due")
-    public List<UUID> dueForErasure(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public List<UUID> dueForErasure(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                                     @RequestParam(required = false)
                                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
-        return retention.dueForErasure(workspace(workspaceId), asOf == null ? today() : asOf);
+        return retention.dueForErasure(workspaceId, asOf == null ? today() : asOf);
     }
 }

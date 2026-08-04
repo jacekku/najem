@@ -36,14 +36,18 @@ class TimelineTest {
     static ConfigurableApplicationContext app;
 
     /**
-     * The dev workspace, sent explicitly on every write. Writes require the header — a write with
-     * none would land in a workspace nobody named — while reads keep the fallback, so the read
-     * assertions below deliberately send nothing.
+     * The workspace every request names, reads included. The read fallback these assertions used to
+     * rely on is deleted (najem-build seq 248): a timeline is one tenancy's entire story, so serving
+     * it to a caller who named no agency was the most complete cross-tenant read in the tree.
      */
     private static final String DEV_WORKSPACE = "00000000-0000-0000-0000-000000000001";
 
     private static io.restassured.specification.RequestSpecification writing() {
         return given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON);
+    }
+
+    private static io.restassured.specification.RequestSpecification reading() {
+        return given().header("X-Workspace-Id", DEV_WORKSPACE);
     }
 
     @BeforeAll
@@ -103,7 +107,7 @@ class TimelineTest {
 
         // The projector polls; wait for the story rather than assume it has caught up.
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
-            List<String> kinds = given()
+            List<String> kinds = reading()
                 .get("/api/reporting/tenancies/" + tenancyId + "/timeline")
                 .then().statusCode(200).extract().path("kind");
             assertThat(kinds).contains("tenancy-reserved", "tenancy-activated");
@@ -111,19 +115,19 @@ class TimelineTest {
 
         // The same facts, told about the unit rather than about the tenancy.
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
-            List<String> kinds = given()
+            List<String> kinds = reading()
                 .get("/api/reporting/units/" + unitId + "/timeline")
                 .then().statusCode(200).extract().path("kind");
             assertThat(kinds).contains("unit-added", "opened-to-rent", "tenancy-period-registered");
         });
 
-        var occupancy = given()
+        var occupancy = reading()
             .get("/api/reporting/properties/" + propertyId + "/occupancy?asOf=2026-10-01")
             .then().statusCode(200).extract().jsonPath();
         assertThat(occupancy.getInt("occupied")).isEqualTo(1);
         assertThat(occupancy.getInt("total")).isEqualTo(1);
 
-        var board = given()
+        var board = reading()
             .get("/api/reporting/units?propertyId=" + propertyId + "&asOf=2026-10-01")
             .then().statusCode(200).extract().jsonPath();
         assertThat(board.getString("[0].name")).isEqualTo("m. 7");
@@ -141,4 +145,5 @@ class TimelineTest {
 
         assertThat(entries).isEmpty();
     }
+
 }

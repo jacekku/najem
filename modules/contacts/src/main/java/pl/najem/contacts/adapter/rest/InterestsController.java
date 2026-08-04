@@ -22,8 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static pl.najem.contacts.adapter.rest.ContactsController.workspace;
-
 @RestController
 @RequestMapping("/api/contacts")
 public class InterestsController {
@@ -58,8 +56,8 @@ public class InterestsController {
     }
 
     @GetMapping("/units/{unitId}/interests")
-    public List<Interest> forUnit(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public List<Interest> forUnit(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                                   @PathVariable UUID unitId) {
-        return interests.forUnit(workspace(workspaceId), unitId);
+        return interests.forUnit(workspaceId, unitId);
     }
 }

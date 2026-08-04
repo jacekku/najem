@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-import pl.najem.contacts.WorkspaceContext;
 import pl.najem.contacts.application.ContactDetails;
 import pl.najem.contacts.application.ContactDirectory;
 import pl.najem.contacts.application.ContactService;
@@ -72,16 +71,16 @@ public class ContactsController {
     }
 
     @GetMapping("/{contactId}")
-    public ContactDetails find(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public ContactDetails find(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                                @PathVariable UUID contactId) {
-        return directory.find(workspace(workspaceId), contactId)
+        return directory.find(workspaceId, contactId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
     @GetMapping(params = "email")
-    public List<UUID> findByEmail(@RequestHeader(name = "X-Workspace-Id", required = false) UUID workspaceId,
+    public List<UUID> findByEmail(@RequestHeader("X-Workspace-Id") UUID workspaceId,
                                   @RequestParam String email) {
-        return directory.findByEmail(workspace(workspaceId), email);
+        return directory.findByEmail(workspaceId, email);
     }
 
     @PutMapping("/{contactId}/details")
@@ -106,16 +105,4 @@ public class ContactsController {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
-    /**
-     * Until Keycloak claims land, an absent header means the single dev workspace — on READS ONLY.
-     * <p>
-     * Every mutating endpoint requires the header instead, so a client that drops it gets a 400.
-     * The asymmetry is deliberate: a read with no header shows you the wrong (empty) data and you
-     * notice immediately, whereas a write with no header puts real data into a workspace nobody
-     * named and returns a success. Erasing a contact, or releasing the retention hold that blocks
-     * an erasure, must never be able to land somewhere the caller did not ask for.
-     */
-    static UUID workspace(UUID fromHeader) {
-        return fromHeader == null ? WorkspaceContext.DEV_WORKSPACE_ID : fromHeader;
-    }
 }
