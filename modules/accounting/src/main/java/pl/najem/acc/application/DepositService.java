@@ -58,10 +58,20 @@ public class DepositService {
             return Optional.empty();
         }
         var raised = new ArrayList<Warning>();
+        // The cap is a multiple of the czynsz, so with no czynsz there is no multiple to compare and
+        // the check cannot run. Saying so is the whole point: a multiplier of zero is not greater
+        // than any cap, so passing one to the comparison below reports a check that never happened,
+        // and a contract putting its whole monthly into adminFee and mediaAdvance is exactly how a
+        // deposit would be placed beyond the cap's reach.
+        boolean checkable = rentAtCharge != null && rentAtCharge.signum() > 0;
+        if (!checkable) {
+            raised.add(Warning.of(WarningKind.DEPOSIT_CAP_UNCHECKABLE,
+                "kaucja " + amount + " zł; czynsz wynosi 0, więc nie sprawdzono ustawowego limitu"));
+        }
         BigDecimal multiplier = multiplierOf(amount, rentAtCharge);
         LegalForm.of(legalForm).ifPresentOrElse(
             form -> {
-                if (multiplier.compareTo(BigDecimal.valueOf(form.depositCapInMonths())) > 0) {
+                if (checkable && multiplier.compareTo(BigDecimal.valueOf(form.depositCapInMonths())) > 0) {
                     raised.add(Warning.of(WarningKind.DEPOSIT_CAP_EXCEEDED,
                         "kaucja " + amount + " zł to " + multiplier + "-krotność czynszu "
                             + rentAtCharge + " zł; ustawowy limit dla formy " + form.name()
@@ -106,7 +116,10 @@ public class DepositService {
      */
     private static BigDecimal multiplierOf(BigDecimal amount, BigDecimal rentAtCharge) {
         if (rentAtCharge == null || rentAtCharge.signum() <= 0) {
-            return BigDecimal.ZERO;
+            // Null, not zero. There is no multiple of nothing, and a stored zero is indistinguishable
+            // from a computed one to every later reader -- including valorization at return, which
+            // works from this same base and would compute a valorized deposit of nothing.
+            return null;
         }
         return amount.divide(rentAtCharge, 2, RoundingMode.HALF_UP);
     }

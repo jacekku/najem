@@ -12,7 +12,12 @@ public enum WarningKind {
     /** The deposit exceeds the statutory cap for this tenancy's legal form. Charged anyway; flagged. */
     DEPOSIT_CAP_EXCEEDED("depositCapExceeded"),
     /** PM sent a legal form this module has not been taught, so no cap could be checked. */
-    UNKNOWN_LEGAL_FORM("unknownLegalForm");
+    UNKNOWN_LEGAL_FORM("unknownLegalForm"),
+    /**
+     * The cap is a multiple of the czynsz and this tenancy declares none, so there is no multiple to
+     * compare. Charged anyway, and the manager is told the check did not happen rather than nothing.
+     */
+    DEPOSIT_CAP_UNCHECKABLE("depositCapUncheckable");
 
     private final String wireName;
 

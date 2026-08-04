@@ -181,7 +181,7 @@ class AccountingSchemaShapeTest {
         "acc_deposit.charged_on date not null",
         "acc_deposit.deposit_id uuid not null",
         "acc_deposit.legal_form text not null",
-        "acc_deposit.multiplier numeric not null",
+        "acc_deposit.multiplier numeric null",
         "acc_deposit.nominal_amount numeric not null",
         "acc_deposit.rent_at_charge numeric not null",
         "acc_deposit.state text not null",

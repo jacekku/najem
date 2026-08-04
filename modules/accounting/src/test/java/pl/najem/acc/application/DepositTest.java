@@ -148,6 +148,40 @@ class DepositTest {
     }
 
     /**
+     * The cap is expressed as a multiple of the czynsz, so a contract with no czynsz has no cap that
+     * can be computed. Returning a multiplier of zero made that read as a successful check — zero is
+     * not greater than any cap, so no warning was ever raised and the activation was silent.
+     *
+     * <p>It is the legally interesting case rather than an obscure one: putting the whole monthly
+     * into adminFee and mediaAdvance and declaring no rent is exactly the shape someone would use to
+     * take a deposit the cap could not touch, and silence reads as approval.
+     */
+    @Test
+    void aDepositAgainstAZeroCzynszSaysTheCapCouldNotBeCheckedRatherThanNothing() {
+        var tenancyId = UUID.randomUUID();
+        acl.handle(new TenancyActivatedEvent(WS, tenancyId, UUID.randomUUID(), START,
+            new BigDecimal("800"), true, BigDecimal.ZERO, new BigDecimal("500"),
+            new BigDecimal("300"), "ZWYKLY", new BigDecimal("20000"), "NAJEM/D9/2027"));
+
+        assertThat(warningsFor(tenancyId, WarningKind.DEPOSIT_CAP_UNCHECKABLE)).singleElement()
+            .satisfies(w -> assertThat(w.detail()).contains("20000").contains("czynsz"));
+        assertThat(capWarningsFor(tenancyId)).isEmpty();
+        assertThat(chargedFor(tenancyId, "deposit")).isEqualByComparingTo("20000");
+        // Absent, not zero. Valorization at return works from this base, and a stored zero would
+        // read to it as a genuinely computed multiple of nothing.
+        assertThat(jdbc.queryForObject("select multiplier from acc_deposit where tenancy_id = ?",
+            BigDecimal.class, tenancyId)).isNull();
+    }
+
+    /** A cap that could be checked must not also claim it could not. */
+    @Test
+    void anOrdinaryDepositDoesNotClaimTheCapWasUncheckable() {
+        var tenancyId = activate("ZWYKLY", "3000", "6000");
+
+        assertThat(warningsFor(tenancyId, WarningKind.DEPOSIT_CAP_UNCHECKABLE)).isEmpty();
+    }
+
+    /**
      * The multiple is of the czynsz, not of the whole monthly figure — adminFee and mediaAdvance are
      * not rent, and valorization at return works from the same base (DEPOSIT §1).
      */
