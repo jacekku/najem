@@ -6,6 +6,7 @@ include(
     "modules:accounting",
     "modules:contacts",
     "modules:usermanagement",
+    "modules:reporting",
     "apps:najem-app",
     "apps:fakebank",
     "e2e",
