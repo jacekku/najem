@@ -37,8 +37,12 @@ public class TenancyService {
         // The workspace comes from the unit the tenancy sits on, never from a constant.
         UUID workspaceId = jdbc.queryForObject(
             "select workspace_id from pm_unit where unit_id = ?", UUID.class, tenancy.unitId());
+        // v2 bridge values until Task 4 (full reservation) supplies the real contract facts:
+        // no contractual split yet (collapse rule: whole amount is rent), portfolio default
+        // legalForm "zwykly", no deposit known.
         store.append(tenancyId, "Tenancy", stream.version(), tenancy.activate(on),
             List.of(new TenancyActivatedEvent(workspaceId, tenancyId, tenancy.unitId(),
-                tenancy.startDate(), tenancy.monthlyRent(), tenancy.paymentReference())));
+                tenancy.startDate(), tenancy.monthlyRent(), false, null, null, null,
+                "zwykly", null, tenancy.paymentReference())));
     }
 }
