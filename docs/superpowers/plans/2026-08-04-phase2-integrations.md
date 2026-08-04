@@ -25,13 +25,24 @@
   ```
 - Test counts are read from the JUnit XML under `build/test-results/test/`, not from Gradle's console summary.
 
-## Open Decisions (accounting-owned, do not decide unilaterally)
+## Settled Decisions (accounting-owned; answered at topic seq 107)
 
-Tasks 1–6 do not depend on these. **Task 7 is gated on them.** Raised on topic seq 86; record the answers here when they arrive.
+Raised at seq 86, answered by najem-accounting at seq 107. Task 7 is no longer gated on the answers —
+only on the `BankLine` widening commit actually landing.
 
-1. **`BankLine` width.** Today it is `(externalId, amount, title, bookingDate)` — no counterparty, no indicator, no currency. Ladder tiers 3–4 are counterparty-based and cannot be implemented against it. If accounting widens it, Task 7's mapping carries the extra fields; if not, Task 7 drops them. Either way Tasks 1–6 are unaffected. **Do not modify `BankLine` in this plan.**
-2. **`externalId` derivation for an uploaded line.** Proposed: `"mt940/" + account + "/" + statementNumber + "/" + index`. Stable under re-upload (dedup holds), distinct for genuine same-day duplicates. Accounting owns the dedup guarantee and may replace this.
-3. **Who writes the accounting-side file** — this agent with per-file consent, or accounting themselves against the reader. Task 7 assumes the former; if the latter, Task 7 becomes a handoff of the reader plus the round-trip fixture.
+1. **`BankLine` widens.** Accounting is adding `counterpartyName`, `counterpartyIban`,
+   `bankReference`, `valueDate`, `creditDebitIndicator`, `currency` as the first commit of their
+   task 4, and `FakeBankAdapter` will stop discarding them. `counterpartyName`/`counterpartyIban`
+   are **nullable**, and their tier 3 is being written against the null — a free-text `:86:` yields
+   no counterparty and that is an ordinary statement, not a malformed one.
+   **Task 7 must wait for that commit rather than map onto the current four-field record.**
+2. **`externalId` accepted as proposed:** `"mt940/" + account + "/" + statementNumber + "/" + index`.
+   Accounting pinned the **`mt940/` prefix as a contract, not a convention** —
+   `acc_payment.external_id` is unique per workspace across *all* sources, so an unprefixed
+   statement/index pair could collide with a FakeBank id. Keep the `:28C:`-reuse assertion.
+3. **This agent writes the accounting-side file, with per-file consent.** Bounds set by accounting:
+   it lives at `modules/accounting/src/main/java/pl/najem/acc/adapter/mt940/` and touches nothing
+   else in their module. **Post the diff on the topic and get an in-thread ok before merging.**
 
 ## File Structure
 
@@ -1254,7 +1265,7 @@ This is the task the coordinator's both-sides-together ruling exists for. A pars
 - Consumes: `ScenarioCatalog.names()`, `ScenarioCatalog.generate`, `StatementRenderer.render`, `Mt940Writer.write`, `Mt940Reader.read`.
 - Produces: nothing. This is a test and a document.
 
-**What the round trip does and does not assert.** It compares the *transaction*: amount, both dates, remittance text, counterparty, direction. It does **not** compare the external id, and that is deliberate — `on-time/NAJEM-M1-2026/0` is a property of FakeBank's transport, not of the transaction. A real bank has never heard of it. Asserting id equality would only be possible by smuggling our own id through a field banks use for their own purposes, which would make the fixture less like a bank, not more. The id for an ingested MT940 line is derived on the accounting side (open decision 2).
+**What the round trip does and does not assert.** It compares the *transaction*: amount, both dates, remittance text, counterparty, direction. It does **not** compare the external id, and that is deliberate — `on-time/NAJEM-M1-2026/0` is a property of FakeBank's transport, not of the transaction. A real bank has never heard of it. Asserting id equality would only be possible by smuggling our own id through a field banks use for their own purposes, which would make the fixture less like a bank, not more. The id for an ingested MT940 line is derived on the accounting side (settled decision 2).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1428,14 +1439,20 @@ git commit -m "Round-trip every scenario through MT940 and document the export"
 
 ---
 
-### Task 7: The accounting-side upload — GATED
+### Task 7: The accounting-side upload
 
-**Do not start this task until the three open decisions above are answered on the topic.** Post the answers into this plan first.
+**Decisions settled (see above). One thing still blocks the start: accounting's `BankLine` widening
+must be on main first.** Writing the mapping against today's four-field record would mean rewriting
+it hours later and would silently drop the counterparty that tiers 3–4 exist to use. Wait for their
+commit, rebase onto it, then start.
 
-**Files (assuming decision 3 resolves to "this agent writes it, with per-file consent"):**
-- Create: `modules/accounting/src/main/java/pl/najem/acc/adapter/statement/Mt940Import.java`
-- Create: `modules/accounting/src/main/java/pl/najem/acc/adapter/statement/StatementUploadController.java`
-- Test: `modules/accounting/src/test/java/pl/najem/acc/adapter/statement/Mt940ImportTest.java`
+**Files** — the package location is accounting's, set at seq 107:
+- Create: `modules/accounting/src/main/java/pl/najem/acc/adapter/mt940/Mt940Import.java`
+- Create: `modules/accounting/src/main/java/pl/najem/acc/adapter/mt940/StatementUploadController.java`
+- Test: `modules/accounting/src/test/java/pl/najem/acc/adapter/mt940/Mt940ImportTest.java`
+
+**Nothing else in `modules/accounting/**` may be touched, and the diff goes on the topic for an
+in-thread ok before it merges.**
 
 **Interfaces:**
 - Consumes: `Mt940Reader.read`, `BankLine`, `IngestionService.ingest(BankLine)`.
@@ -1452,7 +1469,7 @@ public List<BankLine> toBankLines(String text) {
         int index = 0;
         for (Mt940Line line : statement.lines()) {
             lines.add(new BankLine(
-                externalId(statement, index++),      // open decision 2
+                externalId(statement, index++),      // settled decision 2; the mt940/ prefix is a contract
                 line.amount(),                       // positive; direction is in the mark
                 line.remittanceInfo(),
                 line.bookingDate()));
@@ -1472,7 +1489,7 @@ private static String externalId(Mt940Statement statement, int index) {
 3. A `DBIT` line does not become a rent payment. (The `outgoing-debit` scenario exists for this.)
 4. Malformed text is rejected with a 400 and the offending text in the message, ingesting nothing — a partial import is worse than a refused one.
 
-**Open question for accounting to answer in this task, not before:** whether a debit line should be ingested at all, or filtered at the boundary. Filtering is tempting and probably wrong — a reconciliation screen that cannot see outgoing money cannot reconcile — but it is accounting's call, and `BankLine` cannot currently express the difference (open decision 1).
+**Open question for accounting to answer in this task, not before:** whether a debit line should be ingested at all, or filtered at the boundary. Filtering is tempting and probably wrong — a reconciliation screen that cannot see outgoing money cannot reconcile — but it is accounting's call. The widened `BankLine` (settled decision 1) can express the difference, so the question is now answerable rather than blocked.
 
 ---
 
