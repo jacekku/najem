@@ -128,12 +128,19 @@ if curl -sSf -o /dev/null "$BANK/api/accounts/$IBAN/transactions" 2>/dev/null; t
       -d "$(jq -nc --arg n "$1" --arg i "$IBAN" --arg r "$2" --argjson a "$3" --arg d "$4" \
         '{name:$n,iban:$i,reference:$r,amount:$a,anchorDate:$d}')" >/dev/null
   }
+  # Money that has already arrived, so book it in the past. A fixed future date made
+  # the suspense screen report daysWaiting: -6 — an item that has been waiting minus
+  # six days reads as a broken screen, and it would have been the reviewer's time
+  # spent finding out it was the seed data. Nine days back puts the two unresolved
+  # items past a week, which is where they start to look like they need a person.
+  BOOKED=$(date -v-9d +%Y-%m-%d 2>/dev/null || date -d '9 days ago' +%Y-%m-%d)
+
   # One of each interesting kind, so every tier of the ladder has something to show
   # and the arrears board has more than one colour.
-  scenario on-time         "NAJEM/M12/2026"    3200 "2026-08-10"   # matches cleanly
-  scenario partial         "NAJEM/H45/2025"    2600 "2026-08-10"   # underpaid, stays amber
-  scenario wrong-reference "NAJEM/AJ101/2026"  6800 "2026-08-10"   # needs a human
-  scenario no-reference    "NAJEM/M12/2026-3"  4100 "2026-08-10"   # lands in suspense
+  scenario on-time         "NAJEM/M12/2026"    3200 "$BOOKED"   # matches cleanly
+  scenario partial         "NAJEM/H45/2025"    2600 "$BOOKED"   # underpaid, stays amber
+  scenario wrong-reference "NAJEM/AJ101/2026"  6800 "$BOOKED"   # needs a human
+  scenario no-reference    "NAJEM/M12/2026-3"  4100 "$BOOKED"   # lands in suspense
 
   api POST /api/acc/ingest/fetch >/dev/null
   sleep "$SETTLE"
