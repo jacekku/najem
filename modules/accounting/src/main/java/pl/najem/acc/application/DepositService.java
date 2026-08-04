@@ -5,6 +5,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.Component;
 import pl.najem.acc.domain.DepositCharged;
+import pl.najem.acc.domain.DepositSettled;
+import pl.najem.acc.domain.DepositValorization;
 import pl.najem.acc.domain.LegalForm;
 import pl.najem.acc.domain.WarningKind;
 import pl.najem.eventstore.EventStore;
@@ -14,6 +16,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -95,6 +98,104 @@ public class DepositService {
                 rentAtCharge, legalForm)), List.of());
         warnings.raise(workspaceId, tenancyId, raised);
         return Optional.of(depositId);
+    }
+
+    /**
+     * Gives the deposit back at the end of the tenancy.
+     *
+     * <p>Art. 6 ust. 4: it is returned in the amount corresponding to the agreed multiple of the
+     * czynsz in force on the day of return, less what the landlord is lawfully owed, and never less
+     * than the sum actually taken. The multiple is the one snapshotted at activation — recomputing
+     * it from today's figures would re-price the contract every time the rent moved.
+     *
+     * <p>Deductions are itemised against the charges they settle rather than recorded as one total,
+     * because a disputed deduction has to be traceable to the obligation it paid. Arrears beyond the
+     * deposit are not forgiven by settling it; what the deposit could not cover stays owed.
+     *
+     * @param rentAtReturn the czynsz in force on the day of return
+     * @return what actually went back to the tenant
+     */
+    public BigDecimal settle(UUID workspaceId, UUID tenancyId, BigDecimal rentAtReturn,
+                             LocalDate returnedOn) {
+        var deposit = held(workspaceId, tenancyId);
+        UUID depositId = (UUID) deposit.get("deposit_id");
+        var valorization = DepositValorization.compute((BigDecimal) deposit.get("multiplier"),
+            (BigDecimal) deposit.get("nominal_amount"), rentAtReturn);
+
+        BigDecimal remaining = valorization.valorized();
+        BigDecimal deducted = BigDecimal.ZERO;
+        for (var charge : arrears(workspaceId, tenancyId)) {
+            if (remaining.signum() <= 0) {
+                break;
+            }
+            BigDecimal owed = (BigDecimal) charge.get("owed");
+            BigDecimal taken = remaining.min(owed);
+            jdbc.update("""
+                insert into acc_deposit_deduction(deduction_id, workspace_id, deposit_id, charge_id,
+                                                  amount, deducted_on)
+                values (?,?,?,?,?,?)
+                """, UUID.randomUUID(), workspaceId, depositId, charge.get("charge_id"), taken,
+                returnedOn);
+            jdbc.update("""
+                update acc_charge
+                set allocated_amount = allocated_amount + ?, allocated = allocated_amount + ? >= amount
+                where workspace_id = ? and charge_id = ?
+                """, taken, taken, workspaceId, charge.get("charge_id"));
+            remaining = remaining.subtract(taken);
+            deducted = deducted.add(taken);
+        }
+
+        jdbc.update("""
+            update acc_deposit
+            set state = 'settled', settled_on = ?, rent_at_return = ?, valorized_amount = ?,
+                deducted_amount = ?, returned_amount = ?
+            where workspace_id = ? and deposit_id = ?
+            """, returnedOn, rentAtReturn, valorization.valorized(), deducted, remaining,
+            workspaceId, depositId);
+        var stream = store.load(tenancyId, "TenancyLedger");
+        store.append(tenancyId, "TenancyLedger", stream.version(),
+            List.of(new DepositSettled(depositId, tenancyId, valorization.valorized(), deducted,
+                remaining, rentAtReturn, valorization.floorApplied())), List.of());
+        return remaining;
+    }
+
+    /**
+     * The deposit this workspace is actually holding for the tenancy.
+     *
+     * <p>Scoped by workspace and required to have been paid. A charge nobody settled is not money in
+     * hand, and valorizing it would invent funds — so the unpaid case refuses rather than returning
+     * a figure that looks like a settlement.
+     */
+    private Map<String, Object> held(UUID workspaceId, UUID tenancyId) {
+        var rows = jdbc.queryForList("""
+            select d.deposit_id, d.multiplier, d.nominal_amount, d.state,
+                   c.amount - c.allocated_amount as unpaid
+            from acc_deposit d join acc_charge c on c.charge_id = d.charge_id
+            where d.workspace_id = ? and d.tenancy_id = ?
+            """, workspaceId, tenancyId);
+        if (rows.isEmpty()) {
+            throw new DepositNotHeldException(tenancyId, "none was charged in this workspace");
+        }
+        var deposit = rows.getFirst();
+        if ("settled".equals(deposit.get("state"))) {
+            throw new IllegalStateException("the deposit for tenancy " + tenancyId
+                + " has already been returned; returning it again would pay the tenant twice");
+        }
+        if (((BigDecimal) deposit.get("unpaid")).signum() > 0) {
+            throw new DepositNotHeldException(tenancyId,
+                "it was charged but never paid, so there is nothing to give back");
+        }
+        return deposit;
+    }
+
+    /** What the tenancy still owes, oldest first. The deposit charge is not one of its own arrears. */
+    private List<Map<String, Object>> arrears(UUID workspaceId, UUID tenancyId) {
+        return jdbc.queryForList("""
+            select charge_id, amount - allocated_amount as owed from acc_charge
+            where workspace_id = ? and tenancy_id = ? and active and amount > allocated_amount
+              and component <> ?
+            order by due_date, charge_id
+            """, workspaceId, tenancyId, Component.DEPOSIT.wireName());
     }
 
     private UUID postDepositCharge(UUID workspaceId, UUID tenancyId, BigDecimal amount,

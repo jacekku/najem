@@ -5,6 +5,7 @@ import pl.najem.acc.domain.ChargeDeactivated;
 import pl.najem.acc.domain.ChargePosted;
 import pl.najem.acc.domain.CreditNoteIssued;
 import pl.najem.acc.domain.DepositCharged;
+import pl.najem.acc.domain.DepositSettled;
 import pl.najem.acc.domain.PaymentAllocated;
 import pl.najem.acc.domain.PaymentIngested;
 import pl.najem.acc.domain.PaymentAllocationAmended;
@@ -24,6 +25,7 @@ public class AccEventTypes {
         registry.register(ChargeDeactivated.class);
         registry.register(CreditNoteIssued.class);
         registry.register(DepositCharged.class);
+        registry.register(DepositSettled.class);
         registry.register(PaymentIngested.class);
         registry.register(PaymentAllocated.class);
         registry.register(PaymentMarkedNonTenant.class);
