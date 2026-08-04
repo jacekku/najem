@@ -69,8 +69,9 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/activate")
-    public void activate(@PathVariable UUID tenancyId, @RequestBody ActivateRequest request) {
-        tenancies.activate(tenancyId, request.activatedOn());
+    public Map<String, Object> activate(@PathVariable UUID tenancyId,
+                                        @RequestBody ActivateRequest request) {
+        return Map.of("warnings", tenancies.activate(tenancyId, request.activatedOn()));
     }
 
     @PostMapping("/{tenancyId}/cancel")
@@ -89,16 +90,16 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/rent-changes")
-    public void scheduleRentChange(@PathVariable UUID tenancyId,
-                                   @RequestBody RentChangeRequest request) {
+    public Map<String, Object> scheduleRentChange(@PathVariable UUID tenancyId,
+                                                  @RequestBody RentChangeRequest request) {
         MonthlyAmount.Breakdown breakdown = null;
         if (request.rent() != null || request.adminFee() != null || request.mediaAdvance() != null) {
             breakdown = new MonthlyAmount.Breakdown(
                 orZero(request.rent()), orZero(request.adminFee()), orZero(request.mediaAdvance()));
         }
-        tenancies.scheduleRentChange(tenancyId, request.decidedOn(), request.effectiveFrom(),
-            new MonthlyAmount(request.monthlyTotal(), breakdown),
-            ChangeType.valueOf(request.changeType().toUpperCase().replace('-', '_')));
+        return Map.of("warnings", tenancies.scheduleRentChange(tenancyId, request.decidedOn(),
+            request.effectiveFrom(), new MonthlyAmount(request.monthlyTotal(), breakdown),
+            ChangeType.valueOf(request.changeType().toUpperCase().replace('-', '_'))));
     }
 
     @PostMapping("/{tenancyId}/rent-changes/{effectiveFrom}/cancel")

@@ -102,7 +102,7 @@ public class TenancyService {
      * that decides the statutory deposit cap, and the deposit itself. All of these are fixed at
      * signing and only PM holds them.
      */
-    public void activate(UUID tenancyId, LocalDate on) {
+    public List<String> activate(UUID tenancyId, LocalDate on) {
         var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         MonthlyAmount monthly = tenancy.monthly();
@@ -120,10 +120,17 @@ public class TenancyService {
         jdbc.update("update pm_tenancy set state = 'ACTIVE', activated_on = ? where tenancy_id = ?",
             on, tenancyId);
         armEndingSoon(tenancyId);
+        return warnings(tenancyId);
     }
 
-    public void scheduleRentChange(UUID tenancyId, LocalDate decidedOn, LocalDate effectiveFrom,
-                                   MonthlyAmount newMonthly, ChangeType type) {
+    /**
+     * Returns the warnings the scheduled change raised — a unilateral increase under three
+     * months' notice is exactly the statutory flag a manager must see at the moment they set it,
+     * not on a report later. Swallowing it here would make the expert-system stance decorative.
+     */
+    public List<String> scheduleRentChange(UUID tenancyId, LocalDate decidedOn,
+                                           LocalDate effectiveFrom, MonthlyAmount newMonthly,
+                                           ChangeType type) {
         var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
         store.append(tenancyId, "Tenancy", stream.version(),
@@ -132,6 +139,7 @@ public class TenancyService {
         // so scheduling a later change would otherwise overwrite an earlier change's timer and
         // strand it. Fires the day before it takes effect, not at schedule time (§5).
         armNextRentChange(tenancyId);
+        return warnings(tenancyId);
     }
 
     public void cancelRentChange(UUID tenancyId, LocalDate effectiveFrom) {

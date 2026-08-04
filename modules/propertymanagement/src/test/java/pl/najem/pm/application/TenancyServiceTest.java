@@ -141,4 +141,38 @@ class TenancyServiceTest {
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
         return portfolio.addUnit(propertyId, "M1", new BigDecimal("2500"));
     }
+
+    private static UUID activeTenancy() {
+        var tenancyId = service.reserve(command(unitIn(UUID.randomUUID()),
+            LocalDate.of(2026, 1, 1), LocalDate.of(2028, 12, 31), "2500",
+            "NAJEM/" + UUID.randomUUID())).tenancyId();
+        service.activate(tenancyId, LocalDate.of(2026, 1, 1));
+        return tenancyId;
+    }
+
+    /**
+     * The expert-system stance is only real if the flags reach the manager. A statutory warning
+     * computed and then swallowed by the service is the same as not computing it.
+     */
+    @Test
+    void schedulingAnUnlawfulUnilateralIncreaseReturnsTheStatutoryWarning() {
+        var tenancyId = activeTenancy();
+
+        var warnings = service.scheduleRentChange(tenancyId, LocalDate.of(2026, 5, 1),
+            LocalDate.of(2026, 6, 1), new MonthlyAmount(new BigDecimal("2600"), null),
+            pl.najem.pm.domain.ChangeType.UNILATERAL_INCREASE);
+
+        assertThat(warnings).anyMatch(w -> w.contains("3 months"));
+    }
+
+    @Test
+    void anagreedChangeAtShortNoticeReturnsNoNoticeWarning() {
+        var tenancyId = activeTenancy();
+
+        var warnings = service.scheduleRentChange(tenancyId, LocalDate.of(2026, 5, 25),
+            LocalDate.of(2026, 7, 1), new MonthlyAmount(new BigDecimal("2600"), null),
+            pl.najem.pm.domain.ChangeType.AGREED_CHANGE);
+
+        assertThat(warnings).noneMatch(w -> w.contains("3 months"));
+    }
 }
