@@ -20,7 +20,24 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.mt940.Mt940FormatException;
 
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AnnotationTypeFilter;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Objects;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -214,6 +231,137 @@ class Mt940ImportTest {
         assertThat(jdbc.queryForObject("""
             select count(*) from acc_payment where external_id like 'mt940/%/11/1/%'
             """, Integer.class)).isZero();
+    }
+
+    /**
+     * EVERY mutating endpoint in this module requires a workspace, and no read is changed.
+     *
+     * <p>Deliberately <strong>discovered</strong> rather than enumerated. An enumeration is a
+     * fix-list: it says nothing about the next endpoint someone writes, and this module has already
+     * grown two write endpoints carrying the defect an hour after it was ruled on. A list would have
+     * stayed green through both. This scans the adapter packages, so a new mapping fails here on the
+     * day it is added rather than on the day someone re-audits.
+     *
+     * <p>It asserts the annotation rather than a 400, because a status code cannot distinguish
+     * "required" from "defaulted to something that happens to work" — and the default is how the old
+     * behaviour would return with no visible change to the method body.
+     *
+     * <p><strong>This test enforces the interim mechanism, and one day that will be wrong.</strong>
+     * The header is a stand-in until the workspace comes from the verified token and is checked
+     * against the caller's memberships. When these endpoints stop taking a header and receive a
+     * resolved workspace instead, this test goes red across the module — and the cheapest way to
+     * green it will be to put the headers back. <strong>Widen the assertion to accept a resolved
+     * workspace parameter; do not re-add headers.</strong> The invariant is that a write cannot
+     * obtain a workspace by omission, not that a write takes a header.
+     */
+    @Test
+    void everyMutatingEndpointInThisModuleRequiresAWorkspace() throws Exception {
+        var mutating = List.of(PostMapping.class, PutMapping.class,
+            PatchMapping.class, DeleteMapping.class);
+        var controllers = controllerClasses();
+
+        assertThat(controllers)
+            .as("the scan must actually find controllers, or this test passes vacuously")
+            .hasSizeGreaterThanOrEqualTo(5);
+
+        var offenders = new ArrayList<String>();
+        int checked = 0;
+        for (Class<?> controller : controllers) {
+            for (Method method : controller.getDeclaredMethods()) {
+                boolean isWrite = mutating.stream().anyMatch(method::isAnnotationPresent);
+                if (!isWrite) {
+                    continue;
+                }
+                checked++;
+                var header = Arrays.stream(method.getParameters())
+                    .map(param -> param.getAnnotation(RequestHeader.class))
+                    .filter(Objects::nonNull)
+                    .filter(h -> "X-Workspace-Id".equals(h.value()) || "X-Workspace-Id".equals(h.name()))
+                    .findFirst();
+                if (header.isEmpty()) {
+                    offenders.add(controller.getSimpleName() + "." + method.getName() + " takes no workspace header");
+                } else if (!header.get().required()) {
+                    offenders.add(controller.getSimpleName() + "." + method.getName() + " defaults its workspace");
+                }
+            }
+        }
+
+        assertThat(checked).as("no mutating endpoints were examined").isPositive();
+        assertThat(offenders).as("a write must name the workspace it modifies").isEmpty();
+    }
+
+    /** Every {@code @RestController} under this module's adapter packages, found on the classpath. */
+    private static List<Class<?>> controllerClasses() throws Exception {
+        var scanner = new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
+        var found = new ArrayList<Class<?>>();
+        for (var candidate : scanner.findCandidateComponents("pl.najem.acc.adapter")) {
+            found.add(Class.forName(candidate.getBeanClassName()));
+        }
+        return found;
+    }
+
+    /**
+     * The size limit is enforced by a filter, not by the handler, and these tests exercise the
+     * filter directly for that reason.
+     *
+     * <p>A handler-level check would be untestable as a size limit: calling the method with a large
+     * String proves only that the method rejects large Strings, which is not the property wanted.
+     * The property wanted is that the body is never materialised — and that is decided before the
+     * handler exists, so it can only be observed where the decision is made.
+     */
+    @Test
+    void anOversizedUploadIsRefusedWithoutTheBodyEverBeingRead() throws Exception {
+        var request = new MockHttpServletRequest("POST", StatementSizeFilter.PATH);
+        request.setContent(new byte[(int) StatementSizeFilter.MAX_STATEMENT_BYTES + 1]);
+        var response = new MockHttpServletResponse();
+        var chain = new MockFilterChain();
+
+        new StatementSizeFilter().doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(413);
+        assertThat(response.getContentAsString()).contains("exceeds");
+        assertThat(chain.getRequest()).as("the request must not have reached the handler").isNull();
+    }
+
+    /** An undeclared length cannot be checked, so accepting it would make the limit optional. */
+    @Test
+    void anUploadThatDeclaresNoLengthIsRefused() throws Exception {
+        var request = new MockHttpServletRequest("POST", StatementSizeFilter.PATH);
+        var response = new MockHttpServletResponse();
+        var chain = new MockFilterChain();
+
+        new StatementSizeFilter().doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(413);
+        assertThat(response.getContentAsString()).contains("Content-Length");
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    @Test
+    void anOrdinaryStatementPassesTheFilterUntouched() throws Exception {
+        var request = new MockHttpServletRequest("POST", StatementSizeFilter.PATH);
+        request.setContent(STATEMENT.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var response = new MockHttpServletResponse();
+        var chain = new MockFilterChain();
+
+        new StatementSizeFilter().doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(chain.getRequest()).as("an ordinary upload must reach the handler").isNotNull();
+    }
+
+    /** The filter must not police anyone else's endpoints — it knows nothing about their bodies. */
+    @Test
+    void theFilterIgnoresEveryOtherRequest() throws Exception {
+        var request = new MockHttpServletRequest("POST", "/api/acc/payments/x/confirm");
+        request.setContent(new byte[(int) StatementSizeFilter.MAX_STATEMENT_BYTES + 1]);
+        var response = new MockHttpServletResponse();
+        var chain = new MockFilterChain();
+
+        new StatementSizeFilter().doFilter(request, response, chain);
+
+        assertThat(chain.getRequest()).isNotNull();
     }
 
     /**

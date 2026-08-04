@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import pl.najem.acc.WorkspaceContext;
 import pl.najem.acc.application.CorrectionService;
 
 import java.util.UUID;
@@ -34,19 +33,15 @@ public class CorrectionController {
     @PostMapping("/payments/{paymentId}/reverse")
     public void reverse(@PathVariable UUID paymentId,
                         @RequestBody ReversalRequest request,
-                        @RequestHeader(value = "X-Workspace-Id", required = false) UUID workspaceId) {
-        corrections.reverse(workspaceOf(workspaceId), paymentId, request.reason());
+                        @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        corrections.reverse(workspaceId, paymentId, request.reason());
     }
 
     @PostMapping("/payments/{paymentId}/amend")
     public void amend(@PathVariable UUID paymentId,
                       @RequestBody AmendmentRequest request,
-                      @RequestHeader(value = "X-Workspace-Id", required = false) UUID workspaceId) {
-        corrections.amendAllocation(workspaceOf(workspaceId), paymentId, request.tenancyId(),
+                      @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        corrections.amendAllocation(workspaceId, paymentId, request.tenancyId(),
             request.reason());
-    }
-
-    private static UUID workspaceOf(UUID header) {
-        return header == null ? WorkspaceContext.DEV_WORKSPACE_ID : header;
     }
 }

@@ -45,15 +45,15 @@ public class SuspenseController {
     @PostMapping("/payments/{paymentId}/non-tenant")
     public void markNonTenant(@PathVariable UUID paymentId,
                               @RequestBody NonTenantRequest request,
-                              @RequestHeader(value = "X-Workspace-Id", required = false) UUID workspaceId) {
-        suspense.markNonTenant(workspaceOf(workspaceId), paymentId, request.reason());
+                              @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        suspense.markNonTenant(workspaceId, paymentId, request.reason());
     }
 
     @PostMapping("/payments/{paymentId}/allocate")
     public void allocate(@PathVariable UUID paymentId,
                          @RequestBody ManualAllocationRequest request,
-                         @RequestHeader(value = "X-Workspace-Id", required = false) UUID workspaceId) {
-        suspense.allocateTo(workspaceOf(workspaceId), paymentId, request.tenancyId());
+                         @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        suspense.allocateTo(workspaceId, paymentId, request.tenancyId());
     }
 
     /** Nulls are ordinary here — a bank that sent no counterparty is not an error. */
@@ -72,6 +72,7 @@ public class SuspenseController {
         return wire;
     }
 
+    /** Reads only. A write must never reach this — the guard test enforces it for every mapping. */
     private static UUID workspaceOf(UUID header) {
         return header == null ? WorkspaceContext.DEV_WORKSPACE_ID : header;
     }

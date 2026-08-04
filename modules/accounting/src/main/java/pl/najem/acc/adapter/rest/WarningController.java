@@ -36,12 +36,23 @@ public class WarningController {
             .toList();
     }
 
+    /**
+     * Required on this write, optional on the read above. A write with no header modifies books
+     * nobody named and returns success; a read with no header merely shows the wrong list.
+     * {@code workspaceId} is passed straight through so the fallback is unreachable from a write by
+     * construction rather than by the annotation alone.
+     *
+     * <p>The header is a <strong>stand-in until the workspace is taken from the verified token and checked against the
+     * caller's memberships</strong>. It answers "which workspace", never
+     * "may this caller touch it".
+     */
     @PostMapping("/warnings/{warningId}/seen")
     public void markSeen(@PathVariable UUID warningId,
-                         @RequestHeader(value = "X-Workspace-Id", required = false) UUID workspaceId) {
-        warnings.markSeen(workspaceOf(workspaceId), warningId);
+                         @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        warnings.markSeen(workspaceId, warningId);
     }
 
+    /** Reads only. A write must never reach this — see {@link #markSeen}. */
     private static UUID workspaceOf(UUID header) {
         return header == null ? WorkspaceContext.DEV_WORKSPACE_ID : header;
     }

@@ -25,8 +25,10 @@ import static org.awaitility.Awaitility.await;
 class WalkingSkeletonTest {
 
     /**
-     * PM's property creation is a write, so it names its workspace explicitly (rule 7). Units
-     * and tenancies inherit the workspace from the property rather than taking a header.
+     * The workspace every write must name (rule 7). Reads still fall back to it when no header is
+     * sent — the Phase 1 scaffold — but a write may not, because a write with no header modifies
+     * books nobody named and returns success. PM's units and tenancies take no header at all: they
+     * inherit the workspace from the property they belong to.
      */
     private static final String DEV_WORKSPACE = "00000000-0000-0000-0000-000000000001";
 
@@ -99,12 +101,14 @@ class WalkingSkeletonTest {
                 "bookingDate", java.time.LocalDate.now().toString()))
             .post("/api/accounts/" + IBAN + "/transactions").then().statusCode(201);
 
-        given().post("/api/acc/ingest/fetch").then().statusCode(200);
+        given().header("X-Workspace-Id", DEV_WORKSPACE)
+            .post("/api/acc/ingest/fetch").then().statusCode(200);
 
         String paymentId = given().get("/api/acc/suggestions")
             .then().statusCode(200).extract().path("[0].paymentId");
         assertThat(paymentId).isNotNull();
-        given().post("/api/acc/payments/" + UUID.fromString(paymentId) + "/confirm").then().statusCode(200);
+        given().header("X-Workspace-Id", DEV_WORKSPACE)
+            .post("/api/acc/payments/" + UUID.fromString(paymentId) + "/confirm").then().statusCode(200);
 
         assertThat(boardStatus(tenancyId)).isEqualTo("green");
     }

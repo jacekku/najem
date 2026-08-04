@@ -35,6 +35,10 @@ public class StatementUploadController {
      * books nobody named, returns 201, and says nothing — and per-workspace uniqueness on
      * {@code external_id} means the misplaced copy never collides with the correct import, so it
      * persists after the mistake is found. A missing header is a 400 rather than a guess.
+     *
+     * <p>The header is a <strong>stand-in until the workspace is taken from the verified token and checked against the
+     * caller's memberships</strong>. Requiring it closes omission, not
+     * impersonation — a caller may still name a workspace they are not a member of.
      */
     @PostMapping(value = "/statements", consumes = MediaType.TEXT_PLAIN_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
