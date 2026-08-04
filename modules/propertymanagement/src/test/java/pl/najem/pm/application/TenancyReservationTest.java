@@ -52,7 +52,7 @@ class TenancyReservationTest {
         registry.register(TenancyActivatedEvent.class);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         portfolio = new PortfolioService(store, jdbc);
-        tenancies = new TenancyService(store, jdbc);
+        tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
     }
 
     @Test

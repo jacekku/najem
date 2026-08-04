@@ -40,6 +40,8 @@ public class Tenancy {
     private final Set<String> completedItems = new HashSet<>();
     private final Map<ChecklistPhase, HandoverProtocol> handoverProtocols =
         new EnumMap<>(ChecklistPhase.class);
+    /** Set by TenancyDocumentAttached(NOTARIAL_DECLARATION) — Task 9. */
+    private boolean notarialDeclarationAttached;
 
     private Tenancy() {
     }
@@ -103,6 +105,15 @@ public class Tenancy {
 
     public Optional<HandoverProtocol> handoverProtocol(ChecklistPhase phase) {
         return Optional.ofNullable(handoverProtocols.get(phase));
+    }
+
+    /**
+     * An instytucjonalny tenancy needs the tenant's notarial submission-to-execution declaration
+     * before it can activate UNATTENDED (v1.1 amendment). Manual activation stays possible and is
+     * the manager's call — this gate only stops the process manager from doing it silently.
+     */
+    public boolean autoActivationAllowed() {
+        return legalForm != LegalForm.INSTYTUCJONALNY || notarialDeclarationAttached;
     }
 
     /**

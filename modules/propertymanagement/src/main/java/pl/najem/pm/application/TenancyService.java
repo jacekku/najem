@@ -20,10 +20,12 @@ public class TenancyService {
 
     private final EventStore store;
     private final JdbcTemplate jdbc;
+    private final ProcessDueStore due;
 
-    public TenancyService(EventStore store, JdbcTemplate jdbc) {
+    public TenancyService(EventStore store, JdbcTemplate jdbc, ProcessDueStore due) {
         this.store = store;
         this.jdbc = jdbc;
+        this.due = due;
     }
 
     /**
@@ -47,6 +49,7 @@ public class TenancyService {
         var events = Tenancy.reserve(scoped);
         store.append(scoped.tenancyId(), "Tenancy", 0, events, List.of());
         insertProjection(scoped);
+        due.arm(TenancyStartProcess.KIND, scoped.tenancyId(), scoped.startDate());
         return new Reservation(scoped.tenancyId(), Tenancy.from(events).warnings().messages());
     }
 
@@ -67,6 +70,7 @@ public class TenancyService {
         var unitStream = store.load(tenancy.unitId());
         store.append(tenancy.unitId(), "Unit", unitStream.version(),
             Unit.from(unitStream.events()).releaseTenancyPeriod(tenancyId), List.of());
+        due.disarm(TenancyStartProcess.KIND, tenancyId);
         jdbc.update("update pm_tenancy set state = 'CANCELLED' where tenancy_id = ?", tenancyId);
     }
 
@@ -103,7 +107,8 @@ public class TenancyService {
                 breakdown == null ? null : breakdown.mediaAdvance(),
                 tenancy.legalForm().wireName(), tenancy.depositAmount(),
                 tenancy.paymentReference())));
-        jdbc.update("update pm_tenancy set state = 'ACTIVE' where tenancy_id = ?", tenancyId);
+        jdbc.update("update pm_tenancy set state = 'ACTIVE', activated_on = ? where tenancy_id = ?",
+            on, tenancyId);
     }
 
     private void insertProjection(ReserveTenancy c) {
