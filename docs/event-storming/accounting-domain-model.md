@@ -1,6 +1,6 @@
 # NAJEM — Accounting Domain Model
 
-**v1.0** — compiled from the Accounting event-storming session of 2026-08-03.
+**v1.1** — compiled from the Accounting event-storming session of 2026-08-03; amended 2026-08-04 (§2 account identity).
 Raw record: `session-2026-08-03-accounting.md` · Working research: `research/accounting-synthesis.md` (+ 4 underlying reports) · Companion: `property-management-domain-model.md` (v1.1).
 
 ---
@@ -26,7 +26,14 @@ The Accounting context answers one question reliably: **"did the tenant pay?"** 
 
 ## 2. Chart of Accounts
 
-One CoA; dimensions live in a **separate jsonb table** linked per account (`tenancyId`, `ownerId`, `component`, `bankSourceId`, `purpose`, `debtorOwnerId`, …). The "ledgers" are filtered projections.
+One CoA per workspace; dimensions live in a **separate jsonb table** linked per account (`tenancyId`, `ownerId`, `component`, `bankSourceId`, `purpose`, `debtorOwnerId`, …). The "ledgers" are filtered projections.
+
+**Account identity is `(workspace_id, account_code)` — human ruling, 2026-08-04.** Every account in every group is workspace-keyed: the primary key, every foreign key that references an account, and every uniqueness constraint carry `workspace_id`. `account_code` is unique *within* a workspace and deliberately not globally — two agencies both having a `SUSPENSE` or a `TENANCY-FUNDS` account is the normal case, not a collision. Consequences that follow and are not optional:
+- **A posting may never span workspaces.** The Σ Dr = Σ Cr check at transaction construction is joined by a same-workspace check on every leg; a transaction touching two workspaces is rejected at construction, not detected later by a report.
+- **Account lookup takes the workspace explicitly.** No `findByCode(code)` overload exists — the seam that makes a cross-workspace posting possible is an account resolved without one.
+- **The trust equation is per workspace.** Bank balance vs application balance is computed and alarmed within a workspace; a global figure that nets two agencies' books against each other would hide exactly the discrepancy the alarm exists to surface.
+
+Rationale: workspace = agency = the hard multi-tenancy boundary. An account is where money is *stated to be*, so an account reachable without a workspace is a route to one agency's balance appearing in another's books — and a wrong balance reads as an accounting error, never as a tenancy breach.
 
 | Group | Side | Content |
 |---|---|---|
