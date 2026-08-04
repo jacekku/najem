@@ -30,6 +30,15 @@ STALE_AFTER=1200   # 20 minutes, in seconds — how long a HOLDER may hold a bui
 POLL=${NAJEM_TESTQ_POLL:-3}
 WAITER_STALE=${NAJEM_TESTQ_WAITER_STALE:-60}
 
+# A waiter proves it is alive once per POLL, so a threshold below that declares live
+# waiters dead and evicts them — silently, and preferentially the slowest poller.
+# Refuse rather than run: the whole point of this file is that two agents must not
+# hold the slot at once, and pruning a live waiter is one way to arrange it.
+if [ "$WAITER_STALE" -le $((POLL * 2)) ]; then
+  echo "testq: WAITER_STALE ($WAITER_STALE) must exceed twice POLL ($POLL)" >&2
+  exit 2
+fi
+
 [ -f "$QUEUE" ] || { echo "testq: no queue file at $QUEUE" >&2; exit 1; }
 
 # Serialise edits to the queue file itself. Held for milliseconds — this is not the
@@ -77,6 +86,17 @@ now() { date +%s; }
 entry() { printf '%s@%s@%s@%s' "$1" "$2" "$(now)" "${3:-}"; }
 field() { printf '%s' "$1" | cut -d@ -f"$2"; }
 
+# Drop waiters that have stopped proving they are alive. Called from the fast path as
+# well as the loop, so a queue of nothing but corpses does not delay a fresh arrival.
+prune_dead_waiters() { # -> echoes the surviving list
+  local w
+  w=$(waiting)
+  [ -n "$w" ] || { printf ''; return; }
+  printf '%s' "$w" | tr '|' '\n' \
+    | awk -F@ -v now="$(now)" -v max=$WAITER_STALE 'now - $3 <= max' \
+    | paste -sd'|' -
+}
+
 cmd=${1:-show}
 
 case "$cmd" in
@@ -89,16 +109,27 @@ wait)
 
   lock
   h=$(holder)
-  if [ -z "$h" ]; then
-    set_state "$me" "$(waiting)"
+  w=$(prune_dead_waiters)
+  # A free slot is only yours if nobody is already queued for it. The fast path used
+  # to skip this, so a fresh arrival with a short loop could take a slot ahead of an
+  # agent who had been waiting for it — the queue then favoured whoever polled most
+  # often over whoever arrived first, which is precisely backwards for the agent on
+  # the critical path with the longest build. najem-reviewer, seq 350; the fairness
+  # najem-pm asked for at seq 344, safe to add now the dead-waiter sweep exists to
+  # stop it queueing behind a corpse forever.
+  if [ -z "$h" ] && [ -z "$w" ]; then
+    set_state "$me" ""
     unlock
     echo "GO — you hold the test slot ($agent @ $commit)"
     exit 0
   fi
-  w=$(waiting)
   set_state "$h" "${w:+$w|}$me"
   unlock
-  echo "queued behind $(field "$h" 1) — waiting…"
+  if [ -n "$h" ]; then
+    echo "queued behind $(field "$h" 1) — waiting…"
+  else
+    echo "slot is free but $(printf '%s' "$w" | tr '|' '\n' | wc -l | tr -d ' ') ahead of you — waiting…"
+  fi
 
   while :; do
     sleep $POLL
@@ -120,12 +151,8 @@ wait)
     # Refreshing the timestamp below is what makes this safe: a live waiter is never
     # stale, so the only entries this drops are ones no process is behind.
     w=$(waiting)
-    if [ -n "$w" ]; then
-      pruned=$(printf '%s' "$w" | tr '|' '\n' \
-        | awk -F@ -v now="$(now)" -v max=$WAITER_STALE 'now - $3 <= max' \
-        | paste -sd'|' -)
-      [ "$pruned" = "$w" ] || set_state "$h" "$pruned"
-    fi
+    pruned=$(prune_dead_waiters)
+    [ "$pruned" = "$w" ] || set_state "$h" "$pruned"
 
     # Prove this waiter is still alive. Without it the prune above would drop
     # anyone still queued after a minute, which on a contended night is every

@@ -1,43 +1,107 @@
 #!/usr/bin/env bash
-# najem-reviewer's seq 331: a waiter that dies at the head of the queue strands
-# everyone behind it, and both `show` and `evict` report the slot as free while
-# it happens. Reproduce it, then prove the fix recovers.
+# Checks for tools/testq. Every case here failed on some earlier version of the
+# script, which is the only reason to keep any of them.
 #
 #   usage: tools/testq-selftest [path/to/testq]
 set -uo pipefail
 
 TESTQ=${1:-$(dirname "$0")/testq}
-export NAJEM_TEST_QUEUE=$(mktemp -d)/queue.md
 export NAJEM_TESTQ_POLL=1
 export NAJEM_TESTQ_WAITER_STALE=6   # 60s in production; seconds here so the test is a test
-printf 'HOLDER: \nWAITING: \n' > "$NAJEM_TEST_QUEUE"
 
-"$TESTQ" wait alice deadbeef "build A" >/dev/null      # alice holds
+FAILED=0
+fresh_queue() {
+  export NAJEM_TEST_QUEUE=$(mktemp -d)/queue.md
+  printf 'HOLDER: \nWAITING: \n' > "$NAJEM_TEST_QUEUE"
+}
+report() { # name result
+  if [ "$2" = pass ]; then echo "  PASS  $1"; else echo "  FAIL  $1"; FAILED=1; fi
+}
 
-"$TESTQ" wait bob cafe1234 "build B" >/dev/null &      # bob queues behind her
-BOB=$!
+# --- 1. A waiter that dies must not strand everyone behind it -----------------
+# najem-reviewer, seq 331: only the waiting process removes its own entry, so a
+# `wait` killed with its session sat at the head of WAITING forever while `show`
+# and `evict` both reported the slot as free.
+echo "a dead waiter at the head of the queue"
+fresh_queue
+"$TESTQ" wait alice deadbeef "build A" >/dev/null
+"$TESTQ" wait bob cafe1234 "build B" >/dev/null & BOB=$!
 sleep 2
-"$TESTQ" wait carol c0ffee11 "build C" >/dev/null &    # carol queues behind bob
-CAROL=$!
+"$TESTQ" wait carol c0ffee11 "build C" >/dev/null & CAROL=$!
 sleep 2
-
-kill -9 $BOB 2>/dev/null                                # bob's session dies
-"$TESTQ" done alice >/dev/null                          # alice finishes cleanly
-
-echo "--- with the slot free and bob dead at the head of the queue:"
-"$TESTQ" show
-
-for _ in $(seq 1 15); do
-  sleep 1
-  kill -0 $CAROL 2>/dev/null || break
-done
-
-if kill -0 $CAROL 2>/dev/null; then
-  kill -9 $CAROL 2>/dev/null
-  echo "RESULT: DEADLOCK — carol never got the slot"; exit 1
-fi
-echo "--- after carol's wait returned:"
-"$TESTQ" show
+kill -9 $BOB 2>/dev/null
+"$TESTQ" done alice >/dev/null
+for _ in $(seq 1 15); do sleep 1; kill -0 $CAROL 2>/dev/null || break; done
+kill -0 $CAROL 2>/dev/null && kill -9 $CAROL 2>/dev/null
 grep -q '^HOLDER: carol@' "$NAJEM_TEST_QUEUE" \
-  && { echo "RESULT: RECOVERED — carol holds the slot"; exit 0; } \
-  || { echo "RESULT: carol exited but does not hold it"; exit 1; }
+  && report "carol gets the slot despite bob dying ahead of her" pass \
+  || report "carol gets the slot despite bob dying ahead of her" fail
+
+# --- 2. The queue file must survive a second waiter ---------------------------
+# set_state substituted through sed with "|" as the delimiter, and "|" is also
+# what joins waiters — so the state line corrupted as soon as anyone queued
+# behind anyone, which is every case the tool exists for.
+echo "two waiters at once"
+fresh_queue
+"$TESTQ" wait alice deadbeef "build A" >/dev/null
+"$TESTQ" wait bob cafe1234 "b|uild B" >/dev/null & B=$!
+sleep 2
+"$TESTQ" wait carol c0ffee11 "build & C" >/dev/null & C=$!
+sleep 2
+LINE=$(grep '^WAITING:' "$NAJEM_TEST_QUEUE")
+kill -9 $B $C 2>/dev/null
+case "$LINE" in
+  *bob@*carol@*) report "both waiters recorded, no corruption" pass ;;
+  *)             report "both waiters recorded, no corruption ($LINE)" fail ;;
+esac
+
+# --- 3. A free slot goes to whoever queued first ------------------------------
+# najem-reviewer, seq 350: the fast path took a free slot without consulting
+# WAITING, so a fresh arrival could overtake an agent already queued. That made
+# the queue favour whoever polled most often over whoever arrived first — worst
+# for the agent on the critical path with the longest build.
+#
+# The bug lives in the gap between the slot freeing and the queued agent's next
+# poll, so the test has to open that gap: a slow poller is exactly the agent this
+# was unfair to. With a 1s poll bob wins the race by luck and the check passes on
+# the broken version, which is how this test first fooled me.
+#
+# Every process in this case shares one POLL/WAITER_STALE pair. They must: a waiter
+# proves it is alive once per poll, so an agent reading a threshold shorter than
+# another agent's poll interval prunes a live waiter. testq now refuses to start in
+# that configuration, and finding out this way is why.
+echo "fairness when the slot frees up"
+fresh_queue
+export NAJEM_TESTQ_POLL=10 NAJEM_TESTQ_WAITER_STALE=60
+"$TESTQ" wait alice deadbeef "build A" >/dev/null
+"$TESTQ" wait bob cafe1234 "build B" >/dev/null & BOB=$!
+sleep 3
+"$TESTQ" done alice >/dev/null          # slot is free and bob is queued for it,
+sleep 2                                 # but bob will not poll for ~8s more
+"$TESTQ" wait dave d00dd00d "build D" >/dev/null & DAVE=$!
+sleep 2
+GRABBED=$(sed -n 's/^HOLDER: *//p' "$NAJEM_TEST_QUEUE" | cut -d@ -f1)
+sleep 12                                # long enough for bob's slow poll to come round
+SETTLED=$(sed -n 's/^HOLDER: *//p' "$NAJEM_TEST_QUEUE" | cut -d@ -f1)
+kill -9 $BOB $DAVE 2>/dev/null
+if [ "$GRABBED" = dave ]; then
+  report "dave does not overtake bob at the free slot — dave grabbed it" fail
+elif [ "$SETTLED" = bob ]; then
+  report "dave does not overtake bob at the free slot" pass
+else
+  report "dave does not overtake bob at the free slot — settled on '$SETTLED'" fail
+fi
+export NAJEM_TESTQ_POLL=1 NAJEM_TESTQ_WAITER_STALE=6
+
+# --- 4. Nobody may release somebody else's slot -------------------------------
+echo "releasing a slot you do not hold"
+fresh_queue
+"$TESTQ" wait alice deadbeef "build A" >/dev/null
+"$TESTQ" done mallory >/dev/null 2>&1
+grep -q '^HOLDER: alice@' "$NAJEM_TEST_QUEUE" \
+  && report "mallory cannot release alice's slot" pass \
+  || report "mallory cannot release alice's slot" fail
+
+echo
+[ $FAILED -eq 0 ] && { echo "testq: all checks passed"; exit 0; }
+echo "testq: FAILURES above"; exit 1
