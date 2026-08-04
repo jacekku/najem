@@ -5,6 +5,9 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import pl.najem.acc.application.ArrearsBoardQuery;
 
+import java.time.Clock;
+import java.time.LocalDate;
+
 /**
  * The arrears board: one colour per tenancy, decided by Accounting.
  *
@@ -20,14 +23,20 @@ import pl.najem.acc.application.ArrearsBoardQuery;
 public class ReportScreenController {
 
     private final ArrearsBoardQuery board;
+    private final TenancyLabels labels;
+    private final Clock clock;
 
-    public ReportScreenController(ArrearsBoardQuery board) {
+    public ReportScreenController(ArrearsBoardQuery board, TenancyLabels labels, Clock clock) {
         this.board = board;
+        this.labels = labels;
+        this.clock = clock;
     }
 
     @GetMapping("/report")
     public String report(WebWorkspace workspace, Model model) {
         model.addAttribute("rows", board.forWorkspace(workspace.workspaceId()));
+        model.addAttribute("labels",
+            labels.forWorkspace(workspace.workspaceId(), LocalDate.now(clock)));
         return "report";
     }
 }

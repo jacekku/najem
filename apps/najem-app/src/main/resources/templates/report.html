@@ -34,9 +34,18 @@
         </thead>
         <tbody>
         <tr th:each="row : ${rows}">
+            <!--/*
+              The unit and address, not the tenancy's identifier. The board is keyed by tenancy and
+              carries only a colour, so rendering it as given is a column of UUIDs — the same
+              "internals presented as facts" the agency screen was told to stop doing.
+
+              A tenancy the occupancy projection does not place falls back to its id rather than to
+              a blank or an invented name: the row is still true, and its colour is the point.
+            */-->
             <td>
                 <a th:href="@{/tenancies/{id}/timeline(id=${row.tenancyId()})}"
-                   th:text="${row.tenancyId()}">—</a>
+                   th:text="${labels.containsKey(row.tenancyId())
+                             ? labels.get(row.tenancyId()) : row.tenancyId()}">—</a>
             </td>
             <!--/*
               The colour comes from accounting verbatim. Whether a tenancy is in arrears, and how
