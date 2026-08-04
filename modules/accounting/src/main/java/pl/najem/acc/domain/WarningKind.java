@@ -6,7 +6,9 @@ public enum WarningKind {
     /** No contractual split, so the whole amount is rent — fully taxable and fully valorizable. */
     COLLAPSE_RULE("collapseRule"),
     /** The contractual breakdown does not sum to the agreed monthly total; the breakdown was charged. */
-    BREAKDOWN_MISMATCH("breakdownMismatch");
+    BREAKDOWN_MISMATCH("breakdownMismatch"),
+    /** An account that paid for one tenancy has been confirmed against another; tier 3 now follows the newer one. */
+    PAYER_ACCOUNT_REASSIGNED("payerAccountReassigned");
 
     private final String wireName;
 
