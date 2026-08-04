@@ -50,7 +50,6 @@ public class ReconciliationService {
         // What the manager confirms is which tenancy the money belongs to. Where it comes to rest
         // within that tenancy is the ledger's rule, not theirs: oldest due first, rent last.
         allocation.allocate(workspaceId, paymentId, tenancyId);
-        jdbc.update("update acc_tenancy_status set status = 'green' where tenancy_id = ?", tenancyId);
         rememberPayerAccount(workspaceId, paymentId, tenancyId);
     }
 

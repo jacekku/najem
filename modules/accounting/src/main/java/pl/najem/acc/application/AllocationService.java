@@ -80,7 +80,28 @@ public class AllocationService {
         }
         jdbc.update("update acc_payment set unallocated_amount = ?, status = ? where payment_id = ?",
             remaining, statusFor(allocated, remaining), paymentId);
+        refreshBoard(workspaceId, tenancyId);
         return allocated;
+    }
+
+    /**
+     * The board follows the charges, so it is updated by whoever settles them rather than by the
+     * path the money took to get here. Confirming a suggestion and allocating by hand are the same
+     * event as far as the tenant's standing is concerned.
+     *
+     * <p>Green means nothing is owed. A tenancy with an open charge left is still awaiting, which is
+     * a plainer answer than the unconditional green a confirmed match used to write — the colours
+     * proper are task 11's.
+     */
+    private void refreshBoard(UUID workspaceId, UUID tenancyId) {
+        Integer open = jdbc.queryForObject("""
+            select count(*) from acc_charge
+            where workspace_id = ? and tenancy_id = ? and active and amount > allocated_amount
+            """, Integer.class, workspaceId, tenancyId);
+        jdbc.update("""
+            insert into acc_tenancy_status(tenancy_id, workspace_id, status) values (?,?,?)
+            on conflict (tenancy_id) do update set status = excluded.status
+            """, tenancyId, workspaceId, open != null && open > 0 ? "awaiting" : "green");
     }
 
     /**
