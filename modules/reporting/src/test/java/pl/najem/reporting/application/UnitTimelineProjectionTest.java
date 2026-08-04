@@ -97,7 +97,7 @@ class UnitTimelineProjectionTest {
 
         occupancy = new UnitOccupancy(jdbc);
         runner = new ProjectionRunner(new EventFeed(jdbc, json), jdbc,
-            new DataSourceTransactionManager(dataSource),
+            new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
             List.of(new UnitTimelineProjection(jdbc)), 100);
         runner.runOnce();
     }

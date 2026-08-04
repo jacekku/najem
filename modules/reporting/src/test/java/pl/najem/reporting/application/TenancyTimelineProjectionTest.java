@@ -114,15 +114,9 @@ class TenancyTimelineProjectionTest {
         checklists.completeItem(tenancyId, "keys-handed-over");
         tenancies.activate(tenancyId, LocalDate.of(2026, 9, 1));
 
-        // ORDER IS A WORKAROUND, NOT A PREFERENCE — do not "tidy" the charge back above the rent
-        // change. PM and accounting share one event stream per tenancy (EventStore.load keys on
-        // stream_id and ignores stream_type), so any PM call that rehydrates a Tenancy AFTER
-        // accounting has charged it throws "Unknown event: ChargePosted". Reported on najem-build;
-        // restore the natural order once the platform fix lands.
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 10, 1), LocalDate.of(2027, 1, 1),
-            new MonthlyAmount(new BigDecimal("2600"), null), ChangeType.AGREED_CHANGE);
-        tenancies.applyRentChange(tenancyId, LocalDate.of(2027, 1, 1));
-
+        // Charging BEFORE the rent change is the natural order, and it is deliberately restored
+        // here: it used to throw, because PM and accounting shared one stream per tenancy until
+        // EventStore.load began filtering on stream_type. This ordering is the regression test.
         var reference = "NAJEM-TL-1";
         ledger.postRentCharge(workspace, tenancyId, new BigDecimal("2400"),
             LocalDate.of(2026, 10, 10), reference);
@@ -130,6 +124,10 @@ class TenancyTimelineProjectionTest {
             LocalDate.of(2026, 10, 9)));
         reconciliation.confirm(workspace, jdbc.queryForObject(
             "select payment_id from acc_payment where external_id = 'tl-ext-1'", UUID.class));
+
+        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 10, 1), LocalDate.of(2027, 1, 1),
+            new MonthlyAmount(new BigDecimal("2600"), null), ChangeType.AGREED_CHANGE);
+        tenancies.applyRentChange(tenancyId, LocalDate.of(2027, 1, 1));
 
         // A second agency's tenancy, so the workspace boundary is asserted rather than assumed.
         var otherWorkspace = UUID.randomUUID();
@@ -140,7 +138,7 @@ class TenancyTimelineProjectionTest {
 
         projection = new TenancyTimelineProjection(jdbc);
         runner = new ProjectionRunner(new EventFeed(jdbc, json), jdbc,
-            new DataSourceTransactionManager(dataSource),
+            new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
             List.of(projection), 100);
         runner.runOnce();
     }

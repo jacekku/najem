@@ -35,6 +35,17 @@ class TimelineTest {
 
     static ConfigurableApplicationContext app;
 
+    /**
+     * The dev workspace, sent explicitly on every write. Writes require the header — a write with
+     * none would land in a workspace nobody named — while reads keep the fallback, so the read
+     * assertions below deliberately send nothing.
+     */
+    private static final String DEV_WORKSPACE = "00000000-0000-0000-0000-000000000001";
+
+    private static io.restassured.specification.RequestSpecification writing() {
+        return given().header("X-Workspace-Id", DEV_WORKSPACE).contentType(ContentType.JSON);
+    }
+
     @BeforeAll
     static void start() {
         app = new SpringApplicationBuilder(NajemApplication.class).run(
@@ -57,21 +68,21 @@ class TimelineTest {
     @Test
     @SuppressWarnings("unchecked")
     void aTenancysStoryIsReadableBackFromReportingAfterTheRealFlow() {
-        String propertyId = given().contentType(ContentType.JSON)
+        String propertyId = writing()
             .body(Map.of("address", "ul. Testowa 9, Łódź",
                 "owners", List.of(Map.of("contactId", "11111111-1111-1111-1111-111111111111",
                     "sharePercent", 100))))
             .post("/api/pm/properties").then().statusCode(200).extract().path("propertyId");
 
-        String unitId = given().contentType(ContentType.JSON)
+        String unitId = writing()
             .body(Map.of("name", "m. 7", "baseRent", 2400))
             .post("/api/pm/properties/" + propertyId + "/units")
             .then().statusCode(200).extract().path("unitId");
 
-        given().contentType(ContentType.JSON).body(Map.of("reason", "ready to let"))
+        writing().body(Map.of("reason", "ready to let"))
             .post("/api/pm/units/" + unitId + "/open").then().statusCode(200);
 
-        String tenancyId = given().contentType(ContentType.JSON)
+        String tenancyId = writing()
             .body(Map.of("unitId", unitId,
                 "tenantContactIds", List.of("22222222-2222-2222-2222-222222222222"),
                 "startDate", "2026-09-01", "endDate", "2027-09-01",
@@ -79,7 +90,7 @@ class TimelineTest {
                 "paymentReference", "NAJEM-TL-E2E"))
             .post("/api/pm/tenancies").then().statusCode(200).extract().path("tenancyId");
 
-        given().contentType(ContentType.JSON).body(Map.of("activatedOn", "2026-09-01"))
+        writing().body(Map.of("activatedOn", "2026-09-01"))
             .post("/api/pm/tenancies/" + tenancyId + "/activate").then().statusCode(200);
 
         // The projector polls; wait for the story rather than assume it has caught up.

@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
@@ -28,18 +27,12 @@ public class ProjectionRunner {
     private final List<Projection> projections;
     private final int batchSize;
 
-    /**
-     * Takes the transaction MANAGER and builds its own template rather than requiring a
-     * {@code TransactionTemplate} bean: Boot does not auto-configure one, and having Reporting
-     * publish a bean of that type into a shared context would hand every other module a default
-     * they never asked for.
-     */
-    public ProjectionRunner(EventFeed feed, JdbcTemplate jdbc, PlatformTransactionManager transactions,
+    public ProjectionRunner(EventFeed feed, JdbcTemplate jdbc, TransactionTemplate tx,
                             List<Projection> projections,
                             @Value("${najem.reporting.batch-size:500}") int batchSize) {
         this.feed = feed;
         this.jdbc = jdbc;
-        this.tx = new TransactionTemplate(transactions);
+        this.tx = tx;
         this.projections = projections;
         this.batchSize = batchSize;
     }

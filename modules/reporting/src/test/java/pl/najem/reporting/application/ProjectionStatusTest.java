@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -39,7 +40,7 @@ class ProjectionStatusTest {
     }
 
     static JdbcTemplate jdbc;
-    static DataSourceTransactionManager txManager;
+    static TransactionTemplate tx;
     static EventFeed feed;
     static ProjectionStatus status;
 
@@ -70,7 +71,7 @@ class ProjectionStatusTest {
         Flyway.configure().dataSource(dataSource)
             .locations("classpath:db/eventstore", "classpath:db/reporting").load().migrate();
         jdbc = new JdbcTemplate(dataSource);
-        txManager = new DataSourceTransactionManager(dataSource);
+        tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         feed = new EventFeed(jdbc, productionMapper());
         status = new ProjectionStatus(jdbc);
     }
@@ -89,7 +90,7 @@ class ProjectionStatusTest {
     }
 
     private static ProjectionRunner runner() {
-        return new ProjectionRunner(feed, jdbc, txManager, List.of(new NoopProjection()), 100);
+        return new ProjectionRunner(feed, jdbc, tx, List.of(new NoopProjection()), 100);
     }
 
     @Test
