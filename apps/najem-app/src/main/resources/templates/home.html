@@ -11,18 +11,12 @@
       th:replace="~{layout :: page('Agencja — NAJEM', ~{::main})}">
 <body>
 <main>
-    <h1>Agencja</h1>
-
     <!--/*
-      The agency's NAME belongs here. It exists in `um_workspace.name` but no read model hands it
-      to a screen yet (asked at najem-build seq 333), so this shows the identifier and SAYS that it
-      is standing in for the name. Rendering a raw UUID under a label like "Identyfikator" — as this
-      screen did — presents an internal as though it were a fact about the agency.
+      The agency by NAME. The identifier that used to sit here under "Identyfikator" was an
+      internal presented as though it were a fact about the agency; `WorkspaceAccess.Membership`
+      carries the name as of f36c1bb and this renders it.
     */-->
-    <p class="provisional">
-        Nazwa agencji nie jest jeszcze podłączona. Tymczasowy identyfikator:
-        <code th:text="${workspaceId}">—</code>
-    </p>
+    <h1 th:text="${agency}">Agencja</h1>
 
     <p class="role">
         Twoja rola: <strong th:switch="${role}">

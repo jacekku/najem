@@ -19,7 +19,7 @@ public class WorkspaceScreenController {
 
     @GetMapping("/workspace")
     public String show(WebWorkspace workspace, Model model) {
-        model.addAttribute("workspaceId", workspace.workspaceId());
+        model.addAttribute("agency", workspace.name());
         model.addAttribute("role", workspace.role().name());
         return "home";
     }

@@ -62,9 +62,11 @@ class WebWorkspaceTest {
         String html = mvc.perform(get("/workspace"))
             .andReturn().getResponse().getContentAsString();
 
-        // "Administrator", not "ADMIN": the enum name is an internal and the screen shows the
-        // Polish word for the role (najem-build seq 309). The identifier stays for now only
-        // because no read model hands a screen the agency's NAME yet, and the screen says so.
-        assertThat(html).contains(workspaceId.toString()).contains("Administrator");
+        // The agency by NAME and the role as a Polish word. Both used to be internals on the
+        // screen — a raw UUID and an enum constant (najem-build seq 309). The name is also the
+        // better assertion: it is what a person reading the page would use to tell which agency
+        // they are in, so the test now checks the thing the screen actually promises.
+        assertThat(html).contains("Agencja Pierwsza").contains("Administrator")
+            .doesNotContain(workspaceId.toString());
     }
 }

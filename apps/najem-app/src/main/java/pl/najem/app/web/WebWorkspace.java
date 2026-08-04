@@ -17,7 +17,7 @@ import java.util.UUID;
  * which was a claim the code did not support: an unguarded sentence that reads as verified is the
  * exact failure this project keeps finding elsewhere (najem-build seq 194).
  */
-public record WebWorkspace(UUID workspaceId, UUID userId, UUID subject, Role role) {
+public record WebWorkspace(UUID workspaceId, String name, UUID userId, UUID subject, Role role) {
 
     public boolean isAdmin() {
         return role == Role.ADMIN;

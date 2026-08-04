@@ -68,6 +68,8 @@ main {
 .board .amount {
     text-align: right;
     font-variant-numeric: tabular-nums;
+    /* "2 500,00" broken across two lines reads as two numbers. */
+    white-space: nowrap;
 }
 
 /* Three states, not two — see units.html. The colours only differ; they never decide. */

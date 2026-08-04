@@ -72,7 +72,7 @@ public class WebWorkspaceResolver {
                     "this user belongs to several workspaces and none has been chosen");
             });
 
-        return new WebWorkspace(active.workspaceId(), userId, subject, active.role());
+        return new WebWorkspace(active.workspaceId(), active.name(), userId, subject, active.role());
     }
 
     private java.util.Optional<UUID> chosen(HttpSession session) {

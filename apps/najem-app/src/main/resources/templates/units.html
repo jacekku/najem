@@ -21,7 +21,15 @@
         <tbody>
         <tr th:each="unit : ${units}">
             <td th:text="${unit.name()}">—</td>
-            <td class="amount" th:text="${unit.baseRent()}">—</td>
+            <!--/*
+              The format is STATED, not inherited. Thymeleaf's default takes grouping and the
+              decimal separator from the server's locale, so the same code renders 2,500.00 on one
+              machine and 2 500,00 on another, with tests green either way when the test JVM shares
+              the locale (@najem-fakebank, najem-build seq 347). That is the systemDefaultZone()
+              defect wearing a template's clothes. Polish convention, matching the bank UI.
+            */-->
+            <td class="amount"
+                th:text="${#numbers.formatDecimal(unit.baseRent(), 1, 'WHITESPACE', 2, 'COMMA')}">—</td>
             <!--/*
               Three states, not two: a unit nobody has ever opened to rent (inventory) is not the
               same as one deliberately closed for renovation. Rendering them alike would tell a

@@ -101,6 +101,6 @@ class WebWorkspaceChoiceTest {
         String html = mvc.perform(get("/workspace").session(session))
             .andReturn().getResponse().getContentAsString();
 
-        assertThat(html).contains(second.toString()).doesNotContain(first.toString());
+        assertThat(html).contains("Agencja B").doesNotContain("Agencja A");
     }
 }
