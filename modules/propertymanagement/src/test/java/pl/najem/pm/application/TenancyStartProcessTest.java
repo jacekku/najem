@@ -14,6 +14,7 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.domain.ChecklistPhase;
+import pl.najem.pm.domain.DocType;
 import pl.najem.pm.domain.LegalForm;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.Owner;
@@ -126,6 +127,27 @@ class TenancyStartProcessTest {
 
         assertThat(stateOf(tenancyId)).isEqualTo(Tenancy.State.RESERVED);
         assertThat(activationsOf(tenancyId)).isZero();
+    }
+
+    /**
+     * The other half of the gate above, and until the declaration was attachable it was
+     * unreachable: no instytucjonalny tenancy could auto-activate at all. The timer stays armed
+     * rather than being cancelled, so attaching the document later lets the next sweep proceed.
+     */
+    @Test
+    void aninstytucjonalnyTenancyAutoActivatesOnceTheDeclarationIsAttached() {
+        var tenancyId = reserveStarting(LocalDate.of(2027, 12, 1), LegalForm.INSTYTUCJONALNY);
+
+        process.runDue(LocalDate.of(2027, 12, 1));
+        assertThat(stateOf(tenancyId)).isEqualTo(Tenancy.State.RESERVED);
+
+        tenancies.attachDocument(tenancyId, DocType.NOTARIAL_DECLARATION, "s3://docs/akt.pdf",
+            null, null, LocalDate.of(2027, 11, 20));
+
+        process.runDue(LocalDate.of(2027, 12, 2));
+
+        assertThat(stateOf(tenancyId)).isEqualTo(Tenancy.State.ACTIVE);
+        assertThat(activationsOf(tenancyId)).isEqualTo(1);
     }
 
     private static UUID reserveStarting(LocalDate startDate) {

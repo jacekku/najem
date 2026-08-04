@@ -9,6 +9,7 @@ import pl.najem.contracts.events.TenancyEndedEvent;
 import pl.najem.eventstore.EventStore;
 import pl.najem.pm.domain.ChangeType;
 import pl.najem.pm.domain.ChecklistPhase;
+import pl.najem.pm.domain.DocType;
 import pl.najem.pm.domain.EndTenancy;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.ReserveTenancy;
@@ -18,6 +19,7 @@ import pl.najem.pm.domain.Unit;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -257,6 +259,37 @@ public class TenancyService {
         store.append(tenancyId, "Tenancy", stream.version(), tenancy.flagEndingSoon(), List.of());
         due.markFired(EndOfTenancyProcess.KIND, tenancyId);
         return true;
+    }
+
+    public void addComment(UUID tenancyId, String text) {
+        var stream = store.load(tenancyId, "Tenancy");
+        store.append(tenancyId, "Tenancy", stream.version(),
+            Tenancy.from(stream.events()).addComment(text), List.of());
+    }
+
+    /**
+     * Returns the warnings the correction raised, because the one that matters — correcting a
+     * fact Accounting already holds — is only useful if it reaches the manager who made it.
+     */
+    public List<String> correctDetails(UUID tenancyId, Map<String, String> corrections) {
+        var stream = store.load(tenancyId, "Tenancy");
+        var events = Tenancy.from(stream.events()).correctDetails(corrections);
+        store.append(tenancyId, "Tenancy", stream.version(), events, List.of());
+
+        var corrected = Tenancy.from(store.load(tenancyId, "Tenancy").events());
+        jdbc.update("update pm_tenancy set payment_reference = ?, rent_day = ?, start_date = ?, "
+                + "monthly_total = ? where tenancy_id = ?",
+            corrected.paymentReference(), corrected.rentDay(), corrected.startDate(),
+            corrected.monthly().total(), tenancyId);
+        return corrected.warnings().messages();
+    }
+
+    public void attachDocument(UUID tenancyId, DocType type, String s3Ref, LocalDate validFrom,
+                               LocalDate validTo, LocalDate date) {
+        var stream = store.load(tenancyId, "Tenancy");
+        store.append(tenancyId, "Tenancy", stream.version(),
+            Tenancy.from(stream.events()).attachDocument(type, s3Ref, validFrom, validTo, date),
+            List.of());
     }
 
     /** One sweep item as its own unit of work — see {@link SweepResult}. */

@@ -3,6 +3,7 @@ package pl.najem.pm.domain;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Tenancy-stream events. First field is always workspaceId. */
@@ -76,5 +77,22 @@ public final class TenancyEvents {
 
     /** Prompt, not a transition: the tenancy is still active and may yet be renewed. */
     public record TenancyEndingSoon(UUID workspaceId, UUID tenancyId, LocalDate endDate) {
+    }
+
+    public record TenancyCommentAdded(UUID workspaceId, UUID tenancyId, String text) {
+    }
+
+    /**
+     * A correction states what a field should always have said. It is not a change of terms —
+     * that is a rent change or an annex — so it carries no effective date.
+     */
+    public record TenancyDetailsCorrected(UUID workspaceId, UUID tenancyId,
+                                          Map<String, String> corrections) {
+    }
+
+    /** validFrom/validTo are null for documents that do not expire, which is most of them. */
+    public record TenancyDocumentAttached(UUID workspaceId, UUID tenancyId, DocType docType,
+                                          String s3Ref, LocalDate validFrom, LocalDate validTo,
+                                          LocalDate date) {
     }
 }

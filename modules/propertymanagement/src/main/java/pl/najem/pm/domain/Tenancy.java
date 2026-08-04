@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,9 +45,24 @@ public class Tenancy {
     /** Set by TenancyDocumentAttached(NOTARIAL_DECLARATION) — Task 9. */
     private boolean notarialDeclarationAttached;
     private final Map<LocalDate, RentChange> pendingChanges = new LinkedHashMap<>();
+    private final List<String> comments = new ArrayList<>();
+    private LocalDate insuranceExpiry;
+    /** Fields corrected after Accounting was told about them — see warnings(). */
+    private final Set<String> correctedAfterPublication = new LinkedHashSet<>();
     /** Set by the standing termination notice; a later notice replaces it. */
     private LocalDate noticeEffectiveDate;
     private boolean endingSoon;
+
+    /**
+     * What a correction may touch. Deliberately short: everything else is either a change of
+     * terms (which has its own event and its own effective date) or immutable identity.
+     */
+    private static final Set<String> CORRECTABLE =
+        Set.of("paymentReference", "rentDay", "startDate", "monthlyTotal");
+
+    /** Correctable fields Accounting was already told about at activation. */
+    private static final Set<String> PUBLISHED_TO_ACCOUNTING =
+        Set.of("paymentReference", "monthlyTotal");
 
     private Tenancy() {
     }
@@ -119,6 +135,44 @@ public class Tenancy {
      */
     public boolean autoActivationAllowed() {
         return legalForm != LegalForm.INSTYTUCJONALNY || notarialDeclarationAttached;
+    }
+
+    public List<Object> addComment(String text) {
+        return List.of(new TenancyEvents.TenancyCommentAdded(workspaceId, id, text));
+    }
+
+    /**
+     * Fixing what a field should always have said — a typo in a payment reference, a start date
+     * entered a week out. Not a change of terms: that is a rent change or an annex.
+     *
+     * <p>An unknown key is rejected rather than ignored, for the same reason a mistyped checklist
+     * key is: a correction that silently corrects nothing looks exactly like one that worked.
+     */
+    public List<Object> correctDetails(Map<String, String> corrections) {
+        corrections.keySet().stream()
+            .filter(key -> !CORRECTABLE.contains(key))
+            .findFirst()
+            .ifPresent(key -> {
+                throw new IllegalArgumentException("Cannot correct '" + key + "' on tenancy " + id
+                    + " — correctable fields are " + CORRECTABLE);
+            });
+        return List.of(new TenancyEvents.TenancyDetailsCorrected(workspaceId, id,
+            Map.copyOf(corrections)));
+    }
+
+    public List<Object> attachDocument(DocType type, String s3Ref, LocalDate validFrom,
+                                       LocalDate validTo, LocalDate date) {
+        return List.of(new TenancyEvents.TenancyDocumentAttached(workspaceId, id, type, s3Ref,
+            validFrom, validTo, date));
+    }
+
+    /** The latest policy's expiry — a renewal supersedes the policy it replaces. */
+    public Optional<LocalDate> insuranceExpiry() {
+        return Optional.ofNullable(insuranceExpiry);
+    }
+
+    public List<String> comments() {
+        return List.copyOf(comments);
     }
 
     public List<Object> scheduleRentChange(LocalDate decidedOn, LocalDate effectiveFrom,
@@ -224,6 +278,10 @@ public class Tenancy {
             .filter(change -> change.decidedOn().plusMonths(3).isAfter(change.effectiveFrom()))
             .forEach(change -> warnings.add("Unilateral increase effective "
                 + change.effectiveFrom() + " gives less than 3 months notice (art. 8a/9)"));
+        // PM cannot fix this alone — it needs a contract record — so it must not pass silently.
+        correctedAfterPublication.forEach(field -> warnings.add(
+            "Corrected " + field + " after Accounting was told the old value at activation; "
+                + "their ledger still holds it"));
         if (endDate != null && startDate.plusYears(10).isBefore(endDate)) {
             warnings.add("Fixed term longer than 10 years");
         }
@@ -272,11 +330,38 @@ public class Tenancy {
                 monthly = e.monthly();
                 pendingChanges.remove(e.effectiveFrom());
             }
+            case TenancyEvents.TenancyCommentAdded e -> comments.add(e.text());
+            case TenancyEvents.TenancyDetailsCorrected e -> applyCorrections(e.corrections());
+            case TenancyEvents.TenancyDocumentAttached e -> {
+                if (e.docType() == DocType.NOTARIAL_DECLARATION) {
+                    notarialDeclarationAttached = true;
+                }
+                if (e.docType() == DocType.INSURANCE_POLICY && e.validTo() != null) {
+                    insuranceExpiry = e.validTo();
+                }
+            }
             case TenancyEvents.TerminationNoticeGiven e -> noticeEffectiveDate = e.effectiveDate();
             case TenancyEvents.TenancyEndingSoon e -> endingSoon = true;
             case TenancyEvents.TenancyEnded e -> state = State.ENDED;
             default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
         }
+    }
+
+    private void applyCorrections(Map<String, String> corrections) {
+        corrections.forEach((key, value) -> {
+            switch (key) {
+                case "paymentReference" -> paymentReference = value;
+                case "rentDay" -> rentDay = Integer.parseInt(value);
+                case "startDate" -> startDate = LocalDate.parse(value);
+                case "monthlyTotal" -> monthly = new MonthlyAmount(new BigDecimal(value),
+                    monthly.breakdown());
+                default -> throw new IllegalArgumentException("Uncorrectable field: " + key);
+            }
+            // ACTIVE, not "has ever been active": before activation nothing was published.
+            if (state == State.ACTIVE && PUBLISHED_TO_ACCOUNTING.contains(key)) {
+                correctedAfterPublication.add(key);
+            }
+        });
     }
 
     public State state() {

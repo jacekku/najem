@@ -43,7 +43,10 @@ public class PmEventTypes {
             TenancyEvents.RentChangeApplied.class,
             TenancyEvents.TerminationNoticeGiven.class,
             TenancyEvents.TenancyEndingSoon.class,
-            TenancyEvents.TenancyEnded.class);
+            TenancyEvents.TenancyEnded.class,
+            TenancyEvents.TenancyCommentAdded.class,
+            TenancyEvents.TenancyDetailsCorrected.class,
+            TenancyEvents.TenancyDocumentAttached.class);
     }
 
     public static void register(EventTypeRegistry registry) {

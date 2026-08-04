@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.ChangeType;
+import pl.najem.pm.domain.DocType;
 import pl.najem.pm.domain.EndReason;
 import pl.najem.pm.domain.EndTenancy;
 import pl.najem.pm.domain.LegalForm;
@@ -46,6 +47,11 @@ public class TenancyController {
 
     public record EndRequest(LocalDate endDate, LocalDate vacateDate, String reasonType,
                              String comment, Boolean backToMarket) {}
+
+    public record CommentRequest(String text) {}
+
+    public record DocumentRequest(String docType, String s3Ref, LocalDate validFrom,
+                                  LocalDate validTo, LocalDate date) {}
 
     /** Default rent day, per the domain model's stated assumption (hotspot #3). */
     private static final int DEFAULT_RENT_DAY = 10;
@@ -115,6 +121,28 @@ public class TenancyController {
             // Absent means "not back to market": reopening a unit is an explicit decision, and
             // a missing field must not silently advertise a flat the manager said nothing about.
             Boolean.TRUE.equals(request.backToMarket())));
+    }
+
+    @PostMapping("/{tenancyId}/comments")
+    public void addComment(@PathVariable UUID tenancyId, @RequestBody CommentRequest request) {
+        tenancies.addComment(tenancyId, request.text());
+    }
+
+    @PostMapping("/{tenancyId}/corrections")
+    public Map<String, Object> correctDetails(@PathVariable UUID tenancyId,
+                                              @RequestBody Map<String, String> corrections) {
+        return Map.of("warnings", tenancies.correctDetails(tenancyId, corrections));
+    }
+
+    @PostMapping("/{tenancyId}/documents")
+    public void attachDocument(@PathVariable UUID tenancyId, @RequestBody DocumentRequest request) {
+        tenancies.attachDocument(tenancyId, docTypeOf(request.docType()), request.s3Ref(),
+            request.validFrom(), request.validTo(), request.date());
+    }
+
+    private static DocType docTypeOf(String wireName) {
+        return wireName == null ? DocType.OTHER
+            : DocType.valueOf(wireName.toUpperCase().replace('-', '_'));
     }
 
     private static EndReason endReasonOf(String wireName) {
