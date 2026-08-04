@@ -57,9 +57,18 @@ public class WebWorkspaceResolver {
                 // client-influenced input, not a credential, and membership can be revoked between
                 // one request and the next.
                 .orElseThrow(() -> new AccessDeniedException("not a member of the chosen workspace")))
-            // forSubject orders by joined_on, so "the first" is the earliest joined rather than
-            // whichever row the database happened to return. Deterministic until 4b's switcher.
-            .orElseGet(() -> memberships.getFirst());
+            .orElseGet(() -> {
+                // Exactly one membership is not a choice, so acting in it is unambiguous.
+                if (memberships.size() == 1) {
+                    return memberships.getFirst();
+                }
+                // Several, and nobody has said which. Picking one would be a default deciding
+                // WHOSE data a request acts on — roadmap rule 7 forbids exactly that, and a
+                // misdirected write is sticky because uniqueness is per workspace. The switcher
+                // (plan task 4b) is what supplies the answer; until then this is a refusal.
+                throw new AccessDeniedException(
+                    "this user belongs to several workspaces and none has been chosen");
+            });
 
         return new WebWorkspace(active.workspaceId(), userId, subject, active.role());
     }
