@@ -43,10 +43,6 @@ class PackagedConfigTest {
      * key cannot be fixed and leave its excuse behind.
      */
     private static final Set<String> KNOWN_UNFIXED = new LinkedHashSet<>(List.of(
-        "najem.keycloak.base-url",        // najem-frontend, with the SecurityConfig fail-closed work
-        "najem.keycloak.realm",           // najem-frontend
-        "najem.keycloak.admin-username",  // najem-frontend
-        "najem.keycloak.admin-password",  // najem-frontend
         "spring.datasource.url",          // unowned as of seq 240 — raised by najem-reviewer
         "spring.datasource.username",     // unowned
         "spring.datasource.password"      // unowned

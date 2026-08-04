@@ -10,15 +10,19 @@ spring:
     # the only way a module dropping off the classpath is distinguishable from one that is wired.
     fail-on-missing-locations: true
 
-najem:
-  # najem.bank.* is deliberately absent. base-url and iban name an environment, and iban in
-  # particular answers "whose money is this?" — a packaged value answers it with one agency's
-  # account for every workspace in the system. najem.bank.fake.enabled is absent for the same
-  # reason: without it there is no BankStatementPort and the application refuses to start, which
-  # is the loud version of what used to be a clean start that reconciled nothing.
-  # Supply all three per deployment. PackagedConfigTest fails if any of them returns here.
-  keycloak:
-    base-url: "http://localhost:8180"
-    realm: "najem"
-    admin-username: "admin"
-    admin-password: "admin"
+# There is deliberately no najem.* block. Both halves were removed for the same reason under
+# roadmap rule 7, by two agents who arrived at it independently:
+#
+# najem.bank.* — base-url and iban name an environment, and iban in particular answers "whose
+# money is this?" A packaged value answers it with one agency's account for every workspace in the
+# system. najem.bank.fake.enabled is absent for the same reason: without it there is no
+# BankStatementPort and the application refuses to start, which is the loud version of what used
+# to be a clean start that reconciled nothing.
+#
+# najem.keycloak.* — admin-password shipped as "admin", so a deployment that forgot to override it
+# did not fail: it ran with a guessable credential against the identity provider that owns every
+# account. Naming a base-url now requires realm, admin-username and admin-password too, or the
+# application refuses to start. Setting none of them is still fine and still means local runs get
+# a port that refuses to provision rather than one that invents accounts.
+#
+# Supply each per deployment. The packaged-config guard tests fail if any of them returns here.
