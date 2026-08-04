@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import pl.najem.contracts.events.IntegrationEventHandler;
 import pl.najem.contracts.events.TenancyActivatedEvent;
+import pl.najem.contracts.events.WorkspaceCreatedEvent;
 import pl.najem.eventstore.EventStore;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -20,6 +21,7 @@ public class PlatformConfig {
     EventTypeRegistry eventTypeRegistry() {
         EventTypeRegistry registry = new EventTypeRegistry();
         registry.register(TenancyActivatedEvent.class);
+        registry.register(WorkspaceCreatedEvent.class);
         return registry;
     }
 
