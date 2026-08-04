@@ -41,8 +41,18 @@ the app still starts; it just reconciles against nothing.
   --najem.security.permit-all=true \
   --najem.bank.fake.enabled=true \
   --najem.bank.base-url=http://localhost:8081 \
-  --najem.bank.iban=PL61109010140000071219812874"
+  --najem.bootstrap.operator-subject=$(uuidgen | tr 'A-Z' 'a-z')"
 ```
+
+There is no longer a `--najem.bank.iban`. Each agency registers its own account
+(`PUT /api/acc/workspace-account`), because a deployment-wide IBAN answered
+"whose money is this?" with a setting rather than with the data — one agency's
+transfers would have been reconciled into another's books.
+
+`--najem.bootstrap.operator-subject` is what lets you create the first agency:
+until somebody belongs to one, nobody can make one. Any UUID will do for local
+play, and the same one must be passed to `tools/seed-demo.sh` as
+`NAJEM_OPERATOR_SUBJECT`.
 
 `--najem.security.permit-all=true` is the explicit opt-out of authentication,
 for local play only. Omit it and the app refuses to start rather than silently
@@ -77,17 +87,38 @@ The home page is server-rendered Thymeleaf with htmx served from the app itself
 open http://localhost:8080/
 ```
 
+### Get some data in it first
+
+An empty system shows empty screens. `tools/seed-demo.sh` builds a demo agency
+entirely through the public API — three properties, seven units, four tenancies,
+and four bank transfers ingested through the real reconciliation path, one at
+each tier of the ladder: a clean match, an underpayment, a mangled reference and
+one with no reference at all. Nothing writes a projection directly, so the
+colours on the arrears board were computed by the code you are looking at.
+
+```sh
+NAJEM_OPERATOR_SUBJECT=<the same uuid you started the app with> ./tools/seed-demo.sh
+```
+
+It prints the agency id. **Put that in `X-Workspace-Id` for every call below.**
+
+To start over, **drop and recreate the database** (below) rather than emptying
+`events` — the projections outlive a truncated event table, and the stale rows
+collide with the new agency in ways that surface several steps later. FakeBank
+keeps its scenarios in memory with no reset, so restart it too.
+
 `GET /workspace` returns **403** until your subject belongs to a workspace.
 That is the seam working, not a bug: an ambiguous or absent workspace resolves
 to denied rather than to a guess.
 
 ### A round trip through the API
 
-Every write needs `X-Workspace-Id`. Any UUID acts as a workspace for now; the
-check that the *caller* is entitled to it is the next piece of work.
+Every call needs `X-Workspace-Id`, reads as well as writes. Any UUID is accepted
+as a workspace; the check that the *caller* is entitled to it is the next piece
+of work.
 
 ```sh
-W=00000000-0000-4000-8000-000000000001
+W=<the agency id seed-demo.sh printed>
 
 P=$(curl -s -X POST http://localhost:8080/api/pm/properties \
   -H "Content-Type: application/json" -H "X-Workspace-Id: $W" \
@@ -128,7 +159,11 @@ breath as the write that feeds it and you will legitimately see the old answer.
   Nothing yet checks that the caller is entitled to that workspace — the seam
   exists (`WorkspaceCaller`) and the web layer uses it, but the REST APIs above
   still trust the header. Treat the API as unauthenticated.
-- **Screens.** Only the scaffold, the home page and the workspace page render.
-  Reconciliation, arrears and the unit board are API-only so far.
-- **Reads still fall back** to a default workspace in a few places where writes
-  no longer do.
+- **Screens.** Being built now. Until they land, the boards below are API-only —
+  the data is real and computed, it just has no page yet.
+- **A second agency cannot register a bank account** if another already holds
+  that IBAN. The refusal is correct — an account belongs to one agency — but it
+  arrives as a 500 carrying a raw Postgres constraint error, and the symptom
+  then surfaces three steps later as "this workspace has no bank account".
+- **`marketState` reads `inventory` for let units too.** Use the presence of
+  `currentTenancyId` to tell let from vacant until that vocabulary is settled.
