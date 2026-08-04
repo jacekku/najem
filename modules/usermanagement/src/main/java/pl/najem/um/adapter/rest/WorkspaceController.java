@@ -12,6 +12,7 @@ import pl.najem.um.application.WorkspaceAccess;
 import pl.najem.um.application.WorkspaceCaller;
 import pl.najem.um.application.WorkspaceService;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -27,20 +28,22 @@ public class WorkspaceController {
     private final WorkspaceAccess access;
     private final CurrentUser currentUser;
     private final WorkspaceCaller caller;
+    private final Clock clock;
 
     public WorkspaceController(WorkspaceService workspaces, WorkspaceAccess access,
-                               CurrentUser currentUser, WorkspaceCaller caller) {
+                               CurrentUser currentUser, WorkspaceCaller caller, Clock clock) {
         this.workspaces = workspaces;
         this.access = access;
         this.currentUser = currentUser;
         this.caller = caller;
+        this.clock = clock;
     }
 
     /** The caller becomes the new workspace's first ADMIN — see WorkspaceService.create. */
     @PostMapping("/workspaces")
     public Map<String, UUID> create(@RequestBody CreateRequest request, @AuthenticationPrincipal Jwt jwt) {
         UUID creator = caller.resolveWithoutWorkspace(jwt);
-        return Map.of("workspaceId", workspaces.create(request.name(), creator, LocalDate.now()));
+        return Map.of("workspaceId", workspaces.create(request.name(), creator, LocalDate.now(clock)));
     }
 
     @GetMapping("/me")

@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -23,15 +24,18 @@ public class PlatformOperator {
 
     private final UserService users;
     private final UUID subject;
+    private final Clock clock;
 
-    public PlatformOperator(UserService users, @Value("${najem.bootstrap.operator-subject}") String subject) {
+    public PlatformOperator(UserService users, @Value("${najem.bootstrap.operator-subject}") String subject,
+                            Clock clock) {
         this.users = users;
         this.subject = UUID.fromString(subject);
+        this.clock = clock;
     }
 
     /** Registers the operator on first use; idempotent, so restarts do not create duplicates. */
     public UUID userId() {
-        return users.findBySubject(subject).orElseGet(() -> users.register(subject, LocalDate.now()));
+        return users.findBySubject(subject).orElseGet(() -> users.register(subject, LocalDate.now(clock)));
     }
 
     public UUID subject() {

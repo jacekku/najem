@@ -14,6 +14,7 @@ import pl.najem.um.application.InvitationService;
 import pl.najem.um.application.WorkspaceCaller;
 import pl.najem.um.domain.Role;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
@@ -28,12 +29,14 @@ public class InvitationController {
     private final InvitationService invitations;
     private final CurrentUser currentUser;
     private final WorkspaceCaller caller;
+    private final Clock clock;
 
     public InvitationController(InvitationService invitations, CurrentUser currentUser,
-                                WorkspaceCaller caller) {
+                                WorkspaceCaller caller, Clock clock) {
         this.invitations = invitations;
         this.currentUser = currentUser;
         this.caller = caller;
+        this.clock = clock;
     }
 
     @PostMapping("/workspaces/{workspaceId}/invitations")
@@ -42,7 +45,7 @@ public class InvitationController {
                                       @AuthenticationPrincipal Jwt jwt) {
         UUID invitedBy = caller.resolve(jwt, workspaceId, Role.ADMIN);
         var issued = invitations.invite(workspaceId, request.email(), request.role(), invitedBy,
-            LocalDate.now(), request.expiresOn());
+            LocalDate.now(clock), request.expiresOn());
         return Map.of("invitationId", issued.invitationId(), "token", issued.token());
     }
 
@@ -50,13 +53,13 @@ public class InvitationController {
     public ResponseEntity<Void> revoke(@PathVariable UUID workspaceId, @PathVariable UUID invitationId,
                                        @AuthenticationPrincipal Jwt jwt) {
         caller.resolve(jwt, workspaceId, Role.ADMIN);
-        invitations.revoke(workspaceId, invitationId, LocalDate.now());
+        invitations.revoke(workspaceId, invitationId, LocalDate.now(clock));
         return ResponseEntity.noContent().build();
     }
 
     /** Public by design: the invitation token is the credential, and the invitee has no account yet. */
     @PostMapping("/invitations/accept")
     public Map<String, UUID> accept(@RequestBody AcceptRequest request) {
-        return Map.of("userId", invitations.accept(request.token(), LocalDate.now()));
+        return Map.of("userId", invitations.accept(request.token(), LocalDate.now(clock)));
     }
 }

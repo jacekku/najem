@@ -13,6 +13,7 @@ import pl.najem.um.application.MembershipService;
 import pl.najem.um.application.WorkspaceCaller;
 import pl.najem.um.domain.Role;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -24,10 +25,12 @@ public class MemberController {
 
     private final MembershipService memberships;
     private final WorkspaceCaller caller;
+    private final Clock clock;
 
-    public MemberController(MembershipService memberships, WorkspaceCaller caller) {
+    public MemberController(MembershipService memberships, WorkspaceCaller caller, Clock clock) {
         this.memberships = memberships;
         this.caller = caller;
+        this.clock = clock;
     }
 
     @PutMapping("/{userId}")
@@ -35,7 +38,7 @@ public class MemberController {
                                            @RequestBody RoleRequest request,
                                            @AuthenticationPrincipal Jwt jwt) {
         caller.resolve(jwt, workspaceId, Role.ADMIN);
-        memberships.changeRole(workspaceId, userId, request.role(), LocalDate.now());
+        memberships.changeRole(workspaceId, userId, request.role(), LocalDate.now(clock));
         return ResponseEntity.noContent().build();
     }
 
@@ -43,7 +46,7 @@ public class MemberController {
     public ResponseEntity<Void> remove(@PathVariable UUID workspaceId, @PathVariable UUID userId,
                                        @AuthenticationPrincipal Jwt jwt) {
         caller.resolve(jwt, workspaceId, Role.ADMIN);
-        memberships.remove(workspaceId, userId, LocalDate.now());
+        memberships.remove(workspaceId, userId, LocalDate.now(clock));
         return ResponseEntity.noContent().build();
     }
 }
