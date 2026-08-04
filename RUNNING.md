@@ -165,5 +165,6 @@ breath as the write that feeds it and you will legitimately see the old answer.
   that IBAN. The refusal is correct — an account belongs to one agency — but it
   arrives as a 500 carrying a raw Postgres constraint error, and the symptom
   then surfaces three steps later as "this workspace has no bank account".
-- **`marketState` reads `inventory` for let units too.** Use the presence of
-  `currentTenancyId` to tell let from vacant until that vocabulary is settled.
+`marketState` is not an occupancy state — it says how a unit is being marketed,
+and a let unit is legitimately still `inventory`. Whether a unit is let is
+`currentTenancyId`. Two questions, two fields; don't merge them.
