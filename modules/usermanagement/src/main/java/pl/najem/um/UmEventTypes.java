@@ -2,6 +2,9 @@ package pl.najem.um;
 
 import org.springframework.stereotype.Component;
 import pl.najem.eventstore.EventTypeRegistry;
+import pl.najem.um.domain.InvitationAccepted;
+import pl.najem.um.domain.InvitationRevoked;
+import pl.najem.um.domain.MemberInvited;
 import pl.najem.um.domain.MemberRemoved;
 import pl.najem.um.domain.MemberRoleChanged;
 import pl.najem.um.domain.UserLinkedToContact;
@@ -23,5 +26,8 @@ public class UmEventTypes {
         registry.register(UserLinkedToContact.class);
         registry.register(MemberRoleChanged.class);
         registry.register(MemberRemoved.class);
+        registry.register(MemberInvited.class);
+        registry.register(InvitationRevoked.class);
+        registry.register(InvitationAccepted.class);
     }
 }
