@@ -1,7 +1,6 @@
 package pl.najem.pm.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -42,7 +41,7 @@ class PortfolioServiceTest {
         jdbc = new JdbcTemplate(dataSource);
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
-        store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
+        store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         service = new PortfolioService(store, jdbc);
     }
 

@@ -53,4 +53,28 @@ public final class TenancyEvents {
     public record RentChangeApplied(UUID workspaceId, UUID tenancyId, LocalDate effectiveFrom,
                                     MonthlyAmount monthly, ChangeType type) {
     }
+
+    /**
+     * Somebody has given notice. This does not end the tenancy — it moves the date on which it
+     * will end, which is what the ending-soon timer re-arms against. {@code ground} is free text
+     * because the statutory grounds are a compliance question, not a PM one.
+     */
+    public record TerminationNoticeGiven(UUID workspaceId, UUID tenancyId, String ground,
+                                         LocalDate noticeDate, LocalDate effectiveDate,
+                                         String noticeDocRef) {
+    }
+
+    /**
+     * Flat rather than wrapping the EndTenancy command. A command and an event have different
+     * lifecycles: adding a field to the command would silently change the shape of every event
+     * already stored. HandoverProtocol is embedded because it is a value object, not a command.
+     */
+    public record TenancyEnded(UUID workspaceId, UUID tenancyId, LocalDate endDate,
+                               LocalDate vacateDate, EndReason reasonType, String comment,
+                               boolean backToMarket) {
+    }
+
+    /** Prompt, not a transition: the tenancy is still active and may yet be renewed. */
+    public record TenancyEndingSoon(UUID workspaceId, UUID tenancyId, LocalDate endDate) {
+    }
 }

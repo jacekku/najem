@@ -2,6 +2,7 @@ package pl.najem.pm.application;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.najem.contracts.events.MoveOutProtocolRecordedEvent;
 import pl.najem.eventstore.EventStore;
 import pl.najem.pm.domain.ChecklistPhase;
 import pl.najem.pm.domain.HandoverProtocol;
@@ -33,9 +34,21 @@ public class ChecklistService {
             Tenancy.from(stream.events()).completeChecklistItem(key), List.of());
     }
 
+    /**
+     * Only the move-out protocol crosses the boundary. The move-in one is PM's own record of the
+     * flat's condition; the move-out one carries the readings Accounting trues media up against
+     * and the date that, with the vacate date, fixes their deposit-settlement deadline.
+     */
     public void recordHandover(UUID tenancyId, HandoverProtocol protocol) {
         var stream = store.load(tenancyId);
+        var tenancy = Tenancy.from(stream.events());
         store.append(tenancyId, "Tenancy", stream.version(),
-            Tenancy.from(stream.events()).recordHandoverProtocol(protocol), List.of());
+            tenancy.recordHandoverProtocol(protocol),
+            protocol.type() != ChecklistPhase.END_OF_TENANCY ? List.of()
+                : List.of(new MoveOutProtocolRecordedEvent(tenancy.workspaceId(), tenancyId,
+                    protocol.date(), protocol.meterReadings().stream()
+                        .map(r -> new pl.najem.contracts.events.MeterReading(
+                            r.meterId(), r.utility(), r.reading()))
+                        .toList())));
     }
 }

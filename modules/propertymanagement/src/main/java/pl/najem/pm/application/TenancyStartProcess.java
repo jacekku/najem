@@ -2,13 +2,11 @@ package pl.najem.pm.application;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-import pl.najem.eventstore.EventStore;
-import pl.najem.pm.domain.ChecklistPhase;
-import pl.najem.pm.domain.Tenancy;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -25,40 +23,47 @@ public class TenancyStartProcess {
 
     private final ProcessDueStore due;
     private final TenancyService tenancies;
-    private final EventStore store;
     private final Clock clock;
 
-    public TenancyStartProcess(ProcessDueStore due, TenancyService tenancies,
-                               EventStore store, Clock clock) {
+    public TenancyStartProcess(ProcessDueStore due, TenancyService tenancies, Clock clock) {
         this.due = due;
         this.tenancies = tenancies;
-        this.store = store;
         this.clock = clock;
     }
 
+    /**
+     * Rethrows so a failed subject reaches the scheduler's error handler and gets logged. The
+     * throw costs nothing already done: every subject that succeeded committed in its own
+     * transaction before this point. Silence here is the failure mode this whole shape exists
+     * to avoid — a sweep that quietly does nothing, every minute, forever.
+     */
     @Scheduled(fixedDelay = 60_000)
     public void sweep() {
-        runDue(LocalDate.now(clock));
+        var result = runDue(LocalDate.now(clock));
+        if (!result.clean()) {
+            throw new IllegalStateException(
+                "%s sweep could not process %s".formatted(KIND, result.failed()));
+        }
     }
 
-    /** Separate from {@link #sweep()} so tests drive the date instead of the wall clock. */
-    @Transactional
-    public int runDue(LocalDate on) {
+    /**
+     * Separate from {@link #sweep()} so tests drive the date instead of the wall clock.
+     *
+     * <p>Deliberately NOT {@code @Transactional} — see {@link SweepResult}. Each tenancy is its
+     * own unit of work, so one unprocessable tenancy costs exactly that tenancy.
+     */
+    public SweepResult runDue(LocalDate on) {
         int activated = 0;
+        List<UUID> failed = new ArrayList<>();
         for (UUID tenancyId : due.due(KIND, on)) {
-            var tenancy = Tenancy.from(store.load(tenancyId).events());
-            if (tenancy.state() != Tenancy.State.RESERVED) {
-                due.disarm(KIND, tenancyId);
-                continue;
+            try {
+                if (tenancies.activateIfDue(tenancyId)) {
+                    activated++;
+                }
+            } catch (RuntimeException ex) {
+                failed.add(tenancyId);
             }
-            if (!tenancy.checklistComplete(ChecklistPhase.PRE_ACTIVATION)
-                    || !tenancy.autoActivationAllowed()) {
-                continue;   // stays armed; the manager is still being prompted
-            }
-            tenancies.activate(tenancyId, tenancy.startDate());
-            due.markFired(KIND, tenancyId);
-            activated++;
         }
-        return activated;
+        return new SweepResult(activated, List.copyOf(failed));
     }
 }

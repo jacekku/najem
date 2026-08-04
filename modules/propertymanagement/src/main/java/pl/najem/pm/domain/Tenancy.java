@@ -44,6 +44,9 @@ public class Tenancy {
     /** Set by TenancyDocumentAttached(NOTARIAL_DECLARATION) — Task 9. */
     private boolean notarialDeclarationAttached;
     private final Map<LocalDate, RentChange> pendingChanges = new LinkedHashMap<>();
+    /** Set by the standing termination notice; a later notice replaces it. */
+    private LocalDate noticeEffectiveDate;
+    private boolean endingSoon;
 
     private Tenancy() {
     }
@@ -139,6 +142,52 @@ public class Tenancy {
             change.monthly(), change.type()));
     }
 
+    /**
+     * Notice moves the end date; it does not end the tenancy. A later notice supersedes an
+     * earlier one — parties renegotiate, and the last word is the one that stands.
+     */
+    public List<Object> giveTerminationNotice(String ground, LocalDate noticeDate,
+                                              LocalDate effectiveDate, String noticeDocRef) {
+        if (state != State.ACTIVE && state != State.RESERVED) {
+            throw new IllegalStateException(
+                "Notice can only be given on a live tenancy (state: " + state + ")");
+        }
+        return List.of(new TenancyEvents.TerminationNoticeGiven(workspaceId, id, ground,
+            noticeDate, effectiveDate, noticeDocRef));
+    }
+
+    /**
+     * The date the tenancy is currently expected to stop: the standing notice's effective date
+     * when there is one, otherwise the agreed term end. Null for an indefinite tenancy nobody
+     * has given notice on — there genuinely is no end date, and the ending-soon process reads
+     * that as nothing to arm rather than as an error.
+     */
+    public LocalDate effectiveEndDate() {
+        return noticeEffectiveDate != null ? noticeEffectiveDate : endDate;
+    }
+
+    /**
+     * Ending is allowed from RESERVED so a mistaken reservation can be annulled without first
+     * being activated. Everything else about the ending is the manager's call — PM records the
+     * reason, it does not adjudicate it.
+     */
+    public List<Object> end(EndTenancy c) {
+        if (state != State.ACTIVE && state != State.RESERVED) {
+            throw new IllegalStateException(
+                "Only a live tenancy can be ended (state: " + state + ")");
+        }
+        return List.of(new TenancyEvents.TenancyEnded(workspaceId, id, c.endDate(),
+            c.vacateDate(), c.reason(), c.comment(), c.backToMarket()));
+    }
+
+    public List<Object> flagEndingSoon() {
+        return List.of(new TenancyEvents.TenancyEndingSoon(workspaceId, id, effectiveEndDate()));
+    }
+
+    public boolean endingSoon() {
+        return endingSoon;
+    }
+
     public Optional<RentChange> pendingRentChange(LocalDate effectiveFrom) {
         return Optional.ofNullable(pendingChanges.get(effectiveFrom));
     }
@@ -223,6 +272,9 @@ public class Tenancy {
                 monthly = e.monthly();
                 pendingChanges.remove(e.effectiveFrom());
             }
+            case TenancyEvents.TerminationNoticeGiven e -> noticeEffectiveDate = e.effectiveDate();
+            case TenancyEvents.TenancyEndingSoon e -> endingSoon = true;
+            case TenancyEvents.TenancyEnded e -> state = State.ENDED;
             default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
         }
     }

@@ -2,7 +2,6 @@ package pl.najem.pm.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -54,11 +53,11 @@ class RentChangeProcessTest {
         PmEventTypes.register(registry);
         registry.register(TenancyActivatedEvent.class);
         registry.register(RentChangeAppliedEvent.class);
-        store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
+        store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         var due = new ProcessDueStore(jdbc);
         portfolio = new PortfolioService(store, jdbc);
         tenancies = new TenancyService(store, jdbc, due);
-        process = new RentChangeProcess(due, tenancies, store, Clock.systemDefaultZone());
+        process = new RentChangeProcess(due, tenancies, Clock.systemDefaultZone());
     }
 
     @Test

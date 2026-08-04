@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.ChangeType;
+import pl.najem.pm.domain.EndReason;
+import pl.najem.pm.domain.EndTenancy;
 import pl.najem.pm.domain.LegalForm;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.ReserveTenancy;
@@ -38,6 +40,12 @@ public class TenancyController {
     public record RentChangeRequest(LocalDate decidedOn, LocalDate effectiveFrom, String changeType,
                                     BigDecimal monthlyTotal, BigDecimal rent, BigDecimal adminFee,
                                     BigDecimal mediaAdvance) {}
+
+    public record NoticeRequest(String ground, LocalDate noticeDate, LocalDate effectiveDate,
+                                String noticeDocRef) {}
+
+    public record EndRequest(LocalDate endDate, LocalDate vacateDate, String reasonType,
+                             String comment, Boolean backToMarket) {}
 
     /** Default rent day, per the domain model's stated assumption (hotspot #3). */
     private static final int DEFAULT_RENT_DAY = 10;
@@ -91,6 +99,26 @@ public class TenancyController {
     public void cancelRentChange(@PathVariable UUID tenancyId,
                                  @PathVariable LocalDate effectiveFrom) {
         tenancies.cancelRentChange(tenancyId, effectiveFrom);
+    }
+
+    @PostMapping("/{tenancyId}/termination-notice")
+    public void giveTerminationNotice(@PathVariable UUID tenancyId,
+                                      @RequestBody NoticeRequest request) {
+        tenancies.giveTerminationNotice(tenancyId, request.ground(), request.noticeDate(),
+            request.effectiveDate(), request.noticeDocRef());
+    }
+
+    @PostMapping("/{tenancyId}/end")
+    public void end(@PathVariable UUID tenancyId, @RequestBody EndRequest request) {
+        tenancies.end(tenancyId, new EndTenancy(request.endDate(), request.vacateDate(),
+            endReasonOf(request.reasonType()), request.comment(),
+            // Absent means "not back to market": reopening a unit is an explicit decision, and
+            // a missing field must not silently advertise a flat the manager said nothing about.
+            Boolean.TRUE.equals(request.backToMarket())));
+    }
+
+    private static EndReason endReasonOf(String wireName) {
+        return EndReason.valueOf(wireName.toUpperCase().replace('-', '_'));
     }
 
     private static ReserveTenancy toCommand(ReserveRequest request) {

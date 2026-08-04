@@ -5,14 +5,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.contracts.events.RentChangeAppliedEvent;
 import pl.najem.contracts.events.TenancyActivatedEvent;
+import pl.najem.contracts.events.TenancyEndedEvent;
 import pl.najem.eventstore.EventStore;
 import pl.najem.pm.domain.ChangeType;
+import pl.najem.pm.domain.ChecklistPhase;
+import pl.najem.pm.domain.EndTenancy;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.ReserveTenancy;
 import pl.najem.pm.domain.Tenancy;
 import pl.najem.pm.domain.Unit;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -111,6 +115,7 @@ public class TenancyService {
                 tenancy.paymentReference())));
         jdbc.update("update pm_tenancy set state = 'ACTIVE', activated_on = ? where tenancy_id = ?",
             on, tenancyId);
+        armEndingSoon(tenancyId);
     }
 
     public void scheduleRentChange(UUID tenancyId, LocalDate decidedOn, LocalDate effectiveFrom,
@@ -169,6 +174,149 @@ public class TenancyService {
             breakdown == null ? null : breakdown.adminFee(),
             breakdown == null ? null : breakdown.mediaAdvance(),
             monthly.componentSplitInContract(), tenancyId);
+    }
+
+    /**
+     * Notice moves the end date, so the ending-soon prompt has to move with it — otherwise the
+     * manager is warned a month before a date that is no longer the date.
+     */
+    public void giveTerminationNotice(UUID tenancyId, String ground, LocalDate noticeDate,
+                                      LocalDate effectiveDate, String noticeDocRef) {
+        var stream = store.load(tenancyId);
+        var tenancy = Tenancy.from(stream.events());
+        store.append(tenancyId, "Tenancy", stream.version(),
+            tenancy.giveTerminationNotice(ground, noticeDate, effectiveDate, noticeDocRef),
+            List.of());
+        armEndingSoon(tenancyId);
+    }
+
+    /**
+     * Ends the tenancy and everything hanging off it, in one transaction: the unit's calendar is
+     * freed, the unit reopens if the manager said so, the settlement clock starts, and every
+     * timer still pointed at this tenancy is disarmed. A rent change armed for next month on a
+     * tenancy that ended yesterday would otherwise fire against an ended aggregate.
+     */
+    public void end(UUID tenancyId, EndTenancy command) {
+        var stream = store.load(tenancyId);
+        var tenancy = Tenancy.from(stream.events());
+
+        store.append(tenancyId, "Tenancy", stream.version(), tenancy.end(command),
+            List.of(new TenancyEndedEvent(tenancy.workspaceId(), tenancyId, tenancy.unitId(),
+                command.endDate(), command.vacateDate(), command.reason().wireName())));
+
+        // The calendar is freed whatever the manager decided about the market: the tenancy is
+        // over, so it must stop blocking a new one. Reopening to rent is the separate decision.
+        var unitStream = store.load(tenancy.unitId());
+        var unit = Unit.from(unitStream.events());
+        var unitEvents = new ArrayList<>(unit.releaseTenancyPeriod(tenancyId));
+        // backToMarket is answered either way, never left as whatever the unit happened to be.
+        // "Not back to market" has to mean the unit stops being advertised — otherwise a unit
+        // listed before the tenancy stays listed after a manager explicitly said it should not.
+        unitEvents.addAll(command.backToMarket()
+            ? unit.openToRent("tenancy ended")
+            : unit.closeToRent("tenancy ended, not returned to market"));
+        store.append(tenancy.unitId(), "Unit", unitStream.version(), unitEvents, List.of());
+
+        if (command.vacateDate() != null) {
+            due.arm(EndOfTenancyProcess.DEPOSIT_SETTLEMENT_KIND, tenancyId,
+                command.vacateDate().plusMonths(1));
+        }
+        due.disarm(TenancyStartProcess.KIND, tenancyId);
+        due.disarm(RentChangeProcess.KIND, tenancyId);
+        due.disarm(EndOfTenancyProcess.KIND, tenancyId);
+        jdbc.update("update pm_tenancy set state = 'ENDED' where tenancy_id = ?", tenancyId);
+    }
+
+    /**
+     * One sweep item as its own unit of work — see {@link SweepResult}. Returns false when the
+     * timer was armed against a tenancy that has since moved on, which is not a failure.
+     */
+    public boolean flagEndingSoonIfDue(UUID tenancyId, LocalDate on) {
+        var stream = store.load(tenancyId);
+        if (stream.events().isEmpty()) {
+            throw new IllegalStateException(
+                "Ending-soon timer armed against unknown tenancy " + tenancyId);
+        }
+        var tenancy = Tenancy.from(stream.events());
+        if (tenancy.state() != Tenancy.State.ACTIVE || tenancy.endingSoon()) {
+            due.disarm(EndOfTenancyProcess.KIND, tenancyId);
+            return false;
+        }
+        LocalDate end = tenancy.effectiveEndDate();
+        if (end == null) {
+            due.disarm(EndOfTenancyProcess.KIND, tenancyId);
+            return false;
+        }
+        if (end.minusMonths(1).isAfter(on)) {
+            // The end moved later — re-arm rather than warn about a date that changed.
+            due.arm(EndOfTenancyProcess.KIND, tenancyId, end.minusMonths(1));
+            return false;
+        }
+        store.append(tenancyId, "Tenancy", stream.version(), tenancy.flagEndingSoon(), List.of());
+        due.markFired(EndOfTenancyProcess.KIND, tenancyId);
+        return true;
+    }
+
+    /** One sweep item as its own unit of work — see {@link SweepResult}. */
+    public boolean applyDueRentChange(UUID tenancyId, LocalDate on) {
+        var stream = store.load(tenancyId);
+        if (stream.events().isEmpty()) {
+            throw new IllegalStateException(
+                "Rent-change timer armed against unknown tenancy " + tenancyId);
+        }
+        var next = Tenancy.from(stream.events()).nextPendingRentChange();
+        if (next.isEmpty()) {
+            due.disarm(RentChangeProcess.KIND, tenancyId);
+            return false;
+        }
+        var change = next.get();
+        if (change.effectiveFrom().minusDays(1).isAfter(on)) {
+            // The armed date moved later (the change was rescheduled) — re-arm, don't fire.
+            due.arm(RentChangeProcess.KIND, tenancyId, change.effectiveFrom().minusDays(1));
+            return false;
+        }
+        applyRentChange(tenancyId, change.effectiveFrom());
+
+        // A tenancy may have several changes queued; arm the next one rather than
+        // leaving it stranded behind a fired timer.
+        var later = Tenancy.from(store.load(tenancyId).events()).nextPendingRentChange();
+        if (later.isPresent()) {
+            due.arm(RentChangeProcess.KIND, tenancyId, later.get().effectiveFrom().minusDays(1));
+        } else {
+            due.markFired(RentChangeProcess.KIND, tenancyId);
+        }
+        return true;
+    }
+
+    /** One sweep item as its own unit of work — see {@link SweepResult}. */
+    public boolean activateIfDue(UUID tenancyId) {
+        var stream = store.load(tenancyId);
+        if (stream.events().isEmpty()) {
+            throw new IllegalStateException(
+                "Start timer armed against unknown tenancy " + tenancyId);
+        }
+        var tenancy = Tenancy.from(stream.events());
+        if (tenancy.state() != Tenancy.State.RESERVED) {
+            due.disarm(TenancyStartProcess.KIND, tenancyId);
+            return false;
+        }
+        if (!tenancy.checklistComplete(ChecklistPhase.PRE_ACTIVATION)
+                || !tenancy.autoActivationAllowed()) {
+            return false;   // stays armed; the manager is still being prompted
+        }
+        activate(tenancyId, tenancy.startDate());
+        due.markFired(TenancyStartProcess.KIND, tenancyId);
+        return true;
+    }
+
+    /** Armed at activation, and only when there is an end to warn about. */
+    void armEndingSoon(UUID tenancyId) {
+        LocalDate end = Tenancy.from(store.load(tenancyId).events()).effectiveEndDate();
+        if (end == null) {
+            due.disarm(EndOfTenancyProcess.KIND, tenancyId);
+        } else {
+            due.arm(EndOfTenancyProcess.KIND, tenancyId, end.minusMonths(1));
+        }
     }
 
     private void insertProjection(ReserveTenancy c) {
