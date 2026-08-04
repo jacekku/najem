@@ -17,7 +17,9 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,11 +43,16 @@ class LedgerServiceTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        service = new LedgerService(store, jdbc, new WarningService(jdbc));
+        // Fixed a month before the charge falls due, so the colour asserted below stays what it
+        // means rather than turning red once the wall clock passes September 2026.
+        service = new LedgerService(store, jdbc, new WarningService(jdbc), new BoardService(jdbc,
+            Clock.fixed(LocalDate.of(2026, 8, 1).atStartOfDay(ZoneId.systemDefault()).toInstant(),
+                ZoneId.systemDefault())));
     }
 
+    /** A charge posted before it falls due is not arrears — the board says yellow, not red. */
     @Test
-    void postsRentChargeWithProjectionAndAwaitingStatus() {
+    void postsRentChargeWithProjectionAndPutsTheTenancyOnTheBoard() {
         var tenancyId = UUID.randomUUID();
 
         var chargeId = service.postRentCharge(WorkspaceContext.DEV_WORKSPACE_ID, tenancyId, new BigDecimal("2500"),
@@ -58,6 +65,6 @@ class LedgerServiceTest {
             "select allocated from acc_charge where charge_id = ?", Boolean.class, chargeId)).isFalse();
         assertThat(jdbc.queryForObject(
             "select status from acc_tenancy_status where tenancy_id = ?", String.class, tenancyId))
-            .isEqualTo("awaiting");
+            .isEqualTo("yellow");
     }
 }

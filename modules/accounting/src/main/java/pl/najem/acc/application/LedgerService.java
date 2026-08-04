@@ -1,5 +1,6 @@
 package pl.najem.acc.application;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,6 +11,7 @@ import pl.najem.acc.domain.CreditNoteIssued;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,11 +25,20 @@ public class LedgerService {
     private final EventStore store;
     private final JdbcTemplate jdbc;
     private final WarningService warnings;
+    private final BoardService board;
 
-    public LedgerService(EventStore store, JdbcTemplate jdbc, WarningService warnings) {
+    @Autowired
+    public LedgerService(EventStore store, JdbcTemplate jdbc, WarningService warnings,
+                         BoardService board) {
         this.store = store;
         this.jdbc = jdbc;
         this.warnings = warnings;
+        this.board = board;
+    }
+
+    /** For tests and callers outside the container, which have no Clock bean to hand. */
+    public LedgerService(EventStore store, JdbcTemplate jdbc, WarningService warnings) {
+        this(store, jdbc, warnings, new BoardService(jdbc, Clock.systemDefaultZone()));
     }
 
     public UUID postRentCharge(UUID workspaceId, UUID tenancyId, BigDecimal amount, LocalDate dueDate,
@@ -52,6 +63,7 @@ public class LedgerService {
             insert into acc_charge(charge_id, workspace_id, tenancy_id, component, amount, due_date, payment_reference)
             values (?,?,?,?,?,?,?)
             """, chargeId, workspaceId, tenancyId, component.wireName(), amount, dueDate, paymentReference);
+        board.refresh(workspaceId, tenancyId);
         return chargeId;
     }
 
@@ -81,10 +93,7 @@ public class LedgerService {
                 """, chargeIds.get(i), workspaceId, tenancyId, lines.get(i).component().wireName(),
                 lines.get(i).amount(), dueDate, paymentReference);
         }
-        jdbc.update("""
-            insert into acc_tenancy_status(tenancy_id, workspace_id, status) values (?, ?, 'awaiting')
-            on conflict (tenancy_id) do update set status = 'awaiting'
-            """, tenancyId, workspaceId);
+        board.refresh(workspaceId, tenancyId);
         var raised = breakdown.warnings();
         warnings.raise(workspaceId, tenancyId, raised);
         return new PostedCharges(List.copyOf(chargeIds), raised);
@@ -107,6 +116,9 @@ public class LedgerService {
         jdbc.update("""
             update acc_charge set active = false where workspace_id = ? and charge_id = ?
             """, workspaceId, chargeId);
+        // A withdrawn charge is not an obligation, so it must stop colouring the board. Without this
+        // a tenancy whose only arrear was billed in error stays red until something else moves.
+        board.refresh(workspaceId, tenancyId);
     }
 
     /**

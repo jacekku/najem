@@ -95,7 +95,13 @@ class WalkingSkeletonTest {
             .body(Map.of("activatedOn", "2026-09-01"))
             .post("/api/pm/tenancies/" + tenancyId + "/activate").then().statusCode(200);
 
-        await().atMost(Duration.ofSeconds(10)).until(() -> "awaiting".equals(boardStatus(tenancyId)));
+        // The tenancy appears on the board owing its first month. Which colour that is depends on
+        // where the wall clock sits relative to the due date — yellow before it, red after — so the
+        // skeleton asserts what it actually cares about: the tenancy is on the board and not green.
+        await().atMost(Duration.ofSeconds(10)).until(() -> {
+            String status = boardStatus(tenancyId);
+            return status != null && !"green".equals(status);
+        });
 
         given().port(bankPort).contentType(ContentType.JSON)
             .body(Map.of("id", "tx-1", "amount", "2500", "title", "NAJEM/M1/2026",

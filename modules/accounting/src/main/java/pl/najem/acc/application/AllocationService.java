@@ -1,5 +1,6 @@
 package pl.najem.acc.application;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,6 +9,7 @@ import pl.najem.acc.domain.PaymentAllocated;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,10 +33,18 @@ public class AllocationService {
 
     private final EventStore store;
     private final JdbcTemplate jdbc;
+    private final BoardService board;
 
-    public AllocationService(EventStore store, JdbcTemplate jdbc) {
+    @Autowired
+    public AllocationService(EventStore store, JdbcTemplate jdbc, BoardService board) {
         this.store = store;
         this.jdbc = jdbc;
+        this.board = board;
+    }
+
+    /** For tests and callers outside the container, which have no Clock bean to hand. */
+    public AllocationService(EventStore store, JdbcTemplate jdbc) {
+        this(store, jdbc, new BoardService(jdbc, Clock.systemDefaultZone()));
     }
 
     /**
@@ -91,22 +101,11 @@ public class AllocationService {
      * path the money took to get here. Confirming a suggestion and allocating by hand are the same
      * event as far as the tenant's standing is concerned.
      *
-     * <p>Green means nothing is owed. A tenancy with an open charge left is still awaiting, which is
-     * a plainer answer than the unconditional green a confirmed match used to write — the colours
-     * proper are task 11's.
-     *
      * <p>Package-private so corrections can call it too: reversing allocations reopens charges, and
      * the board must be re-derived rather than assigned. Every writer of charges goes through here.
      */
     void refreshBoard(UUID workspaceId, UUID tenancyId) {
-        Integer open = jdbc.queryForObject("""
-            select count(*) from acc_charge
-            where workspace_id = ? and tenancy_id = ? and active and amount > allocated_amount
-            """, Integer.class, workspaceId, tenancyId);
-        jdbc.update("""
-            insert into acc_tenancy_status(tenancy_id, workspace_id, status) values (?,?,?)
-            on conflict (tenancy_id) do update set status = excluded.status
-            """, tenancyId, workspaceId, open != null && open > 0 ? "awaiting" : "green");
+        board.refresh(workspaceId, tenancyId);
     }
 
     /**

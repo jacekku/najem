@@ -18,7 +18,9 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -59,9 +61,13 @@ class ReversalTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
+        // The board colours are a function of today, so the clock is fixed a day past DUE. Left on
+        // the system clock these assertions would read green/yellow until 2027 and red after it.
+        var board = new BoardService(jdbc, Clock.fixed(
+            DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
+        ledger = new LedgerService(store, jdbc, new WarningService(jdbc), board);
         ingestion = new IngestionService(since -> List.of(), store, jdbc);
-        var allocation = new AllocationService(store, jdbc);
+        var allocation = new AllocationService(store, jdbc, board);
         suspense = new SuspenseService(store, jdbc);
         corrections = new CorrectionService(store, jdbc, allocation);
     }
@@ -101,7 +107,11 @@ class ReversalTest {
             .doesNotContain(paymentId);
     }
 
-    /** The board told the manager this tenancy was current. It is not, and it must say so again. */
+    /**
+     * The board told the manager this tenancy was current. It is not, and it must say so again —
+     * in the colour the reopened charge deserves, which past its due date is red rather than a
+     * neutral "something is pending".
+     */
     @Test
     void reversingTakesTheTenancyBackOffGreen() {
         var tenancyId = UUID.randomUUID();
@@ -111,7 +121,7 @@ class ReversalTest {
 
         corrections.reverse(WS, paymentId, "NSF");
 
-        assertThat(boardStatus(tenancyId)).isEqualTo("awaiting");
+        assertThat(boardStatus(tenancyId)).isEqualTo("red");
     }
 
     /** Reversing what the bank already took back twice would owe the tenant the money twice. */
