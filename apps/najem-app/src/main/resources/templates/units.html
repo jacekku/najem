@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Lokale — NAJEM', ~{::main})}">
+<body>
+<main>
+    <h1>Lokale</h1>
+
+    <p class="empty" th:if="${units.isEmpty()}">
+        Ta nieruchomość nie ma jeszcze żadnych lokali.
+    </p>
+
+    <table class="board" th:unless="${units.isEmpty()}">
+        <thead>
+        <tr>
+            <th>Lokal</th>
+            <th>Czynsz bazowy</th>
+            <th>Status</th>
+            <th>Najem</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="unit : ${units}">
+            <td th:text="${unit.name()}">—</td>
+            <td class="amount" th:text="${unit.baseRent()}">—</td>
+            <!--/*
+              Three states, not two: a unit nobody has ever opened to rent (inventory) is not the
+              same as one deliberately closed for renovation. Rendering them alike would tell a
+              manager work is under way on a flat that has simply never been listed.
+              The projection decides which; this only labels it.
+            */-->
+            <td>
+                <span class="state" th:classappend="'state--' + ${unit.marketState()}"
+                      th:switch="${unit.marketState()}">
+                    <span th:case="'open'">Do wynajęcia</span>
+                    <span th:case="'closed'">Wyłączony</span>
+                    <span th:case="'inventory'">Nieudostępniony</span>
+                    <span th:case="*" th:text="${unit.marketState()}">—</span>
+                </span>
+            </td>
+            <td>
+                <a th:if="${unit.currentTenancyId() != null}"
+                   th:href="@{/tenancies/{id}/timeline(id=${unit.currentTenancyId()})}">Najem bieżący</a>
+                <span th:if="${unit.currentTenancyId() == null}" class="vacant">Pustostan</span>
+                <a th:if="${unit.nextTenancyId() != null}" class="upcoming"
+                   th:href="@{/tenancies/{id}/timeline(id=${unit.nextTenancyId()})}">· nadchodzący</a>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</main>
+</body>
+</html>

@@ -1,12 +1,21 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Agencja — NAJEM', ~{::main})}">
 <body>
 <main>
-    <h1>NAJEM</h1>
-    <p>
-        Zarządzanie najmem. Ekrany pojawią się po zbudowaniu kontekstu przestrzeni roboczej.
-    </p>
+    <h1>Agencja</h1>
+    <dl class="facts">
+        <dt>Identyfikator</dt>
+        <dd th:text="${workspaceId}">—</dd>
+        <dt>Twoja rola</dt>
+        <dd th:text="${role}">—</dd>
+    </dl>
+
+    <nav class="entry">
+        <a th:href="@{/properties}">Nieruchomości</a>
+        <a th:href="@{/bank}">Bank</a>
+        <a th:href="@{/report}">Raport</a>
+    </nav>
 </main>
 </body>
 </html>

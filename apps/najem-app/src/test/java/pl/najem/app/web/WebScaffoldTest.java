@@ -20,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * reason the UI lives in the composition root (najem-build seq 130).
  */
 @SpringBootTest(properties = {
+    "najem.bootstrap.operator-subject=" + WebScaffoldTest.OPERATOR,
     "najem.security.permit-all=true",
     "najem.bank.fake.enabled=true",
     "najem.bank.base-url=http://localhost:8081",
@@ -28,12 +29,33 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Testcontainers
 class WebScaffoldTest {
 
+    static final String OPERATOR = "3f1d9c22-0000-4000-8000-000000000004";
+
     @Container
     @ServiceConnection
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired
     MockMvc mvc;
+    @Autowired
+    pl.najem.um.application.UserService users;
+    @Autowired
+    pl.najem.um.application.WorkspaceService workspaces;
+
+    /** "/" is the agency screen now, so it needs an agency to be the screen of. */
+    static boolean seeded;
+
+    @org.junit.jupiter.api.BeforeEach
+    void anAgency() {
+        if (seeded) {
+            return;
+        }
+        java.util.UUID operator = users.findBySubject(java.util.UUID.fromString(OPERATOR))
+            .orElseGet(() -> users.register(java.util.UUID.fromString(OPERATOR),
+                java.time.LocalDate.now()));
+        workspaces.create("Agencja Testowa", operator, java.time.LocalDate.now());
+        seeded = true;
+    }
 
     @Test
     void servesAnHtmlPageAtTheRoot() throws Exception {

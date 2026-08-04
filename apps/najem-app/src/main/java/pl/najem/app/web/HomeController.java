@@ -1,6 +1,7 @@
 package pl.najem.app.web;
 
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
 /**
@@ -16,7 +17,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 public class HomeController {
 
     @GetMapping("/")
-    public String home() {
+    public String home(WebWorkspace workspace, Model model) {
+        model.addAttribute("workspaceId", workspace.workspaceId());
+        model.addAttribute("role", workspace.role().name());
         return "home";
     }
 }
