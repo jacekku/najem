@@ -20,7 +20,15 @@ set -euo pipefail
 
 QUEUE="${NAJEM_TEST_QUEUE:-$HOME/.claude/shared/najem-test-queue.md}"
 LOCK="$QUEUE.lock"
-STALE_AFTER=1200   # 20 minutes, in seconds
+STALE_AFTER=1200   # 20 minutes, in seconds — how long a HOLDER may hold a build
+
+# A waiter is a different thing: it refreshes its own entry every POLL seconds while
+# it lives, so silence is a much stronger signal than it is for a holder, and the
+# threshold can be short. It only has to exceed the poll interval by enough that a
+# loaded machine cannot make a live waiter look dead.
+# Overridable only so the behaviour can be tested in seconds rather than minutes.
+POLL=${NAJEM_TESTQ_POLL:-3}
+WAITER_STALE=${NAJEM_TESTQ_WAITER_STALE:-60}
 
 [ -f "$QUEUE" ] || { echo "testq: no queue file at $QUEUE" >&2; exit 1; }
 
@@ -46,9 +54,19 @@ waiting() { sed -n 's/^WAITING: *//p' "$QUEUE" | head -1; }
 set_state() { # holder waiting
   local tmp
   tmp=$(mktemp)
+  # Substituted through awk variables, never interpolated into the program. sed was
+  # wrong here twice over: waiters are joined with "|", which was also the sed
+  # delimiter, so the queue corrupted the moment a SECOND agent queued — and any
+  # "&" or "\" in a command string would have been rewritten as replacement syntax.
+  # The values here are agent-supplied build commands; they are data, not program.
+  #
   # Rewrite through a temp file and move: a reader polling this file must never see
   # it half-written, and mv within one filesystem is atomic.
-  sed -e "s|^HOLDER:.*|HOLDER: $1|" -e "s|^WAITING:.*|WAITING: $2|" "$QUEUE" > "$tmp"
+  awk -v h="$1" -v w="$2" '
+    /^HOLDER:/  { print "HOLDER: " h;  next }
+    /^WAITING:/ { print "WAITING: " w; next }
+                { print }
+  ' "$QUEUE" > "$tmp"
   mv "$tmp" "$QUEUE"
 }
 
@@ -83,7 +101,7 @@ wait)
   echo "queued behind $(field "$h" 1) — waiting…"
 
   while :; do
-    sleep 3
+    sleep $POLL
     lock
     h=$(holder)
 
@@ -91,7 +109,33 @@ wait)
     if [ -n "$h" ] && [ $(( $(now) - $(field "$h" 3) )) -gt $STALE_AFTER ]; then
       echo "testq: evicting $(field "$h" 1), held for over 20 minutes" >&2
       h=""
+      set_state "" "$(waiting)"
     fi
+
+    # And prune waiters that have died, which is the failure the holder rule does
+    # not cover: only the waiting process removes its own entry, so a `wait` killed
+    # with the session leaves an entry nobody can clear, and every agent behind it
+    # blocks forever seeing head != me. Both testq show and testq evict report the
+    # slot as free while that happens, so the deadlock is invisible from outside.
+    # Refreshing the timestamp below is what makes this safe: a live waiter is never
+    # stale, so the only entries this drops are ones no process is behind.
+    w=$(waiting)
+    if [ -n "$w" ]; then
+      pruned=$(printf '%s' "$w" | tr '|' '\n' \
+        | awk -F@ -v now="$(now)" -v max=$WAITER_STALE 'now - $3 <= max' \
+        | paste -sd'|' -)
+      [ "$pruned" = "$w" ] || set_state "$h" "$pruned"
+    fi
+
+    # Prove this waiter is still alive. Without it the prune above would drop
+    # anyone still queued after a minute, which on a contended night is every
+    # agent behaving correctly.
+    me=$(entry "$agent" "$commit" "$what")
+    w=$(waiting)
+    refreshed=$(printf '%s' "$w" | tr '|' '\n' \
+      | awk -F@ -v a="$agent" -v me="$me" '$1 == a { print me; next } { print }' \
+      | paste -sd'|' -)
+    [ "$refreshed" = "$w" ] || set_state "$h" "$refreshed"
 
     if [ -z "$h" ]; then
       w=$(waiting)
@@ -132,9 +176,14 @@ show)
     printf 'holding  nobody — the slot is free\n'
   fi
   if [ -n "$w" ]; then
-    printf 'waiting  '
-    printf '%s ' $(printf '%s' "$w" | tr '|' '\n' | cut -d@ -f1)
-    printf '\n'
+    # Ages, not just names: a live waiter refreshes its timestamp every few seconds,
+    # so an age that keeps growing past a minute is a waiter whose process has died.
+    # Without this, a deadlocked queue and an idle one print the same thing.
+    printf '%s' "$w" | tr '|' '\n' | while IFS= read -r e; do
+      [ -n "$e" ] || continue
+      printf 'waiting  %s  %s  (last seen %ds ago)  %s\n' \
+        "$(field "$e" 1)" "$(field "$e" 2)" "$(( $(now) - $(field "$e" 3) ))" "$(field "$e" 4)"
+    done
   else
     printf 'waiting  nobody\n'
   fi

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# najem-reviewer's seq 331: a waiter that dies at the head of the queue strands
+# everyone behind it, and both `show` and `evict` report the slot as free while
+# it happens. Reproduce it, then prove the fix recovers.
+#
+#   usage: tools/testq-selftest [path/to/testq]
+set -uo pipefail
+
+TESTQ=${1:-$(dirname "$0")/testq}
+export NAJEM_TEST_QUEUE=$(mktemp -d)/queue.md
+export NAJEM_TESTQ_POLL=1
+export NAJEM_TESTQ_WAITER_STALE=6   # 60s in production; seconds here so the test is a test
+printf 'HOLDER: \nWAITING: \n' > "$NAJEM_TEST_QUEUE"
+
+"$TESTQ" wait alice deadbeef "build A" >/dev/null      # alice holds
+
+"$TESTQ" wait bob cafe1234 "build B" >/dev/null &      # bob queues behind her
+BOB=$!
+sleep 2
+"$TESTQ" wait carol c0ffee11 "build C" >/dev/null &    # carol queues behind bob
+CAROL=$!
+sleep 2
+
+kill -9 $BOB 2>/dev/null                                # bob's session dies
+"$TESTQ" done alice >/dev/null                          # alice finishes cleanly
+
+echo "--- with the slot free and bob dead at the head of the queue:"
+"$TESTQ" show
+
+for _ in $(seq 1 15); do
+  sleep 1
+  kill -0 $CAROL 2>/dev/null || break
+done
+
+if kill -0 $CAROL 2>/dev/null; then
+  kill -9 $CAROL 2>/dev/null
+  echo "RESULT: DEADLOCK — carol never got the slot"; exit 1
+fi
+echo "--- after carol's wait returned:"
+"$TESTQ" show
+grep -q '^HOLDER: carol@' "$NAJEM_TEST_QUEUE" \
+  && { echo "RESULT: RECOVERED — carol holds the slot"; exit 0; } \
+  || { echo "RESULT: carol exited but does not hold it"; exit 1; }
