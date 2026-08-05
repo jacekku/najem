@@ -173,6 +173,12 @@ A fast in-memory mirror (~4s) beside the Testcontainers suite (~2min), with a he
 when they disagree the database is right and the mirror is wrong. Worth writing in the file: the
 next person to hit a disagreement needs to know which to trust before they start debugging.
 
+*And the build says which tier it is running.* Every class that boots a container is
+`@Tag("integration")`, excluded by default and opted into with `-PintegrationTests` or `CI=true`.
+`./gradlew build` is ~45s and is the inner loop; `./gradlew build -PintegrationTests` is ~8min and
+is what a merge runs. The tag is a claim about cost, not about worth — nothing is skipped at a
+merge, and the slow tier is still the authority when the two disagree.
+
 ## Reporting
 
 **17. Enumerate behaviour changes explicitly — then have someone check the count.**

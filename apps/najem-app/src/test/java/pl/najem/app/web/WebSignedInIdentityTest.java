@@ -1,6 +1,7 @@
 package pl.najem.app.web;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -40,6 +41,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
     "najem.bank.base-url=http://localhost:8081"})
 @AutoConfigureMockMvc
 @Testcontainers
+@Tag("integration")
 class WebSignedInIdentityTest {
 
     /** The account every unauthenticated request falls back to, and the one nobody may become. */

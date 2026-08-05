@@ -1,5 +1,6 @@
 package pl.najem.app;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -19,6 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
     "najem.bank.iban=PL61109010140000071219812874",
     "najem.security.permit-all=true"})
 @Testcontainers
+@Tag("integration")
 class NajemApplicationTest {
 
     @Container

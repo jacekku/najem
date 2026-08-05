@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Tag("keycloak")
 @Testcontainers
+@Tag("integration")
 class KeycloakAdminAdapterTest {
 
     @Container

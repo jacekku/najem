@@ -5,6 +5,7 @@ import io.restassured.http.ContentType;
 import io.restassured.specification.RequestSpecification;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * market. Plus the one hard invariant, which is the only thing in this system that says no.
  */
 @Testcontainers
+@Tag("integration")
 class TenancyLifecycleTest {
 
     /** Writes name their workspace explicitly (rule 7); children inherit it from the property. */

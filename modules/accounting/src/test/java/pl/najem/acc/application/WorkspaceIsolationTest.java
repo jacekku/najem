@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * reference, and money from one must never be matched against the other's charges.
  */
 @Testcontainers
+@Tag("integration")
 class WorkspaceIsolationTest {
 
     private static final UUID AGENCY_A = UUID.fromString("00000000-0000-0000-0000-0000000000aa");

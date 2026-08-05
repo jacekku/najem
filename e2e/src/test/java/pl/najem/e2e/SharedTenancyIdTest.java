@@ -4,6 +4,7 @@ import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -30,6 +31,7 @@ import static org.awaitility.Awaitility.await;
  * catch it: each module's suite drives one module, and neither knows the other exists.
  */
 @Testcontainers
+@Tag("integration")
 class SharedTenancyIdTest {
 
     /**

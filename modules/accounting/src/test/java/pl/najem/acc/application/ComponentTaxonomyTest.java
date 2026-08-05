@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * not is collapsed into a single `rent` line — fully taxable and fully valorizable.
  */
 @Testcontainers
+@Tag("integration")
 class ComponentTaxonomyTest {
 
     private static final UUID WS = TestWorkspace.ID;

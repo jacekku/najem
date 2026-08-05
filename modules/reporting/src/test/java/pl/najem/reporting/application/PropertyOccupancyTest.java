@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -39,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * specific count being off by one rather than as a vague total mismatch.
  */
 @Testcontainers
+@Tag("integration")
 class PropertyOccupancyTest {
 
     @Container

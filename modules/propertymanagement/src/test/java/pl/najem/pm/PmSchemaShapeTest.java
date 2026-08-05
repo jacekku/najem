@@ -2,6 +2,7 @@ package pl.najem.pm;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -38,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * here, which predates the queries above them growing a workspace predicate.
  */
 @Testcontainers
+@Tag("integration")
 class PmSchemaShapeTest {
 
     @Container

@@ -2,6 +2,7 @@ package pl.najem.reporting;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code contacts/SchemaTest}.
  */
 @Testcontainers
+@Tag("integration")
 class ReportingWorkspaceScopingTest {
 
     @Container

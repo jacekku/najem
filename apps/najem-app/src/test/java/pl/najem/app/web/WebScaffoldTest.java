@@ -1,5 +1,6 @@
 package pl.najem.app.web;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -27,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "najem.bank.iban=PL61109010140000071219812874"})
 @AutoConfigureMockMvc
 @Testcontainers
+@Tag("integration")
 class WebScaffoldTest {
 
     static final String OPERATOR = "3f1d9c22-0000-4000-8000-000000000004";

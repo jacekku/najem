@@ -2,6 +2,7 @@ package pl.najem.pm.application;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * this proves it does what it claims when two agencies actually exist.
  */
 @Testcontainers
+@Tag("integration")
 class WorkspaceGuardTest {
 
     @Container

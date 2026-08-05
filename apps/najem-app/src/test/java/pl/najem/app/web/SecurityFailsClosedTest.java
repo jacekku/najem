@@ -1,5 +1,6 @@
 package pl.najem.app.web;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * when the context is assembled — a sliced test could not observe a refusal to start.
  */
 @Testcontainers
+@Tag("integration")
 class SecurityFailsClosedTest {
 
     @Container

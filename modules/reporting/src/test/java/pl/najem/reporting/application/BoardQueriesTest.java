@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -53,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * deliberately shared between them, which is what makes the scoping assertions non-vacuous.
  */
 @Testcontainers
+@Tag("integration")
 class BoardQueriesTest {
 
     @Container

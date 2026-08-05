@@ -5,8 +5,27 @@ subprojects {
     repositories { mavenCentral() }
     the<JavaPluginExtension>().toolchain.languageVersion.set(JavaLanguageVersion.of(21))
     tasks.withType<JavaCompile> { options.compilerArgs.add("-parameters") }
+    // Two tiers, and the tag is which one a test is in. Anything that boots a container is
+    // @Tag("integration"): minutes for the suite, against seconds for everything else. The fast
+    // tier is the inner loop while code is being changed; the slow tier is what a merge runs.
+    //   ./gradlew build                      -> integration skipped
+    //   ./gradlew build -PintegrationTests   -> included
+    //   CI=true ./gradlew build              -> included
+    //
+    // The keycloak tag is the same arrangement one notch further out — it pulls and boots a real
+    // identity provider — and opts in separately, so a run that wants the database suite does not
+    // silently get that one too.
     tasks.withType<Test> {
-        useJUnitPlatform()
+        val ci = System.getenv("CI") != null
+        val excluded = buildList {
+            if (!(project.hasProperty("integrationTests") || ci)) add("integration")
+            if (!(project.hasProperty("keycloakTests") || ci)) add("keycloak")
+        }
+        useJUnitPlatform {
+            if (excluded.isNotEmpty()) {
+                excludeTags(*excluded.toTypedArray())
+            }
+        }
         // colima ships Docker 29 (min API 1.40); docker-java defaults to 1.32
         systemProperty("api.version", "1.44")
     }

@@ -3,6 +3,7 @@ package pl.najem.e2e;
 import io.restassured.RestAssured;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -22,6 +23,7 @@ import static io.restassured.http.ContentType.JSON;
  * unauthenticated caller silently becoming a workspace ADMIN is the worst outcome available here.
  */
 @Testcontainers
+@Tag("integration")
 class BootstrapMissingTest {
 
     @Container

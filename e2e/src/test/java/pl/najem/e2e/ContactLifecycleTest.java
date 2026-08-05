@@ -4,6 +4,7 @@ import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code …0001}'s personal data and erasure worklist to a caller who named no agency.
  */
 @Testcontainers
+@Tag("integration")
 class ContactLifecycleTest {
 
     @Container
