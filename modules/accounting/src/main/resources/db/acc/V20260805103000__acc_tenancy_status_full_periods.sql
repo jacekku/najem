@@ -1,0 +1,12 @@
+-- How far the art. 11 clock has run, kept rather than discarded.
+--
+-- The board computed this number to decide between red and bright red and then threw it away, so
+-- the screen could say "the statutory clock is running" but never "for how long". Termination under
+-- art. 11 ust. 2 pkt 2 becomes available at three full periods; a colour meaning "one or more" is
+-- not something a manager can act on, and the difference between one period and three is the
+-- difference between a reminder and a notice.
+--
+-- Defaults to 0 because a row written before this column existed has no count, and 0 under-claims:
+-- it says the clock has not run rather than asserting a number nobody computed. The next refresh
+-- corrects it, and the wrong direction here would put a termination ground on a screen by default.
+alter table acc_tenancy_status add column full_periods_in_arrears integer not null default 0;

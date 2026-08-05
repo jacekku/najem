@@ -30,7 +30,11 @@ public class BoardController {
         return board.forWorkspace(workspaceId).stream()
             .map(row -> Map.<String, Object>of(
                 "tenancyId", row.tenancyId(),
-                "status", row.colour().wireName()))
+                "status", row.colour().wireName(),
+                // The colour says the art. 11 clock is running; this says how far it has run.
+                // Termination becomes available at three full periods, so a screen with only the
+                // colour can report that something is wrong but not what may lawfully be done.
+                "fullPeriodsInArrears", row.fullPeriodsInArrears()))
             .toList();
     }
 }

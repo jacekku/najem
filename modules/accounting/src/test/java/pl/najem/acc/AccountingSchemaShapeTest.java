@@ -130,6 +130,11 @@ class AccountingSchemaShapeTest {
         // An allocation is live until something reverses it; a reversal marks the row rather than
         // deleting it, because the ledger does not delete facts it has asserted.
         assertThat(defaultOf("acc_allocation", "reversed")).isEqualTo("false");
+
+        // A status row predating the counter has no count, and 0 says the art. 11 clock has not run
+        // rather than asserting a number nobody computed. The next refresh corrects it; the other
+        // direction would put a termination ground on a manager's screen by default.
+        assertThat(defaultOf("acc_tenancy_status", "full_periods_in_arrears")).isEqualTo("0");
     }
 
     private static List<String> actual(String sql) {
@@ -225,6 +230,7 @@ class AccountingSchemaShapeTest {
         "acc_suggestion.payment_id uuid not null",
         "acc_suggestion.tier integer not null default 1",
         "acc_suggestion.workspace_id uuid not null",
+        "acc_tenancy_status.full_periods_in_arrears integer not null default 0",
         "acc_tenancy_status.status text not null",
         "acc_tenancy_status.tenancy_id uuid not null",
         "acc_tenancy_status.workspace_id uuid not null",

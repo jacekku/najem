@@ -20,7 +20,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -118,6 +117,51 @@ class ArrearsBoardTest {
         assertThat(colourOn(tenancyId, JANUARY.plusDays(1))).isEqualTo(ArrearsColour.RED);
     }
 
+    /**
+     * A grosz is not a payment period.
+     *
+     * <p>Art. 11 ust. 2 pkt 2 speaks of <em>zwłoka</em> lasting at least three full payment periods.
+     * The delay is what must be full, not the non-payment: a tenant who pays one grosz against a
+     * 3000 zł czynsz is in delay for the whole period, because the obligation for that period was
+     * never discharged. Counting only periods where nothing at all arrived let a token transfer
+     * reset the statutory clock every month — and the tenant who does it is exactly the tenant the
+     * provision is about.
+     */
+    @Test
+    void aTokenPaymentDoesNotStopTheStatutoryClock() {
+        var tenancyId = charge("NAJEM/B10/2027", "3000", JANUARY);
+        chargeFor(tenancyId, "NAJEM/B10B/2027", "3000", FEBRUARY);
+        settlePartly(tenancyId, "0.01");
+
+        assertThat(colourOn(tenancyId, FEBRUARY.plusDays(1))).isEqualTo(ArrearsColour.BRIGHT_RED);
+    }
+
+    /**
+     * The colour says the clock is running; the count says how far it has run. Three full periods is
+     * where termination becomes available, and a manager cannot act on a colour that means "one or
+     * more" — so the number the colour was derived from is kept rather than thrown away.
+     */
+    @Test
+    void theBoardKeepsThePeriodCountItColouredFrom() {
+        var tenancyId = charge("NAJEM/B11/2027", "3000", JANUARY);
+        chargeFor(tenancyId, "NAJEM/B11B/2027", "3000", FEBRUARY);
+        chargeFor(tenancyId, "NAJEM/B11C/2027", "3000", MARCH);
+
+        assertThat(colourOn(tenancyId, MARCH.plusMonths(1).plusDays(1)))
+            .isEqualTo(ArrearsColour.BRIGHT_RED);
+        assertThat(fullPeriodsOn(tenancyId)).isEqualTo(3);
+    }
+
+    /** Nothing overdue means no periods to count, and the stored number has to say so. */
+    @Test
+    void aGreenTenancyCountsNoPeriods() {
+        var tenancyId = charge("NAJEM/B12/2027", "3000", JANUARY);
+        settle(tenancyId);
+
+        assertThat(colourOn(tenancyId, MARCH)).isEqualTo(ArrearsColour.GREEN);
+        assertThat(fullPeriodsOn(tenancyId)).isZero();
+    }
+
     /** A withdrawn charge is not an obligation, so it cannot colour a board. */
     @Test
     void aDeactivatedChargeDoesNotColourTheBoard() {
@@ -151,6 +195,12 @@ class ArrearsBoardTest {
             "select status from acc_tenancy_status where tenancy_id = ?", String.class, tenancyId));
     }
 
+    private static Integer fullPeriodsOn(UUID tenancyId) {
+        return jdbc.queryForObject(
+            "select full_periods_in_arrears from acc_tenancy_status where tenancy_id = ?",
+            Integer.class, tenancyId);
+    }
+
     private static UUID charge(String reference, String amount, LocalDate dueDate) {
         var tenancyId = UUID.randomUUID();
         chargeFor(tenancyId, reference, amount, dueDate);
@@ -174,8 +224,4 @@ class ArrearsBoardTest {
             """, new BigDecimal(amount), WS, tenancyId);
     }
 
-    static {
-        // Every colour assertion drives the real service; nothing here writes a status directly.
-        List.of();
-    }
 }

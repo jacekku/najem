@@ -25,8 +25,16 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class ArrearsBoardQuery {
 
-    /** One tenancy's standing. */
-    public record Row(UUID tenancyId, ArrearsColour colour) {}
+    /**
+     * One tenancy's standing.
+     *
+     * @param fullPeriodsInArrears whole payment periods the tenant has been in delay for. The colour
+     *                             says the art. 11 clock is running; this says how far it has run,
+     *                             and termination becomes available at three. A screen that renders
+     *                             the colour alone can tell a manager something is wrong but not
+     *                             what they are entitled to do about it.
+     */
+    public record Row(UUID tenancyId, ArrearsColour colour, int fullPeriodsInArrears) {}
 
     private final JdbcTemplate jdbc;
 
@@ -36,9 +44,10 @@ public class ArrearsBoardQuery {
 
     public List<Row> forWorkspace(UUID workspaceId) {
         return jdbc.query("""
-            select tenancy_id, status from acc_tenancy_status
+            select tenancy_id, status, full_periods_in_arrears from acc_tenancy_status
             where workspace_id = ? order by tenancy_id
-            """, (rs, i) -> new Row(rs.getObject(1, UUID.class), ArrearsColour.of(rs.getString(2))),
+            """, (rs, i) -> new Row(rs.getObject(1, UUID.class), ArrearsColour.of(rs.getString(2)),
+                rs.getInt(3)),
             workspaceId);
     }
 }
