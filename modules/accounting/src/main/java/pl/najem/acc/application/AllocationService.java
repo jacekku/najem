@@ -1,16 +1,14 @@
 package pl.najem.acc.application;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pl.najem.acc.domain.Component;
+import pl.najem.acc.domain.Invoice;
+import pl.najem.acc.domain.Payment;
 import pl.najem.acc.domain.PaymentAllocated;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -23,117 +21,82 @@ import java.util.UUID;
  * <p>Money is conserved. What a payment settles plus what it leaves as the tenant's credit is
  * exactly what arrived, and a charge can never be settled beyond its own amount — an overpayment
  * stays credit on the payment rather than being pushed onto an obligation the tenant does not have.
+ *
+ * <p>Where the money lands is all this decides. What the tenant's standing looks like afterwards is
+ * a consequence of the charges, not part of the settlement rule, so the arrears board is refreshed
+ * by {@link AccountingService} rather than from here. Callers who want both want that one.
  */
 @Service
 @Transactional
 public class AllocationService {
 
-    /** One open charge, with what is still owed on it. */
-    private record OpenCharge(UUID chargeId, Component component, LocalDate dueDate, BigDecimal owed) {}
-
     private final EventStore store;
-    private final JdbcTemplate jdbc;
-    private final BoardService board;
+    private final PaymentRepository payments;
+    private final InvoiceRepository invoices;
+    private final AccountingRepository allocations;
 
     @Autowired
-    public AllocationService(EventStore store, JdbcTemplate jdbc, BoardService board) {
+    public AllocationService(EventStore store, PaymentRepository payments,
+                             InvoiceRepository invoices, AccountingRepository allocations) {
         this.store = store;
-        this.jdbc = jdbc;
-        this.board = board;
-    }
-
-    /** For tests and callers outside the container, which have no Clock bean to hand. */
-    public AllocationService(EventStore store, JdbcTemplate jdbc) {
-        this(store, jdbc, new BoardService(jdbc, Clock.systemDefaultZone()));
+        this.payments = payments;
+        this.invoices = invoices;
+        this.allocations = allocations;
     }
 
     /**
      * Allocates whatever of the payment is still unallocated across that tenancy's open charges.
      *
      * @return what came to rest; the remainder stays on the payment as the tenant's credit
+     * @throws PaymentNotFoundException if there is no such payment in that workspace
      */
     public BigDecimal allocate(UUID workspaceId, UUID paymentId, UUID tenancyId) {
-        BigDecimal remaining = jdbc.queryForObject("""
-            select unallocated_amount from acc_payment where workspace_id = ? and payment_id = ?
-            """, BigDecimal.class, workspaceId, paymentId);
-        if (remaining == null || remaining.signum() <= 0) {
+        Payment payment = payments.getPayment(workspaceId, paymentId)
+            .orElseThrow(() -> new PaymentNotFoundException(
+                "no payment " + paymentId + " in workspace " + workspaceId));
+        if (!payment.hasRemaining()) {
             return BigDecimal.ZERO;
         }
-        BigDecimal allocated = BigDecimal.ZERO;
-        var events = new ArrayList<Object>();
+        var events = new ArrayList<PaymentAllocated>();
 
-        for (OpenCharge charge : openCharges(workspaceId, tenancyId)) {
-            if (remaining.signum() <= 0) {
+        for (Invoice invoice : inSettlementOrder(invoices.openInvoices(workspaceId, tenancyId))) {
+            if (!payment.hasRemaining()) {
                 break;
             }
-            BigDecimal amount = remaining.min(charge.owed());
-            jdbc.update("""
-                insert into acc_allocation(allocation_id, workspace_id, payment_id, charge_id,
-                                           tenancy_id, component, amount, allocated_on)
-                values (?,?,?,?,?,?,?,?)
-                """, UUID.randomUUID(), workspaceId, paymentId, charge.chargeId(), tenancyId,
-                charge.component().wireName(), amount, charge.dueDate());
-            jdbc.update("""
-                update acc_charge
-                set allocated_amount = allocated_amount + ?,
-                    allocated = allocated_amount + ? >= amount
-                where workspace_id = ? and charge_id = ?
-                """, amount, amount, workspaceId, charge.chargeId());
-            events.add(new PaymentAllocated(paymentId, charge.chargeId(), amount));
-            remaining = remaining.subtract(amount);
-            allocated = allocated.add(amount);
+            // The invoice takes what it is owed from the payment, and both sides move together.
+            // What comes back is what has already happened in the domain; the rest of this loop is
+            // recording it.
+            BigDecimal amount = invoice.applyPayment(payment);
+            allocations.recordAllocation(UUID.randomUUID(), workspaceId, paymentId,
+                invoice.invoiceId(), tenancyId, invoice.component(), amount, invoice.dueDate());
+            invoices.applyAllocation(workspaceId, invoice.invoiceId(), amount);
+            events.add(new PaymentAllocated(paymentId, invoice.invoiceId(), amount));
         }
 
         if (!events.isEmpty()) {
             var stream = store.load(paymentId, "Payment");
-            store.append(paymentId, "Payment", stream.version(), List.copyOf(events), List.of());
+            store.append(paymentId, "Payment", stream.version(), List.<Object>copyOf(events), List.of());
         }
-        jdbc.update("""
-            update acc_payment set unallocated_amount = ?, status = ?
-            where workspace_id = ? and payment_id = ?
-            """, remaining, statusFor(allocated, remaining), workspaceId, paymentId);
-        refreshBoard(workspaceId, tenancyId);
-        return allocated;
+        payments.recordSettlement(workspaceId, payment);
+        return payment.settled();
     }
 
     /**
-     * The board follows the charges, so it is updated by whoever settles them rather than by the
-     * path the money took to get here. Confirming a suggestion and allocating by hand are the same
-     * event as far as the tenant's standing is concerned.
+     * The open invoices money may reach, in the order it reaches them. Deposits are excluded: they
+     * are a separate obligation met by a separate transfer.
      *
-     * <p>Package-private so corrections can call it too: reversing allocations reopens charges, and
-     * the board must be re-derived rather than assigned. Every writer of charges goes through here.
-     */
-    void refreshBoard(UUID workspaceId, UUID tenancyId) {
-        board.refresh(workspaceId, tenancyId);
-    }
-
-    /**
-     * The tenancy's open charges in settlement order. Deposits are excluded: they are a separate
-     * obligation met by a separate transfer, and a deactivated charge is not an obligation at all.
-     *
-     * <p>Charges sharing a due date and a component are settled in a stable, arbitrary order —
+     * <p>Invoices sharing a due date and a component are settled in a stable, arbitrary order —
      * they are interchangeable obligations, and determinism matters more than which one goes first.
+     *
+     * <p>This is settlement policy, not storage, so it stays here rather than in the repository:
+     * the order is the thing this service exists to decide, and it must not vary with the store.
      */
-    private List<OpenCharge> openCharges(UUID workspaceId, UUID tenancyId) {
-        return jdbc.query("""
-            select charge_id, component, due_date, amount - allocated_amount as owed
-            from acc_charge
-            where workspace_id = ? and tenancy_id = ? and active and amount > allocated_amount
-            """, (rs, i) -> new OpenCharge(rs.getObject(1, UUID.class), Component.of(rs.getString(2)),
-                rs.getDate(3).toLocalDate(), rs.getBigDecimal(4)), workspaceId, tenancyId)
-            .stream()
-            .filter(charge -> charge.component().settledByAutomaticAllocation())
-            .sorted(Comparator.comparing(OpenCharge::dueDate)
-                .thenComparingInt(charge -> charge.component().allocationRank())
-                .thenComparing(OpenCharge::chargeId))
+    private static List<Invoice> inSettlementOrder(List<Invoice> open) {
+        return open.stream()
+            .filter(invoice -> invoice.component().settledByAutomaticAllocation())
+            .sorted(Comparator.comparing(Invoice::dueDate)
+                .thenComparingInt(invoice -> invoice.component().allocationRank())
+                .thenComparing(Invoice::invoiceId))
             .toList();
-    }
-
-    private static String statusFor(BigDecimal allocated, BigDecimal remaining) {
-        if (allocated.signum() == 0) {
-            return "unmatched";
-        }
-        return remaining.signum() == 0 ? "allocated" : "partially-allocated";
     }
 }

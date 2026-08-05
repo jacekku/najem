@@ -10,6 +10,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.Component;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * One transfer settles charges, not a charge. Oldest due first; within one due date the components
@@ -45,7 +47,12 @@ class AllocationEngineTest {
     static JdbcTemplate jdbc;
     static LedgerService ledger;
     static IngestionService ingestion;
-    static AllocationService allocation;
+    /**
+     * Allocation is exercised through the orchestrator rather than directly, because that is the
+     * route every caller takes: it is what settles the charges and leaves the arrears board saying
+     * something true about them. Reaching past it would test the arithmetic and miss the pairing.
+     */
+    static AccountingService allocation;
 
     @BeforeAll
     static void setUp() {
@@ -58,7 +65,7 @@ class AllocationEngineTest {
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
-        allocation = new AllocationService(store, jdbc);
+        allocation = PostgresAccounting.accountingService(store, jdbc);
     }
 
     @Test
@@ -186,6 +193,32 @@ class AllocationEngineTest {
 
         assertThat(settled(theirs)).isEqualByComparingTo("0");
         assertThat(unallocated(paymentId)).isEqualByComparingTo("2000");
+    }
+
+    /**
+     * The absence has to be proved here rather than only against a fake. The in-memory repository
+     * can show that allocation raises when handed an empty answer; only the real statement can show
+     * that a missing row <em>is</em> an empty answer rather than a thrown query.
+     */
+    @Test
+    void allocatingAPaymentThatDoesNotExistIsAnError() {
+        var tenancyId = UUID.randomUUID();
+        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A9/2027");
+        var unknown = UUID.randomUUID();
+
+        assertThatThrownBy(() -> allocation.allocate(WS, unknown, tenancyId))
+            .isInstanceOf(PaymentNotFoundException.class)
+            .hasMessageContaining(unknown.toString());
+    }
+
+    /** The workspace is part of the lookup, so another agency's payment is absent rather than denied. */
+    @Test
+    void aPaymentInAnotherWorkspaceDoesNotExistHere() {
+        var tenancyId = UUID.randomUUID();
+        var paymentId = ingest("tx-a10", "2000");
+
+        assertThatThrownBy(() -> allocation.allocate(OTHER_WS, paymentId, tenancyId))
+            .isInstanceOf(PaymentNotFoundException.class);
     }
 
     private static UUID ingest(String externalId, String amount) {

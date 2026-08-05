@@ -5,7 +5,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.WarningKind;
-import pl.najem.eventstore.EventStore;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -18,22 +17,21 @@ public class ReconciliationService {
 
     private final JdbcTemplate jdbc;
     private final WarningService warnings;
-    private final AllocationService allocation;
+    private final AccountingService accounting;
     private final Clock clock;
 
     @Autowired
     public ReconciliationService(JdbcTemplate jdbc, WarningService warnings,
-                                 AllocationService allocation, Clock clock) {
+                                 AccountingService accounting, Clock clock) {
         this.jdbc = jdbc;
         this.warnings = warnings;
-        this.allocation = allocation;
+        this.accounting = accounting;
         this.clock = clock;
     }
 
     /** Reconciliation with its own collaborators, for tests and callers outside the context. */
-    public ReconciliationService(EventStore store, JdbcTemplate jdbc) {
-        this(jdbc, new WarningService(jdbc), new AllocationService(store, jdbc),
-            Clock.systemDefaultZone());
+    public ReconciliationService(JdbcTemplate jdbc, AccountingService accounting) {
+        this(jdbc, new WarningService(jdbc), accounting, Clock.systemDefaultZone());
     }
 
     /**
@@ -54,7 +52,7 @@ public class ReconciliationService {
 
         // What the manager confirms is which tenancy the money belongs to. Where it comes to rest
         // within that tenancy is the ledger's rule, not theirs: oldest due first, rent last.
-        allocation.allocate(workspaceId, paymentId, tenancyId);
+        accounting.allocate(workspaceId, paymentId, tenancyId);
         rememberPayerAccount(workspaceId, paymentId, tenancyId);
     }
 

@@ -10,6 +10,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.PaymentAllocationAmended;
@@ -67,9 +68,10 @@ class ReversalTest {
             DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
         ledger = new LedgerService(store, jdbc, new WarningService(jdbc), board);
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
-        var allocation = new AllocationService(store, jdbc, board);
-        suspense = new SuspenseService(store, jdbc);
-        corrections = new CorrectionService(store, jdbc, allocation);
+        var accounting = new AccountingService(
+            PostgresAccounting.allocationService(store, jdbc), board);
+        suspense = PostgresAccounting.suspenseService(store, jdbc);
+        corrections = new CorrectionService(store, jdbc, accounting, board);
     }
 
     /** The tenant owes it again, on the day they always owed it. */

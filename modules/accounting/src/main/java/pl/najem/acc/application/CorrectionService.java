@@ -32,22 +32,30 @@ public class CorrectionService {
 
     private final EventStore store;
     private final JdbcTemplate jdbc;
-    private final AllocationService allocation;
+    private final AccountingService accounting;
+    /**
+     * Held directly rather than reached through {@link AccountingService}: unwinding reopens
+     * charges without allocating anything, and it refreshes several tenancies at once. It is the
+     * same board, needed at a different moment and in a different shape.
+     */
+    private final BoardService board;
 
     private final Clock clock;
 
     @Autowired
-    public CorrectionService(EventStore store, JdbcTemplate jdbc, AllocationService allocation,
-                             Clock clock) {
+    public CorrectionService(EventStore store, JdbcTemplate jdbc, AccountingService accounting,
+                             BoardService board, Clock clock) {
         this.store = store;
         this.jdbc = jdbc;
-        this.allocation = allocation;
+        this.accounting = accounting;
+        this.board = board;
         this.clock = clock;
     }
 
     /** For tests and callers outside the container, which have no Clock bean to hand. */
-    public CorrectionService(EventStore store, JdbcTemplate jdbc, AllocationService allocation) {
-        this(store, jdbc, allocation, Clock.systemDefaultZone());
+    public CorrectionService(EventStore store, JdbcTemplate jdbc, AccountingService accounting,
+                             BoardService board) {
+        this(store, jdbc, accounting, board, Clock.systemDefaultZone());
     }
 
     /**
@@ -83,7 +91,7 @@ public class CorrectionService {
         }
         unwind(workspaceId, paymentId);
         append(paymentId, new PaymentAllocationAmended(paymentId, tenancyId, reason));
-        return allocation.allocate(workspaceId, paymentId, tenancyId);
+        return accounting.allocate(workspaceId, paymentId, tenancyId);
     }
 
     /**
@@ -112,7 +120,7 @@ public class CorrectionService {
         // wrong the moment the colours proper exist, and it would look like a colour bug rather
         // than a missing call. Once per tenancy, after the charges have finished moving.
         live.stream().map(row -> (UUID) row.get("tenancy_id")).distinct()
-            .forEach(tenancyId -> allocation.refreshBoard(workspaceId, tenancyId));
+            .forEach(tenancyId -> board.refresh(workspaceId, tenancyId));
         jdbc.update("""
             update acc_payment
             set unallocated_amount = unallocated_amount
@@ -132,6 +140,10 @@ public class CorrectionService {
             select status from acc_payment where workspace_id = ? and payment_id = ?
             """, String.class, workspaceId, paymentId);
         if (rows.isEmpty()) {
+            // TODO: same absence, two vocabularies. AllocationService now raises
+            // PaymentNotFoundException for exactly this sentence. This one also reads the status,
+            // so it cannot simply defer to the repository — it wants a payment, not a count, and
+            // should move onto PaymentRepository once that port carries status too.
             throw new IllegalArgumentException(
                 "no payment " + paymentId + " in workspace " + workspaceId);
         }

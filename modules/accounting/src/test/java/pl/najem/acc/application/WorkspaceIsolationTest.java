@@ -10,6 +10,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -50,7 +51,7 @@ class WorkspaceIsolationTest {
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
-        reconciliation = new ReconciliationService(store, jdbc);
+        reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
     }
 
     @Test

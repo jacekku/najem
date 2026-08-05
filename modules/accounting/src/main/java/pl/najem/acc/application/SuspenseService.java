@@ -29,27 +29,27 @@ public class SuspenseService {
 
     private final EventStore store;
     private final JdbcTemplate jdbc;
-    private final AllocationService allocation;
+    private final AccountingService accounting;
     private final Clock clock;
     private final int warnAfterDays;
     private final int redAfterDays;
 
     @Autowired
-    public SuspenseService(EventStore store, JdbcTemplate jdbc, AllocationService allocation,
+    public SuspenseService(EventStore store, JdbcTemplate jdbc, AccountingService accounting,
                            Clock clock,
                            @Value("${acc.suspense.warn-after-days:7}") int warnAfterDays,
                            @Value("${acc.suspense.red-after-days:30}") int redAfterDays) {
         this.store = store;
         this.jdbc = jdbc;
-        this.allocation = allocation;
+        this.accounting = accounting;
         this.clock = clock;
         this.warnAfterDays = warnAfterDays;
         this.redAfterDays = redAfterDays;
     }
 
     /** The domain-model defaults: a decision expected within the week, red at a month. */
-    public SuspenseService(EventStore store, JdbcTemplate jdbc) {
-        this(store, jdbc, new AllocationService(store, jdbc), Clock.systemDefaultZone(), 7, 30);
+    public SuspenseService(EventStore store, JdbcTemplate jdbc, AccountingService accounting) {
+        this(store, jdbc, accounting, Clock.systemDefaultZone(), 7, 30);
     }
 
     /**
@@ -99,10 +99,15 @@ public class SuspenseService {
             select count(*) from acc_payment where workspace_id = ? and payment_id = ?
             """, Integer.class, workspaceId, paymentId);
         if (mine == null || mine == 0) {
+            // TODO: same absence, two vocabularies. AllocationService now raises
+            // PaymentNotFoundException for exactly this sentence, so a caller catching one type
+            // catches half the cases. When this service moves onto PaymentRepository, drop the
+            // pre-check and let the repository's empty answer speak — the count query exists only
+            // because allocate used to fail obscurely on a missing row.
             throw new IllegalArgumentException(
                 "no payment " + paymentId + " in workspace " + workspaceId);
         }
-        return allocation.allocate(workspaceId, paymentId, tenancyId);
+        return accounting.allocate(workspaceId, paymentId, tenancyId);
     }
 
     /**
