@@ -16,6 +16,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.Component;
+import pl.najem.acc.domain.LegalForm;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 
@@ -187,7 +188,7 @@ class DepositSettlementTest {
     void aDepositWithNoAgreedMultipleGoesBackAtItsNominalValue() {
         var tenancyId = UUID.randomUUID();
         deposits.chargeOnActivation(WS, tenancyId, new BigDecimal("5000"), BigDecimal.ZERO,
-            "ZWYKLY", START, "NAJEM/S8/2027");
+            LegalForm.ZWYKLY.name(), START, "NAJEM/S8/2027");
         pay(tenancyId);
 
         deposits.settle(WS, tenancyId, new BigDecimal("4000"), RETURN);
@@ -207,7 +208,7 @@ class DepositSettlementTest {
         var tenancyId = chargedDeposit("6000", "3000", "S10");
 
         assertThatThrownBy(() -> deposits.chargeOnActivation(WS, tenancyId, new BigDecimal("9000"),
-            new BigDecimal("4500"), "ZWYKLY", START, "KAUCJA/S10B/2027"))
+            new BigDecimal("4500"), LegalForm.ZWYKLY.name(), START, "KAUCJA/S10B/2027"))
             .isInstanceOf(DuplicateKeyException.class);
 
         assertThat(jdbc.queryForObject("select count(*) from acc_deposit where tenancy_id = ?",
@@ -227,7 +228,7 @@ class DepositSettlementTest {
     private static UUID chargedDeposit(String amount, String rent, String ref) {
         var tenancyId = UUID.randomUUID();
         deposits.chargeOnActivation(WS, tenancyId, new BigDecimal(amount), new BigDecimal(rent),
-            "ZWYKLY", START, "KAUCJA/" + ref + "/2027");
+            LegalForm.ZWYKLY.name(), START, "KAUCJA/" + ref + "/2027");
         return tenancyId;
     }
 

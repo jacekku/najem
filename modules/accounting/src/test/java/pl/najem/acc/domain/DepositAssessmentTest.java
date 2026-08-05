@@ -16,7 +16,7 @@ class DepositAssessmentTest {
 
     @Test
     void aDepositWithinTheCapIsNotFlagged() {
-        var assessment = assess("6000", "3000", "okazjonalny");
+        var assessment = assess("6000", "3000", LegalForm.OKAZJONALNY.name());
 
         assertThat(assessment.capExceeded()).isFalse();
         assertThat(assessment.capCheckable()).isTrue();
@@ -26,7 +26,7 @@ class DepositAssessmentTest {
 
     @Test
     void aDepositAboveTheCapForItsFormIsFlagged() {
-        var okazjonalny = assess("21000", "3000", "okazjonalny");
+        var okazjonalny = assess("21000", "3000", LegalForm.OKAZJONALNY.name());
 
         assertThat(okazjonalny.capExceeded()).isTrue();
         assertThat(okazjonalny.multiplier()).isEqualByComparingTo("7");
@@ -36,7 +36,7 @@ class DepositAssessmentTest {
     /** Exactly at the cap is within it: the statute caps the deposit, it does not forbid reaching it. */
     @Test
     void aDepositExactlyAtTheCapIsWithinIt() {
-        var assessment = assess("18000", "3000", "instytucjonalny");
+        var assessment = assess("18000", "3000", LegalForm.INSTYTUCJONALNY.name());
 
         assertThat(assessment.multiplier()).isEqualByComparingTo(
             BigDecimal.valueOf(assessment.capInMonths()));
@@ -52,7 +52,7 @@ class DepositAssessmentTest {
     @Test
     void aDepositAgainstNoRentIsNotCheckedRatherThanPassing() {
         for (String rent : new String[] {null, "0"}) {
-            var assessment = assess("6000", rent, "okazjonalny");
+            var assessment = assess("6000", rent, LegalForm.OKAZJONALNY.name());
 
             assertThat(assessment.capCheckable()).isFalse();
             assertThat(assessment.capExceeded()).isFalse();
@@ -67,7 +67,25 @@ class DepositAssessmentTest {
      */
     @Test
     void anUncheckableDepositRecordsNoMultipleRatherThanAMultipleOfZero() {
-        assertThat(assess("6000", null, "okazjonalny").multiplier()).isNull();
+        assertThat(assess("6000", null, LegalForm.OKAZJONALNY.name()).multiplier()).isNull();
+    }
+
+    /**
+     * The form arrives from property management as a string on the wire, and PM sends it
+     * <strong>lowercase</strong> — {@code TenancyServiceTest} pins {@code "instytucjonalny"} in the
+     * payload. Every other test here names the constant, which spells it upper case, so this is the
+     * one place the casing that actually crosses the module boundary is exercised. Without it the
+     * enum could be renamed to something PM never sends and nothing would fail (rule 12).
+     */
+    @Test
+    void theLowercaseFormPropertyManagementSendsIsRecognised() {
+        for (LegalForm form : LegalForm.values()) {
+            var assessment = assess("6000", "3000", form.name().toLowerCase());
+
+            assertThat(assessment.formRecognised())
+                .as("PM sends %s", form.name().toLowerCase())
+                .isTrue();
+        }
     }
 
     @Test
@@ -83,7 +101,7 @@ class DepositAssessmentTest {
     /** Two places, because it is a snapshot of an agreed term — "two months" reads back as 2.00. */
     @Test
     void theMultipleIsKeptToTwoPlaces() {
-        assertThat(assess("5000", "3000", "okazjonalny").multiplier()).isEqualByComparingTo("1.67");
+        assertThat(assess("5000", "3000", LegalForm.OKAZJONALNY.name()).multiplier()).isEqualByComparingTo("1.67");
     }
 
     private static DepositAssessment assess(String amount, String rent, String legalForm) {

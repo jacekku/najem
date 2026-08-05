@@ -1,6 +1,7 @@
 package pl.najem.acc.application;
 
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
+import pl.najem.acc.domain.LegalForm;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
@@ -66,7 +67,7 @@ class DepositTest {
 
     @Test
     void activatingWithADepositChargesItAndRemembersTheMultiplierAgreed() {
-        var tenancyId = activate("ZWYKLY", "3000", "6000");
+        var tenancyId = activate(LegalForm.ZWYKLY.name(), "3000", "6000");
 
         var deposit = jdbc.queryForMap(
             "select nominal_amount, multiplier, rent_at_charge, state from acc_deposit where tenancy_id = ?",
@@ -81,7 +82,7 @@ class DepositTest {
     /** No deposit is a contract term, not a deposit of nothing. A zero charge would be a lie. */
     @Test
     void aTenancyWithoutADepositGetsNoDepositChargeAtAll() {
-        var tenancyId = activate("ZWYKLY", "3000", null);
+        var tenancyId = activate(LegalForm.ZWYKLY.name(), "3000", null);
 
         assertThat(jdbc.queryForObject("select count(*) from acc_deposit where tenancy_id = ?",
             Integer.class, tenancyId)).isZero();
@@ -94,14 +95,14 @@ class DepositTest {
     /** Ochrona praw lokatorów art. 6 ust. 1: twelve months' rent for an ordinary tenancy. */
     @Test
     void anOrdinaryTenancyMayTakeTwelveMonthsRentWithoutAWarning() {
-        var tenancyId = activate("ZWYKLY", "3000", "36000");
+        var tenancyId = activate(LegalForm.ZWYKLY.name(), "3000", "36000");
 
         assertThat(capWarningsFor(tenancyId)).isEmpty();
     }
 
     @Test
     void anOrdinaryTenancyBeyondTwelveMonthsRentWarnsWithoutRefusing() {
-        var tenancyId = activate("ZWYKLY", "3000", "39000");
+        var tenancyId = activate(LegalForm.ZWYKLY.name(), "3000", "39000");
 
         assertThat(capWarningsFor(tenancyId)).singleElement()
             .satisfies(w -> assertThat(w.detail()).contains("12"));
@@ -114,14 +115,14 @@ class DepositTest {
      */
     @Test
     void anInstitutionalTenancyAtFiveMonthsRentIsLawfulAndSilent() {
-        var tenancyId = activate("INSTYTUCJONALNY", "3000", "15000");
+        var tenancyId = activate(LegalForm.INSTYTUCJONALNY.name(), "3000", "15000");
 
         assertThat(capWarningsFor(tenancyId)).isEmpty();
     }
 
     @Test
     void anInstitutionalTenancyBeyondSixMonthsRentWarns() {
-        var tenancyId = activate("INSTYTUCJONALNY", "3000", "21000");
+        var tenancyId = activate(LegalForm.INSTYTUCJONALNY.name(), "3000", "21000");
 
         assertThat(capWarningsFor(tenancyId)).singleElement()
             .satisfies(w -> assertThat(w.detail()).contains("6"));
@@ -130,8 +131,8 @@ class DepositTest {
     /** Art. 19a ust. 4: six months for najem okazjonalny. */
     @Test
     void anOccasionalTenancyIsCappedAtSixMonthsRent() {
-        var lawful = activate("OKAZJONALNY", "2000", "12000");
-        var excessive = activate("OKAZJONALNY", "2000", "14000");
+        var lawful = activate(LegalForm.OKAZJONALNY.name(), "2000", "12000");
+        var excessive = activate(LegalForm.OKAZJONALNY.name(), "2000", "14000");
 
         assertThat(capWarningsFor(lawful)).isEmpty();
         assertThat(capWarningsFor(excessive)).hasSize(1);
@@ -164,7 +165,7 @@ class DepositTest {
         var tenancyId = UUID.randomUUID();
         acl.handle(new TenancyActivatedEvent(WS, tenancyId, UUID.randomUUID(), START,
             new BigDecimal("800"), true, BigDecimal.ZERO, new BigDecimal("500"),
-            new BigDecimal("300"), "ZWYKLY", new BigDecimal("20000"), "NAJEM/D9/2027"));
+            new BigDecimal("300"), LegalForm.ZWYKLY.name(), new BigDecimal("20000"), "NAJEM/D9/2027"));
 
         assertThat(warningsFor(tenancyId, WarningKind.DEPOSIT_CAP_UNCHECKABLE)).singleElement()
             .satisfies(w -> assertThat(w.detail()).contains("20000").contains("czynsz"));
@@ -179,7 +180,7 @@ class DepositTest {
     /** A cap that could be checked must not also claim it could not. */
     @Test
     void anOrdinaryDepositDoesNotClaimTheCapWasUncheckable() {
-        var tenancyId = activate("ZWYKLY", "3000", "6000");
+        var tenancyId = activate(LegalForm.ZWYKLY.name(), "3000", "6000");
 
         assertThat(warningsFor(tenancyId, WarningKind.DEPOSIT_CAP_UNCHECKABLE)).isEmpty();
     }
@@ -193,7 +194,7 @@ class DepositTest {
         var tenancyId = UUID.randomUUID();
         acl.handle(new TenancyActivatedEvent(WS, tenancyId, UUID.randomUUID(), START,
             new BigDecimal("3000"), true, new BigDecimal("2400"), new BigDecimal("300"),
-            new BigDecimal("300"), "ZWYKLY", new BigDecimal("4800"), "NAJEM/D8/2027"));
+            new BigDecimal("300"), LegalForm.ZWYKLY.name(), new BigDecimal("4800"), "NAJEM/D8/2027"));
 
         var deposit = jdbc.queryForMap(
             "select multiplier, rent_at_charge from acc_deposit where tenancy_id = ?", tenancyId);

@@ -1,6 +1,7 @@
 package pl.najem.acc.adapter.pm;
 
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
+import pl.najem.acc.domain.LegalForm;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
@@ -64,7 +65,7 @@ class TenancyActivatedHandlerTest {
 
         handler.handle(new TenancyActivatedEvent(WS, tenancyId, UUID.randomUUID(), START,
             new BigDecimal("3000"), true, new BigDecimal("2400"), new BigDecimal("300"),
-            new BigDecimal("300"), "ZWYKLY", new BigDecimal("4800"), "NAJEM/ACL1/2026"));
+            new BigDecimal("300"), LegalForm.ZWYKLY.name(), new BigDecimal("4800"), "NAJEM/ACL1/2026"));
 
         assertThat(monthlyComponentsOf(tenancyId)).containsExactlyInAnyOrder("rent", "adminFee", "mediaAdvance");
         assertThat(amountOf(tenancyId, "rent")).isEqualByComparingTo("2400");
@@ -76,7 +77,7 @@ class TenancyActivatedHandlerTest {
 
         handler.handle(new TenancyActivatedEvent(WS, tenancyId, UUID.randomUUID(), START,
             new BigDecimal("3000"), false, null, null, null,
-            "OKAZJONALNY", new BigDecimal("6000"), "NAJEM/ACL2/2026"));
+            LegalForm.OKAZJONALNY.name(), new BigDecimal("6000"), "NAJEM/ACL2/2026"));
 
         assertThat(monthlyComponentsOf(tenancyId)).containsExactly("rent");
         assertThat(amountOf(tenancyId, "rent")).isEqualByComparingTo("3000");

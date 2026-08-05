@@ -6,6 +6,7 @@ import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.Component;
 import pl.najem.acc.domain.DepositCharged;
 import pl.najem.acc.domain.DepositSettled;
+import pl.najem.acc.domain.LegalForm;
 import pl.najem.acc.domain.WarningKind;
 
 import java.math.BigDecimal;
@@ -56,7 +57,7 @@ class DepositInMemoryTest {
         var tenancyId = UUID.randomUUID();
 
         var depositId = deposits.chargeOnActivation(WS, tenancyId, new BigDecimal("6000"),
-            new BigDecimal("3000"), "okazjonalny", START, "KAUCJA/1/2027");
+            new BigDecimal("3000"), LegalForm.OKAZJONALNY.name(), START, "KAUCJA/1/2027");
 
         assertThat(depositId).isPresent();
         assertThat(invoices.openInvoices(WS, tenancyId)).singleElement()
@@ -74,9 +75,9 @@ class DepositInMemoryTest {
         var tenancyId = UUID.randomUUID();
 
         assertThat(deposits.chargeOnActivation(WS, tenancyId, null, new BigDecimal("3000"),
-            "okazjonalny", START, "KAUCJA/2/2027")).isEmpty();
+            LegalForm.OKAZJONALNY.name(), START, "KAUCJA/2/2027")).isEmpty();
         assertThat(deposits.chargeOnActivation(WS, tenancyId, BigDecimal.ZERO,
-            new BigDecimal("3000"), "okazjonalny", START, "KAUCJA/2/2027")).isEmpty();
+            new BigDecimal("3000"), LegalForm.OKAZJONALNY.name(), START, "KAUCJA/2/2027")).isEmpty();
 
         assertThat(invoices.openInvoices(WS, tenancyId)).isEmpty();
         assertThat(store.appended()).isEmpty();
@@ -88,19 +89,20 @@ class DepositInMemoryTest {
         var tenancyId = UUID.randomUUID();
 
         deposits.chargeOnActivation(WS, tenancyId, new BigDecimal("21000"),
-            new BigDecimal("3000"), "okazjonalny", START, "KAUCJA/3/2027");
+            new BigDecimal("3000"), LegalForm.OKAZJONALNY.name(), START, "KAUCJA/3/2027");
 
         assertThat(invoices.openInvoices(WS, tenancyId)).hasSize(1);
         assertThat(warnings.unseen(WS)).singleElement().satisfies(warning -> {
             assertThat(warning.kind()).isEqualTo(WarningKind.DEPOSIT_CAP_EXCEEDED);
-            assertThat(warning.detail()).contains("21000", "7.00", "OKAZJONALNY", "6-krotność");
+            assertThat(warning.detail())
+                .contains("21000", "7.00", LegalForm.OKAZJONALNY.name(), "6-krotność");
         });
     }
 
     @Test
     void aDepositAgainstNoRentIsRecordedAndSaidToBeUnchecked() {
         deposits.chargeOnActivation(WS, UUID.randomUUID(), new BigDecimal("6000"), BigDecimal.ZERO,
-            "okazjonalny", START, "KAUCJA/4/2027");
+            LegalForm.OKAZJONALNY.name(), START, "KAUCJA/4/2027");
 
         assertThat(warnings.unseen(WS)).singleElement().satisfies(warning ->
             assertThat(warning.kind()).isEqualTo(WarningKind.DEPOSIT_CAP_UNCHECKABLE));
@@ -171,7 +173,7 @@ class DepositInMemoryTest {
     void anUnpaidDepositCannotBeReturned() {
         var tenancyId = UUID.randomUUID();
         deposits.chargeOnActivation(WS, tenancyId, new BigDecimal("6000"), new BigDecimal("3000"),
-            "okazjonalny", START, "KAUCJA/5/2027");
+            LegalForm.OKAZJONALNY.name(), START, "KAUCJA/5/2027");
 
         assertThatThrownBy(() -> deposits.settle(WS, tenancyId, new BigDecimal("3000"), END))
             .isInstanceOf(DepositNotHeldException.class)
@@ -199,7 +201,7 @@ class DepositInMemoryTest {
     /** Charges the deposit and has the tenant pay it, which is what makes it returnable. */
     private UUID chargedAndPaid(UUID tenancyId, String amount, String rent) {
         var depositId = deposits.chargeOnActivation(WS, tenancyId, new BigDecimal(amount),
-            new BigDecimal(rent), "okazjonalny", START, "KAUCJA/" + tenancyId).orElseThrow();
+            new BigDecimal(rent), LegalForm.OKAZJONALNY.name(), START, "KAUCJA/" + tenancyId).orElseThrow();
         var invoice = invoices.openInvoices(WS, tenancyId).stream()
             .filter(open -> open.component() == Component.DEPOSIT)
             .findFirst().orElseThrow();
