@@ -113,9 +113,9 @@ to denied rather than to a guess.
 
 ### A round trip through the API
 
-Every call needs `X-Workspace-Id`, reads as well as writes. Any UUID is accepted
-as a workspace; the check that the *caller* is entitled to it is the next piece
-of work.
+Every call needs `X-Workspace-Id`, reads as well as writes, and the workspace you
+name must be one you belong to — naming somebody else's answers **404**, not 403,
+so the header cannot be used to discover which agency ids exist.
 
 ```sh
 W=<the agency id seed-demo.sh printed>
@@ -155,16 +155,16 @@ breath as the write that feeds it and you will legitimately see the old answer.
 
 ## What is not built yet
 
-- **Authorization.** `X-Workspace-Id` says *which* workspace a request acts in.
-  Nothing yet checks that the caller is entitled to that workspace — the seam
-  exists (`WorkspaceCaller`) and the web layer uses it, but the REST APIs above
-  still trust the header. Treat the API as unauthenticated.
-- **Screens.** Being built now. Until they land, the boards below are API-only —
-  the data is real and computed, it just has no page yet.
+- **Roles.** A caller's membership of the workspace they name is now checked
+  (`WorkspaceHeaderInterceptor`), but *which* role they hold is not consulted
+  by the REST APIs — any member may do anything their agency can do.
 - **A second agency cannot register a bank account** if another already holds
   that IBAN. The refusal is correct — an account belongs to one agency — but it
   arrives as a 500 carrying a raw Postgres constraint error, and the symptom
   then surfaces three steps later as "this workspace has no bank account".
+- **`:e2e:test` is red**, and not for a reason in this file: `e2e` puts both
+  applications on one classpath and they both map `GET /`.
+
 `marketState` is not an occupancy state — it says how a unit is being marketed,
 and a let unit is legitimately still `inventory`. Whether a unit is let is
 `currentTenancyId`. Two questions, two fields; don't merge them.
