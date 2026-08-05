@@ -45,7 +45,7 @@ class AllocationEngineTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService ingestion;
     /**
      * Allocation is exercised through the orchestrator rather than directly, because that is the
@@ -63,7 +63,7 @@ class AllocationEngineTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         allocation = PostgresAccounting.accountingService(store, jdbc);
     }
@@ -71,8 +71,8 @@ class AllocationEngineTest {
     @Test
     void oneTransferSettlesSeveralChargesOldestFirst() {
         var tenancyId = UUID.randomUUID();
-        var january = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A1/2027");
-        var february = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), FEBRUARY, "NAJEM/A1B/2027");
+        var january = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A1/2027");
+        var february = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), FEBRUARY, "NAJEM/A1B/2027");
         var paymentId = ingest("tx-a1", "4000");
 
         allocation.allocate(WS, paymentId, tenancyId);
@@ -89,10 +89,10 @@ class AllocationEngineTest {
     @Test
     void withinOneDueDateRentSettlesLast() {
         var tenancyId = UUID.randomUUID();
-        var charges = ledger.postMonthlyCharges(WS, tenancyId,
+        var charges = invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.split(new BigDecimal("3000"), new BigDecimal("2400"),
                 new BigDecimal("300"), new BigDecimal("300")),
-            JANUARY, "NAJEM/A2/2027").chargeIds();
+            JANUARY, "NAJEM/A2/2027").invoiceIds();
         var paymentId = ingest("tx-a2", "600");
 
         allocation.allocate(WS, paymentId, tenancyId);
@@ -106,8 +106,8 @@ class AllocationEngineTest {
     @Test
     void aPartPaymentSettlesWhatItReachesAndLeavesTheRestOpen() {
         var tenancyId = UUID.randomUUID();
-        var january = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A3/2027");
-        var february = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), FEBRUARY, "NAJEM/A3B/2027");
+        var january = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A3/2027");
+        var february = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), FEBRUARY, "NAJEM/A3B/2027");
         var paymentId = ingest("tx-a3", "2500");
 
         allocation.allocate(WS, paymentId, tenancyId);
@@ -122,7 +122,7 @@ class AllocationEngineTest {
     @Test
     void anOverpaymentLeavesCreditRatherThanOversettlingACharge() {
         var tenancyId = UUID.randomUUID();
-        var january = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A4/2027");
+        var january = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A4/2027");
         var paymentId = ingest("tx-a4", "2600");
 
         allocation.allocate(WS, paymentId, tenancyId);
@@ -136,8 +136,8 @@ class AllocationEngineTest {
     @Test
     void everyZlotyIsEitherSettledOrLeftAsCredit() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("1500"), JANUARY, "NAJEM/A5/2027");
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("1500"), FEBRUARY, "NAJEM/A5B/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("1500"), JANUARY, "NAJEM/A5/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("1500"), FEBRUARY, "NAJEM/A5B/2027");
         var paymentId = ingest("tx-a5", "3700");
 
         allocation.allocate(WS, paymentId, tenancyId);
@@ -152,9 +152,9 @@ class AllocationEngineTest {
     @Test
     void aDeactivatedChargeIsNotSettled() {
         var tenancyId = UUID.randomUUID();
-        var withdrawn = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A6/2027");
-        var standing = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), FEBRUARY, "NAJEM/A6B/2027");
-        ledger.deactivateCharge(WS, withdrawn, "billed in error");
+        var withdrawn = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A6/2027");
+        var standing = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), FEBRUARY, "NAJEM/A6B/2027");
+        invoicing.withdraw(WS, withdrawn, "billed in error");
         var paymentId = ingest("tx-a6", "2000");
 
         allocation.allocate(WS, paymentId, tenancyId);
@@ -170,9 +170,9 @@ class AllocationEngineTest {
     @Test
     void rentMoneyDoesNotDriftOntoADepositCharge() {
         var tenancyId = UUID.randomUUID();
-        var deposit = ledger.postCharge(WS, tenancyId, Component.DEPOSIT, new BigDecimal("6000"),
+        var deposit = invoicing.post(WS, tenancyId, Component.DEPOSIT, new BigDecimal("6000"),
             JANUARY, "KAUCJA/A7/2027");
-        var rent = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), FEBRUARY, "NAJEM/A7/2027");
+        var rent = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), FEBRUARY, "NAJEM/A7/2027");
         var paymentId = ingest("tx-a7", "2000");
 
         allocation.allocate(WS, paymentId, tenancyId);
@@ -185,7 +185,7 @@ class AllocationEngineTest {
     @Test
     void allocationNeverReachesAnotherWorkspacesCharges() {
         var tenancyId = UUID.randomUUID();
-        var theirs = ledger.postRentCharge(OTHER_WS, tenancyId, new BigDecimal("2000"), JANUARY,
+        var theirs = invoicing.postRent(OTHER_WS, tenancyId, new BigDecimal("2000"), JANUARY,
             "OBCE/A8/2027");
         var paymentId = ingest("tx-a8", "2000");
 
@@ -203,7 +203,7 @@ class AllocationEngineTest {
     @Test
     void allocatingAPaymentThatDoesNotExistIsAnError() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A9/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), JANUARY, "NAJEM/A9/2027");
         var unknown = UUID.randomUUID();
 
         assertThatThrownBy(() -> allocation.allocate(WS, unknown, tenancyId))

@@ -119,6 +119,7 @@ class SettlementTest {
     }
 
     private static Invoice invoiceOf(String owed) {
-        return new Invoice(UUID.randomUUID(), Component.RENT, DUE, new BigDecimal(owed));
+        return new Invoice(UUID.randomUUID(), UUID.randomUUID(), Component.RENT, DUE,
+            new BigDecimal(owed), new BigDecimal(owed), false);
     }
 }

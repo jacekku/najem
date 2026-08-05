@@ -169,7 +169,7 @@ class ArrearsBoardTest {
         var tenancyId = charge("NAJEM/B8/2027", "3000", JANUARY);
         UUID chargeId = jdbc.queryForObject(
             "select charge_id from acc_charge where tenancy_id = ? limit 1", UUID.class, tenancyId);
-        ledger().deactivateCharge(WS, chargeId, "billed in error");
+        invoicing().withdraw(WS, chargeId, "billed in error");
 
         assertThat(colourOn(tenancyId, MARCH)).isEqualTo(ArrearsColour.GREEN);
     }
@@ -178,14 +178,14 @@ class ArrearsBoardTest {
     @Test
     void anUnpaidDepositDoesNotCountAsAnArrearsPeriod() {
         var tenancyId = UUID.randomUUID();
-        ledger().postCharge(WS, tenancyId, pl.najem.acc.domain.Component.DEPOSIT,
+        invoicing().post(WS, tenancyId, pl.najem.acc.domain.Component.DEPOSIT,
             new BigDecimal("6000"), JANUARY, "KAUCJA/B9/2027");
 
         assertThat(colourOn(tenancyId, FEBRUARY.plusDays(1))).isEqualTo(ArrearsColour.RED);
     }
 
-    private static LedgerService ledger() {
-        return PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+    private static InvoiceService invoicing() {
+        return PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
     }
 
     private static ArrearsColour colourOn(UUID tenancyId, LocalDate asOf) {
@@ -209,7 +209,7 @@ class ArrearsBoardTest {
     }
 
     private static void chargeFor(UUID tenancyId, String reference, String amount, LocalDate dueDate) {
-        ledger().postRentCharge(WS, tenancyId, new BigDecimal(amount), dueDate, reference);
+        invoicing().postRent(WS, tenancyId, new BigDecimal(amount), dueDate, reference);
     }
 
     private static void settle(UUID tenancyId) {

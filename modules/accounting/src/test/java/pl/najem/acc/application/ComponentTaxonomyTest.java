@@ -1,6 +1,7 @@
 package pl.najem.acc.application;
 
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
+import pl.najem.acc.adapter.persistence.PostgresInvoiceRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
@@ -38,7 +39,8 @@ class ComponentTaxonomyTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
+    static InvoiceRepository charges;
 
     @BeforeAll
     static void setUp() {
@@ -49,14 +51,15 @@ class ComponentTaxonomyTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        charges = new PostgresInvoiceRepository(jdbc);
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
     }
 
     @Test
     void contractWithoutASplitCollapsesTheWholeTotalIntoRent() {
         var tenancyId = UUID.randomUUID();
 
-        var posted = ledger.postMonthlyCharges(WS, tenancyId,
+        var posted = invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.unsplit(new BigDecimal("3000")), DUE, "NAJEM/CT1/2026");
 
         assertThat(componentsOf(tenancyId)).containsExactly("rent");
@@ -68,7 +71,7 @@ class ComponentTaxonomyTest {
     void contractWithASplitChargesEachComponentSeparately() {
         var tenancyId = UUID.randomUUID();
 
-        var posted = ledger.postMonthlyCharges(WS, tenancyId,
+        var posted = invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.split(new BigDecimal("3000"), new BigDecimal("2400"),
                 new BigDecimal("300"), new BigDecimal("300")),
             DUE, "NAJEM/CT2/2026");
@@ -88,7 +91,7 @@ class ComponentTaxonomyTest {
     void aSplitWithoutAnAdminFeeIsNotACollapse() {
         var tenancyId = UUID.randomUUID();
 
-        var posted = ledger.postMonthlyCharges(WS, tenancyId,
+        var posted = invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.split(new BigDecimal("2800"), new BigDecimal("2500"),
                 null, new BigDecimal("300")),
             DUE, "NAJEM/CT3/2026");
@@ -101,7 +104,7 @@ class ComponentTaxonomyTest {
     void aBreakdownThatDoesNotSumToTheAgreedTotalWarnsAndChargesTheBreakdown() {
         var tenancyId = UUID.randomUUID();
 
-        var posted = ledger.postMonthlyCharges(WS, tenancyId,
+        var posted = invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.split(new BigDecimal("3000"), new BigDecimal("2400"),
                 new BigDecimal("300"), new BigDecimal("200")),
             DUE, "NAJEM/CT4/2026");
@@ -117,24 +120,36 @@ class ComponentTaxonomyTest {
     @Test
     void theValorizationBaseIsTheRentComponentAlone() {
         var tenancyId = UUID.randomUUID();
-        ledger.postMonthlyCharges(WS, tenancyId,
+        invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.split(new BigDecimal("3000"), new BigDecimal("2400"),
                 new BigDecimal("300"), new BigDecimal("300")),
             DUE, "NAJEM/CT5/2026");
 
-        assertThat(ledger.rentComponentAsOf(WS, tenancyId, DUE)).isEqualByComparingTo("2400");
+        assertThat(charges.rentInForceOn(WS, tenancyId, DUE)).isEqualByComparingTo("2400");
+    }
+
+    /**
+     * A tenancy with no rent charged by that date has a valorization base of zero, and asking is not
+     * an error. The statement this stands over used to be a {@code queryForObject}, which threw on
+     * no rows — the caller's own null check for the same case could never run. Asserted against the
+     * database because it is the query's behaviour that changed, not the caller's (rule 15).
+     */
+    @Test
+    void aTenancyChargedNoRentYetHasAValorizationBaseOfZero() {
+        assertThat(charges.rentInForceOn(WS, UUID.randomUUID(), DUE))
+            .isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
     void everyChargedLineIsEventSourcedWithItsComponent() {
         var tenancyId = UUID.randomUUID();
 
-        var posted = ledger.postMonthlyCharges(WS, tenancyId,
+        var posted = invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.split(new BigDecimal("2700"), new BigDecimal("2500"),
                 null, new BigDecimal("200")),
             DUE, "NAJEM/CT6/2026");
 
-        assertThat(posted.chargeIds()).hasSize(2);
+        assertThat(posted.invoiceIds()).hasSize(2);
         assertThat(Component.of("mediaAdvance")).isEqualTo(Component.MEDIA_ADVANCE);
     }
 

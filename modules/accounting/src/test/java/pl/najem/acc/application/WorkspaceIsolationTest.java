@@ -36,7 +36,7 @@ class WorkspaceIsolationTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService ingestion;
     static ReconciliationService reconciliation;
 
@@ -49,14 +49,14 @@ class WorkspaceIsolationTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
     }
 
     @Test
     void paymentDoesNotMatchAnIdenticalChargeInAnotherWorkspace() {
-        ledger.postRentCharge(AGENCY_A, UUID.randomUUID(), new BigDecimal("2500"),
+        invoicing.postRent(AGENCY_A, UUID.randomUUID(), new BigDecimal("2500"),
             LocalDate.of(2026, 9, 10), "NAJEM/SHARED/2026");
 
         ingestion.ingest(AGENCY_B, new BankLine("tx-cross", new BigDecimal("2500"),
@@ -82,7 +82,7 @@ class WorkspaceIsolationTest {
     @Test
     void confirmingFromTheWrongWorkspaceIsRefused() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(AGENCY_A, tenancyId, new BigDecimal("3000"),
+        invoicing.postRent(AGENCY_A, tenancyId, new BigDecimal("3000"),
             LocalDate.of(2026, 9, 10), "NAJEM/WRONG-WS/2026");
         ingestion.ingest(AGENCY_A, new BankLine("tx-ws", new BigDecimal("3000"),
             "NAJEM/WRONG-WS/2026", LocalDate.of(2026, 9, 3)));
@@ -104,9 +104,9 @@ class WorkspaceIsolationTest {
     void boardOfOneWorkspaceNeverShowsAnother() {
         var tenancyA = UUID.randomUUID();
         var tenancyB = UUID.randomUUID();
-        ledger.postRentCharge(AGENCY_A, tenancyA, new BigDecimal("1000"),
+        invoicing.postRent(AGENCY_A, tenancyA, new BigDecimal("1000"),
             LocalDate.of(2026, 9, 10), "NAJEM/BOARD-A/2026");
-        ledger.postRentCharge(AGENCY_B, tenancyB, new BigDecimal("1000"),
+        invoicing.postRent(AGENCY_B, tenancyB, new BigDecimal("1000"),
             LocalDate.of(2026, 9, 10), "NAJEM/BOARD-B/2026");
 
         var tenanciesOfA = jdbc.queryForList(

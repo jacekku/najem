@@ -11,6 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
+import pl.najem.acc.adapter.persistence.PostgresInvoiceRepository;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.ChargePosted;
@@ -26,14 +27,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
-class LedgerServiceTest {
+class InvoiceServiceTest {
 
     @Container
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
     static JdbcEventStore store;
-    static LedgerService service;
+    static InvoiceService service;
 
     @BeforeAll
     static void setUp() {
@@ -46,7 +47,7 @@ class LedgerServiceTest {
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         // Fixed a month before the charge falls due, so the colour asserted below stays what it
         // means rather than turning red once the wall clock passes September 2026.
-        service = new LedgerService(store, jdbc, new WarningService(jdbc),
+        service = new InvoiceService(store, new PostgresInvoiceRepository(jdbc), new WarningService(jdbc),
             PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(LocalDate.of(2026, 8, 1).atStartOfDay(ZoneId.systemDefault()).toInstant(),
                 ZoneId.systemDefault())));
     }
@@ -56,7 +57,7 @@ class LedgerServiceTest {
     void postsRentChargeWithProjectionAndPutsTheTenancyOnTheBoard() {
         var tenancyId = UUID.randomUUID();
 
-        var chargeId = service.postRentCharge(TestWorkspace.ID, tenancyId, new BigDecimal("2500"),
+        var chargeId = service.postRent(TestWorkspace.ID, tenancyId, new BigDecimal("2500"),
             LocalDate.of(2026, 9, 1), "NAJEM/M1/2026");
 
         assertThat(store.load(tenancyId, "TenancyLedger").events())

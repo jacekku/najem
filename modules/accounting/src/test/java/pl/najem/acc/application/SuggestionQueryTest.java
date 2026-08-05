@@ -41,7 +41,7 @@ class SuggestionQueryTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService laddered;
     static SuggestionQuery suggestions;
 
@@ -54,7 +54,7 @@ class SuggestionQueryTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         laddered = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
         suggestions = new SuggestionQuery(jdbc);
     }
@@ -63,7 +63,7 @@ class SuggestionQueryTest {
     @Test
     void anExactMatchCarriesItsTierAndTheEvidenceForIt() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2500"), DUE, "NAJEM/Q1/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2500"), DUE, "NAJEM/Q1/2027");
         laddered.ingest(WS, credit("tx-q1", "2500", "NAJEM/Q1/2027", "Anna Kowalska", "PL99"));
 
         var row = only("tx-q1");
@@ -85,7 +85,7 @@ class SuggestionQueryTest {
      */
     @Test
     void aPartPaymentSaysSoBeforeItIsConfirmed() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("3000"), DUE, "NAJEM/Q2/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("3000"), DUE, "NAJEM/Q2/2027");
         laddered.ingest(WS, credit("tx-q2", "500", "przelew najem/q2/2027 czynsz", "Jan Nowak", "PL88"));
 
         var row = only("tx-q2");
@@ -100,8 +100,8 @@ class SuggestionQueryTest {
     /** Certainties first: a manager working down the list spends attention where it is needed. */
     @Test
     void theMostConfidentSuggestionsComeFirst() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("1000"), DUE, "NAJEM/Q3/2027");
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("1000"), DUE, "NAJEM/Q4/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("1000"), DUE, "NAJEM/Q3/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("1000"), DUE, "NAJEM/Q4/2027");
         laddered.ingest(WS, credit("tx-q4", "1000", "oplata najem/q4/2027", "B", "PL77"));
         laddered.ingest(WS, credit("tx-q3", "1000", "NAJEM/Q3/2027", "A", "PL76"));
 
@@ -113,7 +113,7 @@ class SuggestionQueryTest {
     /** A suggestion belongs to one agency's books. */
     @Test
     void anotherWorkspaceSeesNothing() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("900"), DUE, "NAJEM/Q5/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("900"), DUE, "NAJEM/Q5/2027");
         laddered.ingest(WS, credit("tx-q5", "900", "NAJEM/Q5/2027", "C", "PL75"));
 
         assertThat(suggestions.forWorkspace(OTHER_WS)).isEmpty();

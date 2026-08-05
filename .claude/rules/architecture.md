@@ -103,14 +103,14 @@ definition, so the longer name adds a word and drops the more useful signal — 
 Rule A5 is the destination. As of 2026-08-05 the accounting module is partway there:
 
 - **Behind ports:** the `allocate` path — `PaymentRepository`, `InvoiceRepository`,
-  `AccountingRepository` — and the arrears board, which reads through `InvoiceRepository` and
-  writes through `ArrearsStandingProjection`.
-- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **10 times** in
-  `pl.najem.acc.application`. `LedgerService`, `CorrectionService`, `IngestionService`,
-  `SuspenseService`, `DepositService` and others are each a service and their own repository at
-  once.
+  `AccountingRepository` — the arrears board, which reads through `InvoiceRepository` and writes
+  through `ArrearsStandingProjection`, and the posting path: `InvoiceService` (was `LedgerService`)
+  asserts, withdraws and credits obligations through that same `InvoiceRepository`.
+- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **9 times** in
+  `pl.najem.acc.application`. `CorrectionService`, `IngestionService`, `SuspenseService`,
+  `DepositService` and others are each a service and their own repository at once.
 
-Each of those imports is a port that has not been named yet. `LedgerService` holding a
+Each of those imports is a port that has not been named yet. `CorrectionService` holding a
 `JdbcTemplate` is not a violation of A5 — it is a class the extraction has not reached. The
 distinction is practical: a violation blocks a merge, a migration front is tracked and worked
 down. Treating them alike is how a rule stops being believed.

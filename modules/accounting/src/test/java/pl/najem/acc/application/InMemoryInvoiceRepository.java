@@ -1,6 +1,7 @@
 package pl.najem.acc.application;
 
 import pl.najem.acc.domain.Component;
+import pl.najem.acc.domain.CreditNoteIssued;
 import pl.najem.acc.domain.Invoice;
 
 import java.math.BigDecimal;
@@ -9,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -42,8 +44,9 @@ public class InMemoryInvoiceRepository implements InvoiceRepository {
     }
 
     private final Map<UUID, Stored> invoices = new LinkedHashMap<>();
+    private final List<CreditNoteIssued> creditNotes = new ArrayList<>();
 
-    /** Posts an obligation and returns its identifier, as the ledger would. */
+    /** Posts an obligation and returns its identifier, without going through the service. */
     public UUID post(UUID workspaceId, UUID tenancyId, Component component, BigDecimal amount,
                      LocalDate dueDate) {
         UUID invoiceId = UUID.randomUUID();
@@ -67,6 +70,10 @@ public class InMemoryInvoiceRepository implements InvoiceRepository {
         return invoices.get(invoiceId);
     }
 
+    public List<CreditNoteIssued> creditNotes() {
+        return List.copyOf(creditNotes);
+    }
+
     public BigDecimal settled(UUID invoiceId) {
         return invoices.get(invoiceId).allocatedAmount();
     }
@@ -81,16 +88,35 @@ public class InMemoryInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
+    public void post(UUID workspaceId, UUID tenancyId, List<InvoiceToPost> toPost, LocalDate dueDate,
+                     String paymentReference) {
+        for (InvoiceToPost invoice : toPost) {
+            invoices.put(invoice.invoiceId(), new Stored(workspaceId, tenancyId, invoice.component(),
+                invoice.amount(), BigDecimal.ZERO, dueDate, true, false));
+        }
+    }
+
+    @Override
     public List<Invoice> openInvoices(UUID workspaceId, UUID tenancyId) {
         var open = new ArrayList<Invoice>();
         invoices.forEach((invoiceId, stored) -> {
             if (stored.workspaceId().equals(workspaceId) && stored.tenancyId().equals(tenancyId)
                 && stored.active() && stored.owed().signum() > 0) {
-                open.add(new Invoice(invoiceId, stored.component(), stored.dueDate(),
-                    stored.owed()));
+                open.add(asInvoice(invoiceId, stored));
             }
         });
         return open;
+    }
+
+    /**
+     * The workspace clause is the boundary, and it is a filter rather than a failure: a charge in
+     * another agency is absent, not forbidden.
+     */
+    @Override
+    public Optional<Invoice> find(UUID workspaceId, UUID invoiceId) {
+        return Optional.ofNullable(invoices.get(invoiceId))
+            .filter(stored -> stored.workspaceId().equals(workspaceId))
+            .map(stored -> asInvoice(invoiceId, stored));
     }
 
     /**
@@ -112,5 +138,41 @@ public class InMemoryInvoiceRepository implements InvoiceRepository {
         invoices.put(invoiceId, new Stored(stored.workspaceId(), stored.tenancyId(),
             stored.component(), stored.amount(), settledAfter, stored.dueDate(), stored.active(),
             settledAfter.compareTo(stored.amount()) >= 0));
+    }
+
+    /** The row survives, exactly as the update does — a withdrawal is not a delete. */
+    @Override
+    public void withdraw(UUID workspaceId, UUID invoiceId) {
+        Stored stored = invoices.get(invoiceId);
+        if (stored == null || !stored.workspaceId().equals(workspaceId)) {
+            return;
+        }
+        deactivate(invoiceId);
+    }
+
+    @Override
+    public void recordCreditNote(UUID workspaceId, CreditNoteIssued note) {
+        creditNotes.add(note);
+    }
+
+    /**
+     * The latest rent line due by then, withdrawn ones included — the SQL carries no {@code active}
+     * clause and this must not quietly disagree with it.
+     */
+    @Override
+    public BigDecimal rentInForceOn(UUID workspaceId, UUID tenancyId, LocalDate asOf) {
+        return invoices.values().stream()
+            .filter(stored -> stored.workspaceId().equals(workspaceId))
+            .filter(stored -> stored.tenancyId().equals(tenancyId))
+            .filter(stored -> stored.component() == Component.RENT)
+            .filter(stored -> !stored.dueDate().isAfter(asOf))
+            .max((a, b) -> a.dueDate().compareTo(b.dueDate()))
+            .map(Stored::amount)
+            .orElse(BigDecimal.ZERO);
+    }
+
+    private static Invoice asInvoice(UUID invoiceId, Stored stored) {
+        return new Invoice(invoiceId, stored.tenancyId(), stored.component(), stored.dueDate(),
+            stored.amount(), stored.owed(), stored.allocated());
     }
 }

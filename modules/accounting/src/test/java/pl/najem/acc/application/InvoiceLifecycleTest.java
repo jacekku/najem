@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * a credit note is the document face the tenant is entitled to see.
  */
 @Testcontainers
-class ChargeLifecycleTest {
+class InvoiceLifecycleTest {
 
     private static final UUID WS = TestWorkspace.ID;
     private static final LocalDate DUE = LocalDate.of(2026, 12, 10);
@@ -41,7 +41,7 @@ class ChargeLifecycleTest {
 
     static JdbcTemplate jdbc;
     static JdbcEventStore store;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService ingestion;
     static ReconciliationService reconciliation;
 
@@ -54,7 +54,7 @@ class ChargeLifecycleTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> java.util.List.of(), store, jdbc);
         reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
     }
@@ -62,9 +62,9 @@ class ChargeLifecycleTest {
     @Test
     void anUnpaidChargeIsDeactivated() {
         var tenancyId = UUID.randomUUID();
-        var chargeId = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/CL1/2026");
+        var chargeId = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/CL1/2026");
 
-        ledger.deactivateCharge(WS, chargeId, "posted in error");
+        invoicing.withdraw(WS, chargeId, "posted in error");
 
         assertThat(jdbc.queryForObject("select active from acc_charge where charge_id = ?",
             Boolean.class, chargeId)).isFalse();
@@ -75,8 +75,8 @@ class ChargeLifecycleTest {
     @Test
     void aDeactivatedChargeNoLongerAttractsPayments() {
         var tenancyId = UUID.randomUUID();
-        var chargeId = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2100"), DUE, "NAJEM/CL2/2026");
-        ledger.deactivateCharge(WS, chargeId, "tenant never moved in");
+        var chargeId = invoicing.postRent(WS, tenancyId, new BigDecimal("2100"), DUE, "NAJEM/CL2/2026");
+        invoicing.withdraw(WS, chargeId, "tenant never moved in");
 
         ingestion.ingest(WS, new BankLine("tx-cl2", new BigDecimal("2100"), "NAJEM/CL2/2026", DUE));
 
@@ -88,8 +88,8 @@ class ChargeLifecycleTest {
     void aPaidChargeCannotBeDeactivatedAndTheRefusalNamesTheCreditNote() {
         var chargeId = paidCharge("NAJEM/CL3/2026", new BigDecimal("2200"));
 
-        assertThatThrownBy(() -> ledger.deactivateCharge(WS, chargeId, "rent was wrong"))
-            .isInstanceOf(ChargeAlreadyPaidException.class)
+        assertThatThrownBy(() -> invoicing.withdraw(WS, chargeId, "rent was wrong"))
+            .isInstanceOf(InvoiceAlreadyPaidException.class)
             .hasMessageContaining("credit note");
 
         assertThat(jdbc.queryForObject("select active from acc_charge where charge_id = ?",
@@ -101,7 +101,7 @@ class ChargeLifecycleTest {
         var tenancyId = UUID.randomUUID();
         var chargeId = paidCharge(tenancyId, "NAJEM/CL4/2026", new BigDecimal("2300"));
 
-        var creditNoteId = ledger.issueCreditNote(WS, chargeId, new BigDecimal("300"),
+        var creditNoteId = invoicing.issueCreditNote(WS, chargeId, new BigDecimal("300"),
             "hot water out for a week");
 
         assertThat(jdbc.queryForObject("select amount from acc_charge where charge_id = ?",
@@ -116,18 +116,18 @@ class ChargeLifecycleTest {
     void aCreditNoteCannotExceedTheChargeItCorrects() {
         var chargeId = paidCharge("NAJEM/CL5/2026", new BigDecimal("2400"));
 
-        assertThatThrownBy(() -> ledger.issueCreditNote(WS, chargeId, new BigDecimal("2500"), "typo"))
+        assertThatThrownBy(() -> invoicing.issueCreditNote(WS, chargeId, new BigDecimal("2500"), "typo"))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
     /** The pair is not interchangeable in either direction: an unpaid charge is corrected by deactivation. */
     @Test
     void anUnpaidChargeIsNotCorrectedByACreditNote() {
-        var chargeId = ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("2600"), DUE,
+        var chargeId = invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("2600"), DUE,
             "NAJEM/CL6/2026");
 
-        assertThatThrownBy(() -> ledger.issueCreditNote(WS, chargeId, new BigDecimal("100"), "discount"))
-            .isInstanceOf(ChargeNotPaidException.class)
+        assertThatThrownBy(() -> invoicing.issueCreditNote(WS, chargeId, new BigDecimal("100"), "discount"))
+            .isInstanceOf(InvoiceNotPaidException.class)
             .hasMessageContaining("deactivat");
     }
 
@@ -136,7 +136,7 @@ class ChargeLifecycleTest {
         var chargeId = paidCharge("NAJEM/CL7/2026", new BigDecimal("2700"));
         var otherWorkspace = UUID.fromString("00000000-0000-0000-0000-0000000000cc");
 
-        assertThatThrownBy(() -> ledger.issueCreditNote(otherWorkspace, chargeId,
+        assertThatThrownBy(() -> invoicing.issueCreditNote(otherWorkspace, chargeId,
             new BigDecimal("100"), "not mine"))
             .isInstanceOf(IllegalArgumentException.class);
     }
@@ -146,7 +146,7 @@ class ChargeLifecycleTest {
     }
 
     private static UUID paidCharge(UUID tenancyId, String reference, BigDecimal amount) {
-        var chargeId = ledger.postRentCharge(WS, tenancyId, amount, DUE, reference);
+        var chargeId = invoicing.postRent(WS, tenancyId, amount, DUE, reference);
         ingestion.ingest(WS, new BankLine("tx-" + reference, amount, reference, DUE));
         UUID paymentId = jdbc.queryForObject(
             "select payment_id from acc_payment where external_id = ?", UUID.class, "tx-" + reference);

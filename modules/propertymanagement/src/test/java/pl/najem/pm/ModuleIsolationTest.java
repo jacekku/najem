@@ -99,7 +99,7 @@ class ModuleIsolationTest {
     @Test
     void pmDoesNotDependOnAnotherModule() {
         for (String foreign : Set.of(
-                "pl.najem.acc.application.LedgerService",
+                "pl.najem.acc.application.InvoiceService",
                 "pl.najem.contacts.application.ContactService",
                 "pl.najem.um.application.WorkspaceService",
                 "pl.najem.reporting.application.EventFeed")) {

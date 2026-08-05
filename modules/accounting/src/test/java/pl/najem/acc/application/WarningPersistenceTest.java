@@ -24,7 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A warning nobody can see is not a warning. Compliance flags raised while charging are persisted
+ * A warning nobody can see is not a warning. Compliance flags raised while invoicing are persisted
  * in the same transaction as the charge that raised them — queryable, workspace-scoped and
  * restart-proof, rather than a log line that scrolls away.
  */
@@ -39,7 +39,7 @@ class WarningPersistenceTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static WarningService warnings;
 
     @BeforeAll
@@ -52,14 +52,14 @@ class WarningPersistenceTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         warnings = new WarningService(jdbc);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, warnings);
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, warnings);
     }
 
     @Test
     void chargingWithoutAContractualSplitRaisesAVisibleWarning() {
         var tenancyId = UUID.randomUUID();
 
-        ledger.postMonthlyCharges(WS, tenancyId, MonthlyBreakdown.unsplit(new BigDecimal("3000")),
+        invoicing.postMonth(WS, tenancyId, MonthlyBreakdown.unsplit(new BigDecimal("3000")),
             DUE, "NAJEM/W1/2027");
 
         var raised = warnings.unseen(WS).stream()
@@ -74,7 +74,7 @@ class WarningPersistenceTest {
     void aBreakdownMismatchRaisesAWarningCarryingBothFigures() {
         var tenancyId = UUID.randomUUID();
 
-        ledger.postMonthlyCharges(WS, tenancyId,
+        invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.split(new BigDecimal("3000"), new BigDecimal("2400"),
                 new BigDecimal("300"), new BigDecimal("200")),
             DUE, "NAJEM/W2/2027");
@@ -90,7 +90,7 @@ class WarningPersistenceTest {
     void aCleanContractualSplitRaisesNothing() {
         var tenancyId = UUID.randomUUID();
 
-        ledger.postMonthlyCharges(WS, tenancyId,
+        invoicing.postMonth(WS, tenancyId,
             MonthlyBreakdown.split(new BigDecimal("3000"), new BigDecimal("2400"),
                 new BigDecimal("300"), new BigDecimal("300")),
             DUE, "NAJEM/W3/2027");
@@ -101,7 +101,7 @@ class WarningPersistenceTest {
     @Test
     void warningsBelongToTheirWorkspace() {
         var tenancyId = UUID.randomUUID();
-        ledger.postMonthlyCharges(WS, tenancyId, MonthlyBreakdown.unsplit(new BigDecimal("1500")),
+        invoicing.postMonth(WS, tenancyId, MonthlyBreakdown.unsplit(new BigDecimal("1500")),
             DUE, "NAJEM/W4/2027");
 
         assertThat(warnings.unseen(OTHER_WS))
@@ -111,7 +111,7 @@ class WarningPersistenceTest {
     @Test
     void anAcknowledgedWarningLeavesTheUnseenQueue() {
         var tenancyId = UUID.randomUUID();
-        ledger.postMonthlyCharges(WS, tenancyId, MonthlyBreakdown.unsplit(new BigDecimal("1600")),
+        invoicing.postMonth(WS, tenancyId, MonthlyBreakdown.unsplit(new BigDecimal("1600")),
             DUE, "NAJEM/W5/2027");
         var warningId = warnings.unseen(WS).stream()
             .filter(w -> w.tenancyId().equals(tenancyId)).findFirst().orElseThrow().warningId();
@@ -125,7 +125,7 @@ class WarningPersistenceTest {
     @Test
     void anotherWorkspaceCannotAcknowledgeYourWarning() {
         var tenancyId = UUID.randomUUID();
-        ledger.postMonthlyCharges(WS, tenancyId, MonthlyBreakdown.unsplit(new BigDecimal("1700")),
+        invoicing.postMonth(WS, tenancyId, MonthlyBreakdown.unsplit(new BigDecimal("1700")),
             DUE, "NAJEM/W6/2027");
         var warningId = warnings.unseen(WS).stream()
             .filter(w -> w.tenancyId().equals(tenancyId)).findFirst().orElseThrow().warningId();

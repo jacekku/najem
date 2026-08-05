@@ -45,7 +45,7 @@ class MatchingLadderTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService laddered;
     static IngestionService tierOneOnly;
     static ReconciliationService reconciliation;
@@ -61,7 +61,7 @@ class MatchingLadderTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         warnings = new WarningService(jdbc);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, warnings);
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, warnings);
         reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
         laddered = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
         tierOneOnly = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tierOneOnly());
@@ -73,7 +73,7 @@ class MatchingLadderTest {
      */
     @Test
     void withTheLadderOffAMangledReferenceFindsNothing() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("2000"), DUE, "NAJEM/ML1/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("2000"), DUE, "NAJEM/ML1/2027");
 
         tierOneOnly.ingest(WS, credit("tx-ml1", "2000", "najem ml1 2027", null));
 
@@ -87,7 +87,7 @@ class MatchingLadderTest {
      */
     @Test
     void tierTwoRecognisesAReferenceTypedCarelessly() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("2100"), DUE, "NAJEM/ML2/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("2100"), DUE, "NAJEM/ML2/2027");
 
         laddered.ingest(WS, credit("tx-ml2", "2100", "najem ml2 2027", null));
 
@@ -101,7 +101,7 @@ class MatchingLadderTest {
      */
     @Test
     void tierTwoMatchesOnReferenceWhenTheAmountFallsShort() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("2200"), DUE, "NAJEM/ML3/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("2200"), DUE, "NAJEM/ML3/2027");
 
         laddered.ingest(WS, credit("tx-ml3", "1320.00", "NAJEM/ML3/2027", null));
 
@@ -112,9 +112,9 @@ class MatchingLadderTest {
     /** An exact match is a better answer than a fuzzy one, so tier 1 must be tried first. */
     @Test
     void tierOneWinsWhenBothCouldApply() {
-        var exact = ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("2300"), DUE,
+        var exact = invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("2300"), DUE,
             "NAJEM/ML4/2027");
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("9999"), DUE.minusDays(30),
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("9999"), DUE.minusDays(30),
             "NAJEM/ML4/2027");
 
         laddered.ingest(WS, credit("tx-ml4", "2300", "NAJEM/ML4/2027", null));
@@ -132,8 +132,8 @@ class MatchingLadderTest {
     @Test
     void tierTwoPrefersTheLongestReferenceThePayerNamed() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("500"), DUE, "NAJEM/MS1");
-        var named = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2500"), DUE.plusMonths(8),
+        invoicing.postRent(WS, tenancyId, new BigDecimal("500"), DUE, "NAJEM/MS1");
+        var named = invoicing.postRent(WS, tenancyId, new BigDecimal("2500"), DUE.plusMonths(8),
             "NAJEM/MS1/2027/09");
 
         laddered.ingest(WS, credit("tx-ms1", "2500", "przelew najem ms1 2027 09", null));
@@ -144,7 +144,7 @@ class MatchingLadderTest {
     /** Tier 4: an unrecognised payer with no reference is the manual queue, not a guess. */
     @Test
     void anUnknownPayerWithoutAReferenceReachesTheManualQueue() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("2400"), DUE, "NAJEM/ML5/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("2400"), DUE, "NAJEM/ML5/2027");
 
         laddered.ingest(WS, credit("tx-ml5", "2400", "", UNKNOWN_ACCOUNT));
 
@@ -160,11 +160,11 @@ class MatchingLadderTest {
     @Test
     void confirmingAMatchTeachesTheLedgerThePayersAccount() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2500"), DUE, "NAJEM/ML6/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2500"), DUE, "NAJEM/ML6/2027");
         laddered.ingest(WS, credit("tx-ml6", "2500", "NAJEM/ML6/2027", ANNAS_ACCOUNT));
         reconciliation.confirm(WS, paymentOf("tx-ml6"));
 
-        var next = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2500"), DUE.plusMonths(1),
+        var next = invoicing.postRent(WS, tenancyId, new BigDecimal("2500"), DUE.plusMonths(1),
             "NAJEM/ML6B/2027");
         laddered.ingest(WS, credit("tx-ml6b", "2500", "", ANNAS_ACCOUNT));
 
@@ -178,11 +178,11 @@ class MatchingLadderTest {
     void aRememberedPayerDoesNotCrossTheWorkspaceBoundary() {
         var tenancyId = UUID.randomUUID();
         var payerAccount = "PL10105000997603123456789123";
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2600"), DUE, "NAJEM/ML7/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2600"), DUE, "NAJEM/ML7/2027");
         laddered.ingest(WS, credit("tx-ml7", "2600", "NAJEM/ML7/2027", payerAccount));
         reconciliation.confirm(WS, paymentOf("tx-ml7"));
 
-        ledger.postRentCharge(OTHER_WS, UUID.randomUUID(), new BigDecimal("2600"), DUE, "OBCE/ML7/2027");
+        invoicing.postRent(OTHER_WS, UUID.randomUUID(), new BigDecimal("2600"), DUE, "OBCE/ML7/2027");
         laddered.ingest(OTHER_WS, credit("tx-ml7-other", "2600", "", payerAccount));
 
         assertThat(statusOf("tx-ml7-other")).isEqualTo("unmatched");
@@ -195,11 +195,11 @@ class MatchingLadderTest {
     @Test
     void tierThreeDoesNotFireOnAMissingCounterparty() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2700"), DUE, "NAJEM/ML8/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2700"), DUE, "NAJEM/ML8/2027");
         laddered.ingest(WS, credit("tx-ml8", "2700", "NAJEM/ML8/2027", "PL99999999999999999999999999"));
         reconciliation.confirm(WS, paymentOf("tx-ml8"));
 
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2700"), DUE.plusMonths(1), "NAJEM/ML8B/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2700"), DUE.plusMonths(1), "NAJEM/ML8B/2027");
         laddered.ingest(WS, credit("tx-ml8b", "2700", "", null));
 
         assertThat(statusOf("tx-ml8b")).isEqualTo("unmatched");
@@ -235,7 +235,7 @@ class MatchingLadderTest {
         var guarantor = "PL83101010230000261395100001";
         confirmedPaymentFrom(guarantor, flatA, "3100", "NAJEM/MG1A/2027", "tx-mg1a");
         confirmedPaymentFrom(guarantor, flatB, "3200", "NAJEM/MG1B/2027", "tx-mg1b");
-        ledger.postRentCharge(WS, flatA, new BigDecimal("3100"), DUE.plusMonths(1), "NAJEM/MG1C/2027");
+        invoicing.postRent(WS, flatA, new BigDecimal("3100"), DUE.plusMonths(1), "NAJEM/MG1C/2027");
 
         laddered.ingest(WS, credit("tx-mg1c", "3100", "", guarantor));
 
@@ -276,7 +276,7 @@ class MatchingLadderTest {
 
     private static void confirmedPaymentFrom(String payerIban, UUID tenancyId, String amount,
                                              String reference, String externalId) {
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal(amount), DUE, reference);
+        invoicing.postRent(WS, tenancyId, new BigDecimal(amount), DUE, reference);
         laddered.ingest(WS, credit(externalId, amount, reference, payerIban));
         reconciliation.confirm(WS, paymentOf(externalId));
     }
@@ -284,7 +284,7 @@ class MatchingLadderTest {
     /** Automation is built and off: the ladder suggests, and only a manager moves money. */
     @Test
     void aSuggestionIsNeverAllocatedByTheLadderItself() {
-        var chargeId = ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("3000"), DUE,
+        var chargeId = invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("3000"), DUE,
             "NAJEM/ML10/2027");
 
         laddered.ingest(WS, credit("tx-ml10", "3000", "NAJEM/ML10/2027", OWN_ACCOUNT));

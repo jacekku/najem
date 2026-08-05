@@ -2,7 +2,7 @@ package pl.najem.acc.adapter.pm;
 
 import org.springframework.stereotype.Component;
 import pl.najem.acc.application.DepositService;
-import pl.najem.acc.application.LedgerService;
+import pl.najem.acc.application.InvoiceService;
 import pl.najem.acc.application.MonthlyBreakdown;
 import pl.najem.contracts.events.IntegrationEventHandler;
 import pl.najem.contracts.events.TenancyActivatedEvent;
@@ -13,11 +13,11 @@ import java.math.BigDecimal;
 @Component
 public class TenancyActivatedHandler implements IntegrationEventHandler<TenancyActivatedEvent> {
 
-    private final LedgerService ledger;
+    private final InvoiceService invoicing;
     private final DepositService deposits;
 
-    public TenancyActivatedHandler(LedgerService ledger, DepositService deposits) {
-        this.ledger = ledger;
+    public TenancyActivatedHandler(InvoiceService invoicing, DepositService deposits) {
+        this.invoicing = invoicing;
         this.deposits = deposits;
     }
 
@@ -29,7 +29,7 @@ public class TenancyActivatedHandler implements IntegrationEventHandler<TenancyA
     @Override
     public void handle(TenancyActivatedEvent event) {
         var breakdown = breakdownOf(event);
-        ledger.postMonthlyCharges(event.workspaceId(), event.tenancyId(), breakdown,
+        invoicing.postMonth(event.workspaceId(), event.tenancyId(), breakdown,
             event.startDate(), event.paymentReference());
         // A null depositAmount is a contract without a deposit, which the service refuses to turn
         // into a zero-value charge. The multiple is of the czynsz, not the monthly total.
@@ -51,7 +51,7 @@ public class TenancyActivatedHandler implements IntegrationEventHandler<TenancyA
      * not an approximation.
      */
     private static BigDecimal rentBase(MonthlyBreakdown breakdown) {
-        return breakdown.chargeLines().stream()
+        return breakdown.invoiceLines().stream()
             .filter(line -> line.component() == pl.najem.acc.domain.Component.RENT)
             .map(line -> line.amount())
             .findFirst()

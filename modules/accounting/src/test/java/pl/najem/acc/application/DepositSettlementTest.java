@@ -52,7 +52,7 @@ class DepositSettlementTest {
     static JdbcTemplate jdbc;
     static JdbcEventStore store;
     static DepositService deposits;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
 
     @BeforeAll
     static void setUp() {
@@ -65,7 +65,7 @@ class DepositSettlementTest {
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         var warnings = new WarningService(jdbc);
         deposits = new DepositService(store, jdbc, warnings);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, warnings);
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, warnings);
     }
 
     /**
@@ -107,7 +107,7 @@ class DepositSettlementTest {
     void arrearsAreDeductedAndOnlyTheRemainderIsReturned() {
         var tenancyId = chargedDeposit("6000", "3000", "S3");
         pay(tenancyId);
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("3000"), START.plusYears(1), "NAJEM/S3/2028");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("3000"), START.plusYears(1), "NAJEM/S3/2028");
 
         deposits.settle(WS, tenancyId, new BigDecimal("3000"), RETURN);
 
@@ -125,8 +125,8 @@ class DepositSettlementTest {
     void everyDeductionNamesTheChargeItPaid() {
         var tenancyId = chargedDeposit("6000", "3000", "S4");
         pay(tenancyId);
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("1000"), START.plusYears(1), "NAJEM/S4A/2028");
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), START.plusMonths(13), "NAJEM/S4B/2028");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("1000"), START.plusYears(1), "NAJEM/S4A/2028");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), START.plusMonths(13), "NAJEM/S4B/2028");
 
         deposits.settle(WS, tenancyId, new BigDecimal("3000"), RETURN);
 
@@ -143,7 +143,7 @@ class DepositSettlementTest {
     void arrearsLargerThanTheDepositLeaveTheRemainderStillOwed() {
         var tenancyId = chargedDeposit("6000", "3000", "S5");
         pay(tenancyId);
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("9000"), START.plusYears(1), "NAJEM/S5/2028");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("9000"), START.plusYears(1), "NAJEM/S5/2028");
 
         deposits.settle(WS, tenancyId, new BigDecimal("3000"), RETURN);
 

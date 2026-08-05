@@ -32,11 +32,11 @@ public record MonthlyBreakdown(BigDecimal monthlyTotal, boolean componentSplitIn
      * The collapse rule (accounting-domain-model §2): without a contractual split the whole amount
      * is a single {@code rent} line — fully taxable AND fully valorizable.
      */
-    public List<ChargeLine> chargeLines() {
+    public List<InvoiceLine> invoiceLines() {
         if (!componentSplitInContract || splitIsEmpty()) {
-            return List.of(new ChargeLine(Component.RENT, monthlyTotal));
+            return List.of(new InvoiceLine(Component.RENT, monthlyTotal));
         }
-        var lines = new ArrayList<ChargeLine>();
+        var lines = new ArrayList<InvoiceLine>();
         addIfCharged(lines, Component.RENT, rent);
         addIfCharged(lines, Component.ADMIN_FEE, adminFee);
         addIfCharged(lines, Component.MEDIA_ADVANCE, mediaAdvance);
@@ -54,8 +54,8 @@ public record MonthlyBreakdown(BigDecimal monthlyTotal, boolean componentSplitIn
                 "no contractual split: a split was declared but no components were given, "
                     + "so the whole amount was charged as rent"));
         } else {
-            var sum = chargeLines().stream()
-                .map(ChargeLine::amount)
+            var sum = invoiceLines().stream()
+                .map(InvoiceLine::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (sum.compareTo(monthlyTotal) != 0) {
                 warnings.add(Warning.of(WarningKind.BREAKDOWN_MISMATCH,
@@ -70,9 +70,9 @@ public record MonthlyBreakdown(BigDecimal monthlyTotal, boolean componentSplitIn
         return isNothing(rent) && isNothing(adminFee) && isNothing(mediaAdvance);
     }
 
-    private static void addIfCharged(List<ChargeLine> lines, Component component, BigDecimal amount) {
+    private static void addIfCharged(List<InvoiceLine> lines, Component component, BigDecimal amount) {
         if (!isNothing(amount)) {
-            lines.add(new ChargeLine(component, amount));
+            lines.add(new InvoiceLine(component, amount));
         }
     }
 

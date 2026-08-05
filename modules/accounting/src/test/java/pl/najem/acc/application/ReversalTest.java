@@ -11,6 +11,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
+import pl.najem.acc.adapter.persistence.PostgresInvoiceRepository;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.PaymentAllocationAmended;
@@ -48,7 +49,7 @@ class ReversalTest {
 
     static JdbcTemplate jdbc;
     static JdbcEventStore store;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService ingestion;
     static SuspenseService suspense;
     static CorrectionService corrections;
@@ -66,7 +67,7 @@ class ReversalTest {
         // the system clock these assertions would read green/yellow until 2027 and red after it.
         var board = PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(
             DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
-        ledger = new LedgerService(store, jdbc, new WarningService(jdbc), board);
+        invoicing = new InvoiceService(store, new PostgresInvoiceRepository(jdbc), new WarningService(jdbc), board);
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         var accounting = new AccountingService(
             PostgresAccounting.allocationService(store, jdbc), board);
@@ -78,7 +79,7 @@ class ReversalTest {
     @Test
     void reversingAPaymentReopensTheChargesItSettledAtTheirOriginalDueDates() {
         var tenancyId = UUID.randomUUID();
-        var chargeId = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R1/2027");
+        var chargeId = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R1/2027");
         var paymentId = pay("tx-r1", "2000", tenancyId);
 
         corrections.reverse(WS, paymentId, "brak środków na koncie płatnika");
@@ -97,7 +98,7 @@ class ReversalTest {
     @Test
     void reversedMoneyIsNotCreditAndDoesNotWaitInSuspense() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R2/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R2/2027");
         var paymentId = pay("tx-r2", "2600", tenancyId);
         assertThat(unallocated(paymentId)).isEqualByComparingTo("600");
 
@@ -117,7 +118,7 @@ class ReversalTest {
     @Test
     void reversingTakesTheTenancyBackOffGreen() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R3/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R3/2027");
         var paymentId = pay("tx-r3", "2000", tenancyId);
         assertThat(boardStatus(tenancyId)).isEqualTo("green");
 
@@ -130,7 +131,7 @@ class ReversalTest {
     @Test
     void aPaymentCannotBeReversedTwice() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R4/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R4/2027");
         var paymentId = pay("tx-r4", "2000", tenancyId);
         corrections.reverse(WS, paymentId, "NSF");
 
@@ -143,8 +144,8 @@ class ReversalTest {
     void amendingMovesRealMoneyToTheTenancyItBelongsTo() {
         var wrong = UUID.randomUUID();
         var right = UUID.randomUUID();
-        var wrongCharge = ledger.postRentCharge(WS, wrong, new BigDecimal("2000"), DUE, "NAJEM/R5A/2027");
-        var rightCharge = ledger.postRentCharge(WS, right, new BigDecimal("2000"), DUE, "NAJEM/R5B/2027");
+        var wrongCharge = invoicing.postRent(WS, wrong, new BigDecimal("2000"), DUE, "NAJEM/R5A/2027");
+        var rightCharge = invoicing.postRent(WS, right, new BigDecimal("2000"), DUE, "NAJEM/R5B/2027");
         var paymentId = pay("tx-r5", "2000", wrong);
         assertThat(settled(wrongCharge)).isEqualByComparingTo("2000");
 
@@ -162,8 +163,8 @@ class ReversalTest {
     void amendingConservesTheMoney() {
         var wrong = UUID.randomUUID();
         var right = UUID.randomUUID();
-        ledger.postRentCharge(WS, wrong, new BigDecimal("2000"), DUE, "NAJEM/R6A/2027");
-        ledger.postRentCharge(WS, right, new BigDecimal("1500"), DUE, "NAJEM/R6B/2027");
+        invoicing.postRent(WS, wrong, new BigDecimal("2000"), DUE, "NAJEM/R6A/2027");
+        invoicing.postRent(WS, right, new BigDecimal("1500"), DUE, "NAJEM/R6B/2027");
         var paymentId = pay("tx-r6", "2000", wrong);
 
         corrections.amendAllocation(WS, paymentId, right, "wrong tenancy");
@@ -180,8 +181,8 @@ class ReversalTest {
     void anUndoneAllocationSurvivesAsTheRecordOfWhatWasDone() {
         var wrong = UUID.randomUUID();
         var right = UUID.randomUUID();
-        ledger.postRentCharge(WS, wrong, new BigDecimal("2000"), DUE, "NAJEM/R7A/2027");
-        ledger.postRentCharge(WS, right, new BigDecimal("2000"), DUE, "NAJEM/R7B/2027");
+        invoicing.postRent(WS, wrong, new BigDecimal("2000"), DUE, "NAJEM/R7A/2027");
+        invoicing.postRent(WS, right, new BigDecimal("2000"), DUE, "NAJEM/R7B/2027");
         var paymentId = pay("tx-r7", "2000", wrong);
 
         corrections.amendAllocation(WS, paymentId, right, "wrong tenancy");
@@ -195,7 +196,7 @@ class ReversalTest {
     @Test
     void anotherWorkspaceCannotReverseYourPayment() {
         var tenancyId = UUID.randomUUID();
-        var chargeId = ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R8/2027");
+        var chargeId = invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), DUE, "NAJEM/R8/2027");
         var paymentId = pay("tx-r8", "2000", tenancyId);
 
         assertThatThrownBy(() -> corrections.reverse(OTHER_WS, paymentId, "not mine"))

@@ -152,7 +152,7 @@ class EventContractTest {
         var portfolio = new PortfolioService(store, jdbc);
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
-        var ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        var invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         var ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         var reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
 
@@ -187,16 +187,16 @@ class EventContractTest {
         portfolio.closeUnitToRent(unitId, "renovation");
 
         var reference = "NAJEM-TRIPWIRE-1";
-        var chargeId = ledger.postRentCharge(workspace, tenancyId, new BigDecimal("2400"),
+        var chargeId = invoicing.postRent(workspace, tenancyId, new BigDecimal("2400"),
             LocalDate.of(2026, 10, 10), reference);
         ingestion.ingest(workspace, new BankLine("ext-1", new BigDecimal("2400"), reference,
             LocalDate.of(2026, 10, 9)));
         reconciliation.confirm(workspace, paymentIdOf(jdbc));
-        ledger.issueCreditNote(workspace, chargeId, new BigDecimal("100"), "goodwill");
+        invoicing.issueCreditNote(workspace, chargeId, new BigDecimal("100"), "goodwill");
 
-        var spare = ledger.postRentCharge(workspace, tenancyId, new BigDecimal("50"),
+        var spare = invoicing.postRent(workspace, tenancyId, new BigDecimal("50"),
             LocalDate.of(2026, 11, 10), "NAJEM-TRIPWIRE-2");
-        ledger.deactivateCharge(workspace, spare, "billed in error");
+        invoicing.withdraw(workspace, spare, "billed in error");
 
         emitted = drainFeed(new EventFeed(jdbc, json));
     }

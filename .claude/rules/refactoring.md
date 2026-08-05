@@ -15,7 +15,8 @@ persistence. Acting on the premise would have produced a wrong change. One grep 
 
 **2. Verify a Javadoc claim before preserving it.**
 `AllocationService.refreshBoard` asserted "every writer of charges goes through here."
-`LedgerService` had been calling `board.refresh` itself in three places for as long as it existed.
+`LedgerService` (now `InvoiceService`) had been calling `board.refresh` itself in three places
+for as long as it existed.
 The comment documented an intention, not an invariant, and it nearly argued a correct change out
 of existence. Claims in comments are evidence, not proof.
 
@@ -63,7 +64,7 @@ Verified from imports in `modules/accounting/src/main/java/pl/najem/acc`, not fr
         │                                                               │
         │  services                                                     │
         │  ├── AccountingService ──► AllocationService ──► [ports]      │
-        │  ├── ArrearsBoardService  LedgerService  CorrectionService     │
+        │  ├── ArrearsBoardService  InvoiceService  CorrectionService   │
         │  └── SuspenseService  ReconciliationService  IngestionService │
         └───────────────────────────┬───────────────────────────────────┘
                                     │ imports (32 refs)
@@ -88,7 +89,7 @@ In one line: `AllocationService` names `PaymentRepository`; `PostgresPaymentRepo
 
 Two things the diagram hides, both true today:
 
-- `application` imports `org.springframework.jdbc.core.JdbcTemplate` **10 times**. The layer is
+- `application` imports `org.springframework.jdbc.core.JdbcTemplate` **9 times**. The layer is
   clean with respect to this module's adapter package but is still directly coupled to Spring JDBC
   everywhere except `allocate`. The ports covered one method, not the layer — this is the
   remaining work.

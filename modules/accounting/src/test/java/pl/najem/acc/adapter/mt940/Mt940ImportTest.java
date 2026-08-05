@@ -15,7 +15,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.application.IngestionService;
-import pl.najem.acc.application.LedgerService;
+import pl.najem.acc.application.InvoiceService;
 import pl.najem.acc.application.WarningService;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -68,7 +68,7 @@ class Mt940ImportTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static Mt940Import imports;
 
     @BeforeAll
@@ -80,7 +80,7 @@ class Mt940ImportTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, applicationMapper(), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         imports = new Mt940Import(new IngestionService((since, iban) -> List.of(), store, jdbc));
     }
 
@@ -228,7 +228,7 @@ class Mt940ImportTest {
     @Test
     void anOutgoingDebitIsRecordedButNeverSuggestedHoweverWellItMatches() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WORKSPACE, tenancyId, new BigDecimal("287.43"),
+        invoicing.postRent(WORKSPACE, tenancyId, new BigDecimal("287.43"),
             LocalDate.of(2026, 9, 11), "OPLATA ZA MEDIA");
 
         imports.importStatement(WORKSPACE, statement("D"));
@@ -241,7 +241,7 @@ class Mt940ImportTest {
     @Test
     void aCreditWhoseReferenceAndAmountMatchAnOpenChargeIsSuggested() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WORKSPACE, tenancyId, new BigDecimal("2500.00"),
+        invoicing.postRent(WORKSPACE, tenancyId, new BigDecimal("2500.00"),
             LocalDate.of(2026, 9, 10), "NAJEM/T9/2026");
 
         imports.importStatement(WORKSPACE,

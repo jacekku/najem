@@ -32,7 +32,7 @@ class ReconciliationServiceTest {
 
     static JdbcTemplate jdbc;
     static JdbcEventStore store;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService ingestion;
     static ReconciliationService reconciliation;
 
@@ -45,7 +45,7 @@ class ReconciliationServiceTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
     }
@@ -53,7 +53,7 @@ class ReconciliationServiceTest {
     @Test
     void confirmingSuggestionAllocatesAndTurnsBoardGreen() {
         var tenancyId = UUID.randomUUID();
-        var chargeId = ledger.postRentCharge(TestWorkspace.ID, tenancyId, new BigDecimal("2500"),
+        var chargeId = invoicing.postRent(TestWorkspace.ID, tenancyId, new BigDecimal("2500"),
             LocalDate.of(2026, 9, 10), "NAJEM/T9/2026");
         ingestion.ingest(TestWorkspace.ID, new BankLine("tx-c1", new BigDecimal("2500"), "NAJEM/T9/2026",
             LocalDate.of(2026, 9, 3)));

@@ -58,8 +58,8 @@ class DepositTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         warnings = new WarningService(jdbc);
-        var ledger = PostgresAccounting.ledgerService(store, jdbc, warnings);
-        acl = new TenancyActivatedHandler(ledger, new DepositService(store, jdbc, warnings));
+        var invoicing = PostgresAccounting.invoiceService(store, jdbc, warnings);
+        acl = new TenancyActivatedHandler(invoicing, new DepositService(store, jdbc, warnings));
     }
 
     @Test

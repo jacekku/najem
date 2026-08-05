@@ -42,7 +42,7 @@ class BankLineDetailTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService ingestion;
 
     @BeforeAll
@@ -54,7 +54,7 @@ class BankLineDetailTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> java.util.List.of(), store, jdbc);
     }
 
@@ -82,7 +82,7 @@ class BankLineDetailTest {
      */
     @Test
     void anOutgoingDebitIsRecordedAndNeverSuggested() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("287.43"), BOOKED, "NAJEM/BD2/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("287.43"), BOOKED, "NAJEM/BD2/2027");
 
         ingestion.ingest(WS, new BankLine("tx-bd2", new BigDecimal("287.43"), "NAJEM/BD2/2027", BOOKED,
             "PGNIG OBROT DETALICZNY", "PL00000000000000000000000001", "BNP00099999",
@@ -98,7 +98,7 @@ class BankLineDetailTest {
     /** The ledger holds złoty. A euro line is a fact to be looked at by a human, not a match. */
     @Test
     void aForeignCurrencyLineIsNeverSuggestedAgainstAZlotyCharge() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("3000"), BOOKED, "NAJEM/BD3/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("3000"), BOOKED, "NAJEM/BD3/2027");
 
         ingestion.ingest(WS, new BankLine("tx-bd3", new BigDecimal("3000"), "NAJEM/BD3/2027", BOOKED,
             "NAJEMCA BD3", "PL00000000000000000000000002", "BNP00088888", BOOKED, "CRDT", "EUR"));
@@ -113,7 +113,7 @@ class BankLineDetailTest {
      */
     @Test
     void aLineWithoutACounterpartyIngestsRatherThanFailing() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("1800"), BOOKED, "NAJEM/BD4/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("1800"), BOOKED, "NAJEM/BD4/2027");
 
         ingestion.ingest(WS, new BankLine("tx-bd4", new BigDecimal("1800"), "NAJEM/BD4/2027", BOOKED,
             null, null, null, null, "CRDT", "PLN"));
@@ -132,7 +132,7 @@ class BankLineDetailTest {
      */
     @Test
     void theNarrowShapeStillReadsAsAnIncomingZlotyPayment() {
-        ledger.postRentCharge(WS, UUID.randomUUID(), new BigDecimal("1900"), BOOKED, "NAJEM/BD5/2027");
+        invoicing.postRent(WS, UUID.randomUUID(), new BigDecimal("1900"), BOOKED, "NAJEM/BD5/2027");
 
         ingestion.ingest(WS, new BankLine("tx-bd5", new BigDecimal("1900"), "NAJEM/BD5/2027", BOOKED));
 

@@ -95,7 +95,7 @@ class TenancyTimelineProjectionTest {
         var portfolio = new PortfolioService(store, jdbc);
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
-        var ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        var invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         var ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         var reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
 
@@ -117,7 +117,7 @@ class TenancyTimelineProjectionTest {
         // here: it used to throw, because PM and accounting shared one stream per tenancy until
         // EventStore.load began filtering on stream_type. This ordering is the regression test.
         var reference = "NAJEM-TL-1";
-        ledger.postRentCharge(workspace, tenancyId, new BigDecimal("2400"),
+        invoicing.postRent(workspace, tenancyId, new BigDecimal("2400"),
             LocalDate.of(2026, 10, 10), reference);
         ingestion.ingest(workspace, new BankLine("tl-ext-1", new BigDecimal("2400"), reference,
             LocalDate.of(2026, 10, 9)));

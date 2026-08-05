@@ -1,9 +1,9 @@
 package pl.najem.acc.application;
 
 /** Raised when an unpaid charge is credited: the correction for unpaid money is deactivation. */
-public class ChargeNotPaidException extends RuntimeException {
+public class InvoiceNotPaidException extends RuntimeException {
 
-    public ChargeNotPaidException(String message) {
+    public InvoiceNotPaidException(String message) {
         super(message);
     }
 }

@@ -79,8 +79,7 @@ class ArrearsStandingTest {
      */
     @Test
     void anUnpaidDepositColoursTheBoardWithoutAdvancingTheStatutoryCounter() {
-        var deposit = new Invoice(UUID.randomUUID(), Component.DEPOSIT, JANUARY,
-            new BigDecimal("6000"));
+        var deposit = invoice(Component.DEPOSIT, JANUARY, "6000");
 
         var standing = ArrearsStanding.of(List.of(deposit), MARCH);
 
@@ -97,8 +96,7 @@ class ArrearsStandingTest {
     void oneMonthBilledAsSeveralLinesIsOnePeriod() {
         var standing = ArrearsStanding.of(
             List.of(rent(JANUARY), rent(JANUARY),
-                new Invoice(UUID.randomUUID(), Component.MEDIA_ADVANCE, JANUARY,
-                    new BigDecimal("300"))),
+                invoice(Component.MEDIA_ADVANCE, JANUARY, "300")),
             MARCH);
 
         assertThat(standing.fullPeriodsInArrears()).isOne();
@@ -131,6 +129,12 @@ class ArrearsStandingTest {
     }
 
     private static Invoice rent(LocalDate dueDate, String owed) {
-        return new Invoice(UUID.randomUUID(), Component.RENT, dueDate, new BigDecimal(owed));
+        return invoice(Component.RENT, dueDate, owed);
+    }
+
+    /** Untouched by any payment: what is owed is the whole of what was charged. */
+    private static Invoice invoice(Component component, LocalDate dueDate, String owed) {
+        return new Invoice(UUID.randomUUID(), UUID.randomUUID(), component, dueDate,
+            new BigDecimal(owed), new BigDecimal(owed), false);
     }
 }

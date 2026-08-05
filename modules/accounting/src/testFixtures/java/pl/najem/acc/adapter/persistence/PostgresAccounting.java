@@ -4,7 +4,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import pl.najem.acc.application.AccountingService;
 import pl.najem.acc.application.AllocationService;
 import pl.najem.acc.application.ArrearsBoardService;
-import pl.najem.acc.application.LedgerService;
+import pl.najem.acc.application.InvoiceService;
 import pl.najem.acc.application.ReconciliationService;
 import pl.najem.acc.application.SuspenseService;
 import pl.najem.acc.application.WarningService;
@@ -55,9 +55,9 @@ public final class PostgresAccounting {
             arrearsBoardService(jdbc, Clock.systemDefaultZone()));
     }
 
-    public static LedgerService ledgerService(EventStore store, JdbcTemplate jdbc,
+    public static InvoiceService invoiceService(EventStore store, JdbcTemplate jdbc,
                                               WarningService warnings) {
-        return new LedgerService(store, jdbc, warnings,
+        return new InvoiceService(store, new PostgresInvoiceRepository(jdbc), warnings,
             arrearsBoardService(jdbc, Clock.systemDefaultZone()));
     }
 

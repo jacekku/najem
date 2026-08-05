@@ -30,7 +30,7 @@ class IngestionServiceTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService ingestion;
 
     @BeforeAll
@@ -42,14 +42,14 @@ class IngestionServiceTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
     }
 
     @Test
     void exactReferenceAndAmountMatchProducesSuggestion() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(TestWorkspace.ID, tenancyId, new BigDecimal("2500"), LocalDate.of(2026, 9, 10), "NAJEM/T1/2026");
+        invoicing.postRent(TestWorkspace.ID, tenancyId, new BigDecimal("2500"), LocalDate.of(2026, 9, 10), "NAJEM/T1/2026");
 
         ingestion.ingest(TestWorkspace.ID, new BankLine("tx-m1", new BigDecimal("2500"), "NAJEM/T1/2026",
             LocalDate.of(2026, 9, 3)));

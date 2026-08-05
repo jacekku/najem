@@ -46,7 +46,7 @@ class SuspenseTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static JdbcTemplate jdbc;
-    static LedgerService ledger;
+    static InvoiceService invoicing;
     static IngestionService ingestion;
     static ReconciliationService reconciliation;
     static SuspenseService suspense;
@@ -61,7 +61,7 @@ class SuspenseTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
         suspense = PostgresAccounting.suspenseService(store, jdbc);
@@ -123,7 +123,7 @@ class SuspenseTest {
     @Test
     void anOverpaymentsRemainderKeepsWaiting() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), BOOKED, "NAJEM/S5/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), BOOKED, "NAJEM/S5/2027");
         var paymentId = ingest("tx-s5", "2600", "NAJEM/S5/2027", null);
         suspense.allocateTo(WS, paymentId, tenancyId);
 
@@ -137,7 +137,7 @@ class SuspenseTest {
     @Test
     void anAllocatedPaymentLeavesTheQueue() {
         var tenancyId = UUID.randomUUID();
-        ledger.postRentCharge(WS, tenancyId, new BigDecimal("2000"), BOOKED, "NAJEM/S6/2027");
+        invoicing.postRent(WS, tenancyId, new BigDecimal("2000"), BOOKED, "NAJEM/S6/2027");
         var paymentId = ingest("tx-s6", "2000", "NAJEM/S6/2027", null);
         reconciliation.confirm(WS, paymentId);
 
