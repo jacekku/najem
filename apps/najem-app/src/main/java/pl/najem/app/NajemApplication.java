@@ -32,11 +32,15 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *
  * <pre>
  * drop pl.najem.pm         → three process managers go, AND ProcessRunnerController goes with them
- * drop pl.najem.reporting  → ProjectionRunner goes,     AND RebuildController goes with it
+ * drop pl.najem.reporting  → ProjectionRunner goes,     AND RebuildController goes with it —
+ *                            except RebuildController is @Conditional(RebuildEnabled) and is its
+ *                            ONLY injector, so in any deployment that has not opted into rebuild
+ *                            there is no consumer even before the cut. ProjectionRunner runs
+ *                            purely because it was scanned.
  * </pre>
  *
  * <p>Nothing is left to report an unsatisfied dependency, because the consumer was deleted in the
- * same stroke. Spring is not asked for a bean it cannot find; it is asked for nothing at all. The
+ * same stroke — or, for reporting by default, was never instantiated at all. Spring is not asked for a bean it cannot find; it is asked for nothing at all. The
  * app starts, every screen renders, and <b>projections silently stop advancing</b> — indistinguishable
  * from a quiet week. Four of these six packages have no such protection. <b>Treat an edit to this
  * list as a change that only a running system can falsify, and check what stopped moving.</b>
