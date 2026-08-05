@@ -89,7 +89,7 @@ In one line: `AllocationService` names `PaymentRepository`; `PostgresPaymentRepo
 
 Two things the diagram hides, both true today:
 
-- `application` imports `org.springframework.jdbc.core.JdbcTemplate` **8 times**. The layer is
+- `application` imports `org.springframework.jdbc.core.JdbcTemplate` **7 times**. The layer is
   clean with respect to this module's adapter package but is still directly coupled to Spring JDBC
   everywhere except `allocate`. The ports covered one method, not the layer — this is the
   remaining work.

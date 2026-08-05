@@ -66,7 +66,7 @@ class DepositSettlementTest {
         AccEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         var warnings = PostgresAccounting.warningService(jdbc);
-        deposits = new DepositService(store, jdbc, warnings);
+        deposits = PostgresAccounting.depositService(store, jdbc);
         invoicing = PostgresAccounting.invoiceService(store, jdbc, warnings);
     }
 

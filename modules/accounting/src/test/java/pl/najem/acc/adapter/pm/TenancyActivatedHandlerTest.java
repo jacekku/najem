@@ -55,7 +55,7 @@ class TenancyActivatedHandlerTest {
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         var warnings = PostgresAccounting.warningService(jdbc);
         handler = new TenancyActivatedHandler(PostgresAccounting.invoiceService(store, jdbc, warnings),
-            new DepositService(store, jdbc, warnings));
+            PostgresAccounting.depositService(store, jdbc));
     }
 
     @Test

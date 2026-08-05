@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import pl.najem.acc.application.AccountingService;
 import pl.najem.acc.application.AllocationService;
 import pl.najem.acc.application.ArrearsBoardService;
+import pl.najem.acc.application.DepositService;
 import pl.najem.acc.application.InvoiceService;
 import pl.najem.acc.application.ReconciliationService;
 import pl.najem.acc.application.SuspenseService;
@@ -67,6 +68,11 @@ public final class PostgresAccounting {
      */
     public static WarningService warningService(JdbcTemplate jdbc) {
         return new WarningService(new PostgresWarningRepository(jdbc));
+    }
+
+    public static DepositService depositService(EventStore store, JdbcTemplate jdbc) {
+        return new DepositService(store, new PostgresDepositRepository(jdbc),
+            new PostgresInvoiceRepository(jdbc), warningService(jdbc));
     }
 
     public static SuspenseService suspenseService(EventStore store, JdbcTemplate jdbc) {

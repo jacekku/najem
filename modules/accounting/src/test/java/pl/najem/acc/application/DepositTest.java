@@ -61,7 +61,7 @@ class DepositTest {
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         warnings = PostgresAccounting.warningService(jdbc);
         var invoicing = PostgresAccounting.invoiceService(store, jdbc, warnings);
-        acl = new TenancyActivatedHandler(invoicing, new DepositService(store, jdbc, warnings));
+        acl = new TenancyActivatedHandler(invoicing, PostgresAccounting.depositService(store, jdbc));
     }
 
     @Test

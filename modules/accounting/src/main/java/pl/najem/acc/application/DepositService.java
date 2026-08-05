@@ -1,22 +1,22 @@
 package pl.najem.acc.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.Component;
+import pl.najem.acc.domain.DepositAssessment;
 import pl.najem.acc.domain.DepositCharged;
 import pl.najem.acc.domain.DepositSettled;
 import pl.najem.acc.domain.DepositValorization;
-import pl.najem.acc.domain.LegalForm;
+import pl.najem.acc.domain.HeldDeposit;
+import pl.najem.acc.domain.Invoice;
 import pl.najem.acc.domain.WarningKind;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -27,20 +27,25 @@ import java.util.UUID;
  * mediaAdvance are not rent, and valorization at return works from the same base. Under the collapse
  * rule a contract with no split has a rent equal to its total, which is the intended consequence.
  *
- * <p>Caps warn and never refuse. A manager exceeding one is doing something the ledger should record
+ * <p>Caps warn and never refuse. A manager exceeding one is doing something the record should keep
  * and flag, not block — and a deposit the system refused to record is a deposit nobody can return.
+ * Whether a cap is exceeded is decided by {@link DepositAssessment}; the sentences below are this
+ * layer's, because they are addressed to a person.
  */
 @Service
 @Transactional
 public class DepositService {
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final DepositRepository deposits;
+    private final InvoiceRepository invoices;
     private final WarningService warnings;
 
-    public DepositService(EventStore store, JdbcTemplate jdbc, WarningService warnings) {
+    public DepositService(EventStore store, DepositRepository deposits, InvoiceRepository invoices,
+                          WarningService warnings) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.deposits = deposits;
+        this.invoices = invoices;
         this.warnings = warnings;
     }
 
@@ -60,43 +65,23 @@ public class DepositService {
         if (amount == null || amount.signum() <= 0) {
             return Optional.empty();
         }
-        var raised = new ArrayList<WarningToRaise>();
-        // The cap is a multiple of the czynsz, so with no czynsz there is no multiple to compare and
-        // the check cannot run. Saying so is the whole point: a multiplier of zero is not greater
-        // than any cap, so passing one to the comparison below reports a check that never happened,
-        // and a contract putting its whole monthly into adminFee and mediaAdvance is exactly how a
-        // deposit would be placed beyond the cap's reach.
-        boolean checkable = rentAtCharge != null && rentAtCharge.signum() > 0;
-        if (!checkable) {
-            raised.add(new WarningToRaise(WarningKind.DEPOSIT_CAP_UNCHECKABLE,
-                "kaucja " + amount + " zł; czynsz wynosi 0, więc nie sprawdzono ustawowego limitu"));
-        }
-        BigDecimal multiplier = multiplierOf(amount, rentAtCharge);
-        LegalForm.of(legalForm).ifPresentOrElse(
-            form -> {
-                if (checkable && multiplier.compareTo(BigDecimal.valueOf(form.depositCapInMonths())) > 0) {
-                    raised.add(new WarningToRaise(WarningKind.DEPOSIT_CAP_EXCEEDED,
-                        "kaucja " + amount + " zł to " + multiplier + "-krotność czynszu "
-                            + rentAtCharge + " zł; ustawowy limit dla formy " + form.name()
-                            + " to " + form.depositCapInMonths() + "-krotność"));
-                }
-            },
-            () -> raised.add(new WarningToRaise(WarningKind.UNKNOWN_LEGAL_FORM,
-                "nieznana forma najmu \"" + legalForm + "\"; nie sprawdzono limitu kaucji")));
+        var assessment = DepositAssessment.assess(amount, rentAtCharge, legalForm);
 
-        UUID chargeId = postDepositCharge(workspaceId, tenancyId, amount, dueDate, paymentReference);
+        UUID invoiceId = UUID.randomUUID();
+        // Through the invoice port rather than InvoiceService: the obligation the tenant pays is an
+        // ordinary charge row, but a deposit announces itself with DepositCharged rather than
+        // ChargePosted, and posting through the service would append a second event for the same
+        // fact and refresh the board on a charge that is not yet an arrear.
+        invoices.post(workspaceId, tenancyId,
+            List.of(new InvoiceToPost(invoiceId, Component.DEPOSIT, amount)), dueDate,
+            paymentReference);
+
         UUID depositId = UUID.randomUUID();
-        jdbc.update("""
-            insert into acc_deposit(deposit_id, workspace_id, tenancy_id, charge_id, legal_form,
-                                    nominal_amount, rent_at_charge, multiplier, state, charged_on)
-            values (?,?,?,?,?,?,?,?, 'charged', ?)
-            """, depositId, workspaceId, tenancyId, chargeId, legalForm, amount, rentAtCharge,
-            multiplier, dueDate);
-        var stream = store.load(tenancyId, "TenancyLedger");
-        store.append(tenancyId, "TenancyLedger", stream.version(),
-            List.of(new DepositCharged(depositId, tenancyId, chargeId, amount, multiplier,
-                rentAtCharge, legalForm)), List.of());
-        warnings.raise(workspaceId, tenancyId, raised);
+        deposits.charge(workspaceId, tenancyId, new DepositToCharge(depositId, invoiceId, legalForm,
+            amount, rentAtCharge, assessment.multiplier(), dueDate));
+        append(tenancyId, new DepositCharged(depositId, tenancyId, invoiceId, amount,
+            assessment.multiplier(), rentAtCharge, legalForm));
+        warnings.raise(workspaceId, tenancyId, flagsFor(assessment, amount, rentAtCharge, legalForm));
         return Optional.of(depositId);
     }
 
@@ -108,7 +93,7 @@ public class DepositService {
      * than the sum actually taken. The multiple is the one snapshotted at activation — recomputing
      * it from today's figures would re-price the contract every time the rent moved.
      *
-     * <p>Deductions are itemised against the charges they settle rather than recorded as one total,
+     * <p>Deductions are itemised against the invoices they settle rather than recorded as one total,
      * because a disputed deduction has to be traceable to the obligation it paid. Arrears beyond the
      * deposit are not forgiven by settling it; what the deposit could not cover stays owed.
      *
@@ -117,45 +102,28 @@ public class DepositService {
      */
     public BigDecimal settle(UUID workspaceId, UUID tenancyId, BigDecimal rentAtReturn,
                              LocalDate returnedOn) {
-        var deposit = held(workspaceId, tenancyId);
-        UUID depositId = (UUID) deposit.get("deposit_id");
-        var valorization = DepositValorization.compute((BigDecimal) deposit.get("multiplier"),
-            (BigDecimal) deposit.get("nominal_amount"), rentAtReturn);
+        HeldDeposit deposit = held(workspaceId, tenancyId);
+        var valorization = DepositValorization.compute(deposit.multiplier(),
+            deposit.nominalAmount(), rentAtReturn);
 
         BigDecimal remaining = valorization.valorized();
         BigDecimal deducted = BigDecimal.ZERO;
-        for (var charge : arrears(workspaceId, tenancyId)) {
+        for (Invoice arrear : arrears(workspaceId, tenancyId)) {
             if (remaining.signum() <= 0) {
                 break;
             }
-            BigDecimal owed = (BigDecimal) charge.get("owed");
-            BigDecimal taken = remaining.min(owed);
-            jdbc.update("""
-                insert into acc_deposit_deduction(deduction_id, workspace_id, deposit_id, charge_id,
-                                                  amount, deducted_on)
-                values (?,?,?,?,?,?)
-                """, UUID.randomUUID(), workspaceId, depositId, charge.get("charge_id"), taken,
-                returnedOn);
-            jdbc.update("""
-                update acc_charge
-                set allocated_amount = allocated_amount + ?, allocated = allocated_amount + ? >= amount
-                where workspace_id = ? and charge_id = ?
-                """, taken, taken, workspaceId, charge.get("charge_id"));
+            BigDecimal taken = remaining.min(arrear.owed());
+            deposits.deduct(workspaceId, deposit.depositId(), arrear.invoiceId(), taken, returnedOn);
+            invoices.applyAllocation(workspaceId, arrear.invoiceId(), taken);
             remaining = remaining.subtract(taken);
             deducted = deducted.add(taken);
         }
 
-        jdbc.update("""
-            update acc_deposit
-            set state = 'settled', settled_on = ?, rent_at_return = ?, valorized_amount = ?,
-                deducted_amount = ?, returned_amount = ?
-            where workspace_id = ? and deposit_id = ?
-            """, returnedOn, rentAtReturn, valorization.valorized(), deducted, remaining,
-            workspaceId, depositId);
-        var stream = store.load(tenancyId, "TenancyLedger");
-        store.append(tenancyId, "TenancyLedger", stream.version(),
-            List.of(new DepositSettled(depositId, tenancyId, valorization.valorized(), deducted,
-                remaining, rentAtReturn, valorization.floorApplied())), List.of());
+        deposits.settle(workspaceId, deposit.depositId(), returnedOn, rentAtReturn,
+            valorization.valorized(), deducted, remaining);
+        append(tenancyId, new DepositSettled(deposit.depositId(), tenancyId,
+            valorization.valorized(), deducted, remaining, rentAtReturn,
+            valorization.floorApplied()));
         return remaining;
     }
 
@@ -165,71 +133,59 @@ public class DepositService {
      * <p>Scoped by workspace and required to have been paid. A charge nobody settled is not money in
      * hand, and valorizing it would invent funds — so the unpaid case refuses rather than returning
      * a figure that looks like a settlement.
-     *
-     * <p>Taking the single row is safe because {@code acc_deposit} is unique on
-     * {@code (workspace_id, tenancy_id)} — so a redelivered activation, which the at-least-once
-     * outbox is entitled to produce, is refused by the database rather than producing a second
-     * deposit with a different amount and a different answer to what the tenant gets back. That
-     * constraint is the reason this query needs no tie-break, and it is asserted by name in
-     * {@code AccountingSchemaShapeTest} so that dropping it fails a test rather than silently making
-     * a refund depend on row order.
      */
-    private Map<String, Object> held(UUID workspaceId, UUID tenancyId) {
-        var rows = jdbc.queryForList("""
-            select d.deposit_id, d.multiplier, d.nominal_amount, d.state,
-                   c.amount - c.allocated_amount as unpaid
-            from acc_deposit d join acc_charge c on c.charge_id = d.charge_id
-            where d.workspace_id = ? and d.tenancy_id = ?
-            """, workspaceId, tenancyId);
-        if (rows.isEmpty()) {
-            throw new DepositNotHeldException(tenancyId, "none was charged in this workspace");
-        }
-        var deposit = rows.getFirst();
-        if ("settled".equals(deposit.get("state"))) {
+    private HeldDeposit held(UUID workspaceId, UUID tenancyId) {
+        var deposit = deposits.find(workspaceId, tenancyId).orElseThrow(
+            () -> new DepositNotHeldException(tenancyId, "none was charged in this workspace"));
+        if (deposit.settled()) {
             throw new IllegalStateException("the deposit for tenancy " + tenancyId
                 + " has already been returned; returning it again would pay the tenant twice");
         }
-        if (((BigDecimal) deposit.get("unpaid")).signum() > 0) {
+        if (!deposit.isPaid()) {
             throw new DepositNotHeldException(tenancyId,
                 "it was charged but never paid, so there is nothing to give back");
         }
         return deposit;
     }
 
-    /** What the tenancy still owes, oldest first. The deposit charge is not one of its own arrears. */
-    private List<Map<String, Object>> arrears(UUID workspaceId, UUID tenancyId) {
-        return jdbc.queryForList("""
-            select charge_id, amount - allocated_amount as owed from acc_charge
-            where workspace_id = ? and tenancy_id = ? and active and amount > allocated_amount
-              and component <> ?
-            order by due_date, charge_id
-            """, workspaceId, tenancyId, Component.DEPOSIT.wireName());
-    }
-
-    private UUID postDepositCharge(UUID workspaceId, UUID tenancyId, BigDecimal amount,
-                                   LocalDate dueDate, String paymentReference) {
-        UUID chargeId = UUID.randomUUID();
-        jdbc.update("""
-            insert into acc_charge(charge_id, workspace_id, tenancy_id, component, amount, due_date,
-                                   payment_reference)
-            values (?,?,?,?,?,?,?)
-            """, chargeId, workspaceId, tenancyId, Component.DEPOSIT.wireName(), amount, dueDate,
-            paymentReference);
-        return chargeId;
-    }
-
     /**
-     * How many months' rent the deposit is. Kept to two places because it is a snapshot of an agreed
-     * figure rather than a computed one — a contract says "two months", and 2.00 should read back as
-     * the term it was.
+     * What the tenancy still owes, oldest first. The deposit charge is not one of its own arrears.
+     *
+     * <p>The order is decided here rather than in SQL: which obligation a deposit reaches first is
+     * policy, and it must not vary with the store. The tie-break on id keeps two charges of the same
+     * day from being deducted in whatever order a row happened to come back in — a refund that
+     * differs run to run is not a refund anyone can explain.
      */
-    private static BigDecimal multiplierOf(BigDecimal amount, BigDecimal rentAtCharge) {
-        if (rentAtCharge == null || rentAtCharge.signum() <= 0) {
-            // Null, not zero. There is no multiple of nothing, and a stored zero is indistinguishable
-            // from a computed one to every later reader -- including valorization at return, which
-            // works from this same base and would compute a valorized deposit of nothing.
-            return null;
+    private List<Invoice> arrears(UUID workspaceId, UUID tenancyId) {
+        var open = new ArrayList<>(invoices.openInvoices(workspaceId, tenancyId));
+        open.removeIf(invoice -> invoice.component() == Component.DEPOSIT);
+        open.sort(Comparator.comparing(Invoice::dueDate).thenComparing(Invoice::invoiceId));
+        return open;
+    }
+
+    /** The assessment's answers, said to a human. */
+    private static List<WarningToRaise> flagsFor(DepositAssessment assessment, BigDecimal amount,
+                                                 BigDecimal rentAtCharge, String legalForm) {
+        var raised = new ArrayList<WarningToRaise>();
+        if (!assessment.capCheckable()) {
+            raised.add(new WarningToRaise(WarningKind.DEPOSIT_CAP_UNCHECKABLE,
+                "kaucja " + amount + " zł; czynsz wynosi 0, więc nie sprawdzono ustawowego limitu"));
         }
-        return amount.divide(rentAtCharge, 2, RoundingMode.HALF_UP);
+        if (!assessment.formRecognised()) {
+            raised.add(new WarningToRaise(WarningKind.UNKNOWN_LEGAL_FORM,
+                "nieznana forma najmu \"" + legalForm + "\"; nie sprawdzono limitu kaucji"));
+        }
+        if (assessment.capExceeded()) {
+            raised.add(new WarningToRaise(WarningKind.DEPOSIT_CAP_EXCEEDED,
+                "kaucja " + amount + " zł to " + assessment.multiplier() + "-krotność czynszu "
+                    + rentAtCharge + " zł; ustawowy limit dla formy " + assessment.formName()
+                    + " to " + assessment.capInMonths() + "-krotność"));
+        }
+        return List.copyOf(raised);
+    }
+
+    private void append(UUID tenancyId, Object event) {
+        var stream = store.load(tenancyId, "TenancyLedger");
+        store.append(tenancyId, "TenancyLedger", stream.version(), List.of(event), List.of());
     }
 }
