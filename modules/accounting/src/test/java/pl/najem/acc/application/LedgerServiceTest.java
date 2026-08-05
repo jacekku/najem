@@ -10,6 +10,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.ChargePosted;
@@ -45,8 +46,8 @@ class LedgerServiceTest {
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         // Fixed a month before the charge falls due, so the colour asserted below stays what it
         // means rather than turning red once the wall clock passes September 2026.
-        service = new LedgerService(store, jdbc, new WarningService(jdbc), new BoardService(jdbc,
-            Clock.fixed(LocalDate.of(2026, 8, 1).atStartOfDay(ZoneId.systemDefault()).toInstant(),
+        service = new LedgerService(store, jdbc, new WarningService(jdbc),
+            PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(LocalDate.of(2026, 8, 1).atStartOfDay(ZoneId.systemDefault()).toInstant(),
                 ZoneId.systemDefault())));
     }
 

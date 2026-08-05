@@ -48,7 +48,9 @@ Verified from imports in `modules/accounting/src/main/java/pl/najem/acc`, not fr
         │  ├── adapter/bank               ├── PostgresPaymentRepository │
         │  ├── adapter/mt940              ├── PostgresInvoiceRepository │
         │  └── adapter/pm                 ├── PostgresAccountingRepo…   │
-        │                                 └── PostgresAccounting (wiring)│
+        │                                 └── PostgresArrearsStanding…  │
+        │                                                               │
+        │  testFixtures: PostgresAccounting (wiring, not in the jar)    │
         └───────────┬───────────────────────────────────┬───────────────┘
                     │ imports                           │ implements
                     ▼                                   ▲
@@ -61,7 +63,7 @@ Verified from imports in `modules/accounting/src/main/java/pl/najem/acc`, not fr
         │                                                               │
         │  services                                                     │
         │  ├── AccountingService ──► AllocationService ──► [ports]      │
-        │  ├── BoardService  LedgerService  CorrectionService           │
+        │  ├── ArrearsBoardService  LedgerService  CorrectionService     │
         │  └── SuspenseService  ReconciliationService  IngestionService │
         └───────────────────────────┬───────────────────────────────────┘
                                     │ imports (32 refs)
@@ -86,7 +88,7 @@ In one line: `AllocationService` names `PaymentRepository`; `PostgresPaymentRepo
 
 Two things the diagram hides, both true today:
 
-- `application` imports `org.springframework.jdbc.core.JdbcTemplate` **11 times**. The layer is
+- `application` imports `org.springframework.jdbc.core.JdbcTemplate` **10 times**. The layer is
   clean with respect to this module's adapter package but is still directly coupled to Spring JDBC
   everywhere except `allocate`. The ports covered one method, not the layer — this is the
   remaining work.
@@ -103,9 +105,15 @@ blast radius is a nice property, not a correctness argument. When the two confli
 
 **6. Infrastructure assembly belongs on the infrastructure side.**
 "Convenience constructors for tests and callers outside the container" that `new` up concrete
-adapters are a composition root hiding in the application layer. `PostgresAccounting` in
-`adapter/persistence` does the same job in the direction that was wanted: adapter depends on
-application.
+adapters are a composition root hiding in the application layer. `PostgresAccounting` does the
+same job in the direction that was wanted: adapter depends on application.
+
+*And it belongs in the source set that uses it.* It lived in `src/main` first, which shipped a
+helper no deployment calls in the jar every deployment carries — production has Spring, and Spring
+does this assembly from the beans it scans. It is now `src/testFixtures`, which keeps it out of the
+jar and still lends it to `modules:reporting`, whose tripwires drive accounting's real services and
+need the same wiring. Right side of the boundary was only half the question; the other half is
+whether it is production code at all.
 
 **7. Count the callers before moving a side effect.**
 `allocate` had three production callers, not one — `SuspenseService.allocateTo`,

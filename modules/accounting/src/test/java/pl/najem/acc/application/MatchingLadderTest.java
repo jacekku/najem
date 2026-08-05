@@ -61,7 +61,7 @@ class MatchingLadderTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         warnings = new WarningService(jdbc);
-        ledger = new LedgerService(store, jdbc, warnings);
+        ledger = PostgresAccounting.ledgerService(store, jdbc, warnings);
         reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
         laddered = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
         tierOneOnly = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tierOneOnly());

@@ -1,5 +1,6 @@
 package pl.najem.acc.application;
 
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
@@ -184,11 +185,11 @@ class ArrearsBoardTest {
     }
 
     private static LedgerService ledger() {
-        return new LedgerService(store, jdbc, new WarningService(jdbc));
+        return PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
     }
 
     private static ArrearsColour colourOn(UUID tenancyId, LocalDate asOf) {
-        var board = new BoardService(jdbc, Clock.fixed(
+        var board = PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(
             asOf.atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
         board.refresh(WS, tenancyId);
         return ArrearsColour.of(jdbc.queryForObject(

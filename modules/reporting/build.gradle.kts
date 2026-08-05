@@ -25,6 +25,9 @@ dependencies {
     // importing another module's record class is the allowlist ruling actually breaking.
     testImplementation(project(":modules:propertymanagement"))
     testImplementation(project(":modules:accounting"))
+    // Accounting's hand wiring of its services onto a JdbcTemplate. Test scope like the line above
+    // and for the same ruling; a fixtures dependency cannot reach production code by construction.
+    testImplementation(testFixtures(project(":modules:accounting")))
     testImplementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
     testImplementation("org.testcontainers:postgresql")

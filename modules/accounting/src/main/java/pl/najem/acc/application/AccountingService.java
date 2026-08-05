@@ -24,10 +24,10 @@ import java.util.UUID;
 public class AccountingService {
 
     private final AllocationService allocation;
-    private final BoardService board;
+    private final ArrearsBoardService board;
 
     @Autowired
-    public AccountingService(AllocationService allocation, BoardService board) {
+    public AccountingService(AllocationService allocation, ArrearsBoardService board) {
         this.allocation = allocation;
         this.board = board;
     }

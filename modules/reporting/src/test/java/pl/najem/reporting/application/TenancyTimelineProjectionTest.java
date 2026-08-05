@@ -1,5 +1,6 @@
 package pl.najem.reporting.application;
 
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -17,8 +18,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.application.BankLine;
 import pl.najem.acc.application.IngestionService;
-import pl.najem.acc.application.LedgerService;
-import pl.najem.acc.application.ReconciliationService;
 import pl.najem.acc.application.WarningService;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -96,9 +95,9 @@ class TenancyTimelineProjectionTest {
         var portfolio = new PortfolioService(store, jdbc);
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
-        var ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
+        var ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
         var ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
-        var reconciliation = new ReconciliationService(store, jdbc);
+        var reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
 
         workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Kwiatowa 5, Kraków",

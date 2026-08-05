@@ -1,5 +1,6 @@
 package pl.najem.acc.adapter.pm;
 
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
@@ -13,7 +14,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.application.DepositService;
-import pl.najem.acc.application.LedgerService;
 import pl.najem.acc.application.WarningService;
 import pl.najem.contracts.events.TenancyActivatedEvent;
 import pl.najem.eventstore.EventTypeRegistry;
@@ -52,7 +52,7 @@ class TenancyActivatedHandlerTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         var warnings = new WarningService(jdbc);
-        handler = new TenancyActivatedHandler(new LedgerService(store, jdbc, warnings),
+        handler = new TenancyActivatedHandler(PostgresAccounting.ledgerService(store, jdbc, warnings),
             new DepositService(store, jdbc, warnings));
     }
 

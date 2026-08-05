@@ -1,5 +1,6 @@
 package pl.najem.acc.adapter.mt940;
 
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -79,7 +80,7 @@ class Mt940ImportTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, applicationMapper(), registry);
-        ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
+        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
         imports = new Mt940Import(new IngestionService((since, iban) -> List.of(), store, jdbc));
     }
 

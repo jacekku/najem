@@ -1,5 +1,6 @@
 package pl.najem.acc.application;
 
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
@@ -64,7 +65,7 @@ class DepositSettlementTest {
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         var warnings = new WarningService(jdbc);
         deposits = new DepositService(store, jdbc, warnings);
-        ledger = new LedgerService(store, jdbc, warnings);
+        ledger = PostgresAccounting.ledgerService(store, jdbc, warnings);
     }
 
     /**

@@ -17,4 +17,13 @@ subprojects {
         "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
         "testImplementation"("org.assertj:assertj-core:3.26.3")
     }
+    // Test fixtures get the same managed versions as everything else. Without this a fixtures
+    // source set asks for a Spring artifact with no version and the build fails at resolution,
+    // because the platform above is declared on `implementation` and fixtures do not inherit it.
+    plugins.withId("java-test-fixtures") {
+        dependencies {
+            "testFixturesImplementation"(
+                platform("org.springframework.boot:spring-boot-dependencies:3.3.5"))
+        }
+    }
 }

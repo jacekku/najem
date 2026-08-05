@@ -11,7 +11,6 @@ import pl.najem.acc.domain.CreditNoteIssued;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
-import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,20 +24,15 @@ public class LedgerService {
     private final EventStore store;
     private final JdbcTemplate jdbc;
     private final WarningService warnings;
-    private final BoardService board;
+    private final ArrearsBoardService board;
 
     @Autowired
     public LedgerService(EventStore store, JdbcTemplate jdbc, WarningService warnings,
-                         BoardService board) {
+                         ArrearsBoardService board) {
         this.store = store;
         this.jdbc = jdbc;
         this.warnings = warnings;
         this.board = board;
-    }
-
-    /** For tests and callers outside the container, which have no Clock bean to hand. */
-    public LedgerService(EventStore store, JdbcTemplate jdbc, WarningService warnings) {
-        this(store, jdbc, warnings, new BoardService(jdbc, Clock.systemDefaultZone()));
     }
 
     public UUID postRentCharge(UUID workspaceId, UUID tenancyId, BigDecimal amount, LocalDate dueDate,

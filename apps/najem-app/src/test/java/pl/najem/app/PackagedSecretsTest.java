@@ -99,8 +99,11 @@ class PackagedSecretsTest {
     private static List<String> secretNamedValues() {
         List<String> hits = new ArrayList<>();
         for (Path config : packagedConfigs()) {
+            // Normalised for the same reason as the walk, and additionally because the module name
+            // is half of the key in KNOWN_UNFIXED: a register that reads apps\najem-app on one
+            // machine and apps/najem-app on another is a register nobody can keep green.
             String module = repoRoot().relativize(config).getParent().getParent()
-                .getParent().getParent().toString();
+                .getParent().getParent().toString().replace('\\', '/');
             for (String key : flatten(load(config))) {
                 if (SECRET_NAMED.matcher(key).find()) {
                     hits.add(module + "|" + key);
@@ -110,14 +113,21 @@ class PackagedSecretsTest {
         return hits;
     }
 
-    /** Every {@code src/main/resources} YAML in the tree. Build output is not source. */
+    /**
+     * Every {@code src/main/resources} YAML in the tree. Build output is not source.
+     *
+     * <p>Separators are normalised because {@link Path#toString()} gives them back platform-native:
+     * on Windows every path here arrives with backslashes, the {@code src/main/resources} match
+     * finds nothing, and the scan silently covers no files at all. That is the failure
+     * {@link #theWalkReachesTheConfigFilesAndReadsThem} exists to make loud, and it did.
+     */
     private static List<Path> packagedConfigs() {
         Path root = repoRoot();
         try (Stream<Path> walk = Files.walk(root)) {
             return walk
                 .filter(Files::isRegularFile)
                 .filter(p -> {
-                    String s = root.relativize(p).toString();
+                    String s = root.relativize(p).toString().replace('\\', '/');
                     return !s.contains("/build/") && s.contains("src/main/resources")
                         && (s.endsWith(".yml") || s.endsWith(".yaml"));
                 })

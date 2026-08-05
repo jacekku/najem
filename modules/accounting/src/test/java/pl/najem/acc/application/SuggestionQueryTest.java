@@ -1,5 +1,6 @@
 package pl.najem.acc.application;
 
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
@@ -53,7 +54,7 @@ class SuggestionQueryTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
+        ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
         laddered = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
         suggestions = new SuggestionQuery(jdbc);
     }

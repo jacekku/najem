@@ -38,13 +38,13 @@ public class CorrectionService {
      * charges without allocating anything, and it refreshes several tenancies at once. It is the
      * same board, needed at a different moment and in a different shape.
      */
-    private final BoardService board;
+    private final ArrearsBoardService board;
 
     private final Clock clock;
 
     @Autowired
     public CorrectionService(EventStore store, JdbcTemplate jdbc, AccountingService accounting,
-                             BoardService board, Clock clock) {
+                             ArrearsBoardService board, Clock clock) {
         this.store = store;
         this.jdbc = jdbc;
         this.accounting = accounting;
@@ -54,7 +54,7 @@ public class CorrectionService {
 
     /** For tests and callers outside the container, which have no Clock bean to hand. */
     public CorrectionService(EventStore store, JdbcTemplate jdbc, AccountingService accounting,
-                             BoardService board) {
+                             ArrearsBoardService board) {
         this(store, jdbc, accounting, board, Clock.systemDefaultZone());
     }
 

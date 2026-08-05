@@ -1,5 +1,6 @@
 package pl.najem.reporting;
 
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -15,8 +16,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.application.IngestionService;
-import pl.najem.acc.application.LedgerService;
-import pl.najem.acc.application.ReconciliationService;
 import pl.najem.acc.application.WarningService;
 import pl.najem.acc.application.BankLine;
 import pl.najem.eventstore.EventTypeRegistry;
@@ -153,9 +152,9 @@ class EventContractTest {
         var portfolio = new PortfolioService(store, jdbc);
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
-        var ledger = new LedgerService(store, jdbc, new WarningService(jdbc));
+        var ledger = PostgresAccounting.ledgerService(store, jdbc, new WarningService(jdbc));
         var ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
-        var reconciliation = new ReconciliationService(store, jdbc);
+        var reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
 
         var workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Testowa 1, Warszawa",

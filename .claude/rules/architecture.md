@@ -78,18 +78,39 @@ So: do not break a cycle by injecting a proxy, an `@Lazy`, a setter, or an event
 the reference. Those hide the modelling question. Find the unnamed concept or the misplaced side
 effect.
 
+**A7. A name carries the concept, not the screen — and a derived store says so.**
+Two halves of the same rule, both earned on `BoardService`.
+
+*Name the concept.* `BoardService` names the thing a manager looks at; `ArrearsBoardService` names
+what it decides. A generic head noun — `Board`, `Status`, `Standing`, `Manager` — is a name that
+has stopped short. The test: put the class name next to its sibling and see whether the pair still
+tells you which is which. `Standing` and `Payment` do not; `ArrearsStanding` and `Payment` do.
+
+*Say when a store is derived.* A table that can be dropped and rebuilt from another table is a
+projection, and the port onto it is `…Projection`, not `…Repository`. `acc_tenancy_status` holds
+nothing that is not already in `acc_charge`. Naming it a repository invites the one thing that must
+never happen: a service reading the colour to decide something, at which point the board stops being
+derived and becomes an opinion — which is the failure `BoardService`'s own javadoc records fighting
+its way out of. The name is the guardrail. `Repository` is for the record; `Projection` is for the
+view of it, and only the record may be read to make a decision.
+
+Prefer `Projection` over `ReadModelRepository`. A projection is denormalized and rebuildable by
+definition, so the longer name adds a word and drops the more useful signal — that the suffix
+`Repository` does not apply here at all.
+
 ## Migration front
 
 Rule A5 is the destination. As of 2026-08-05 the accounting module is partway there:
 
-- **Behind ports:** the `allocate` path only — `PaymentRepository`, `InvoiceRepository`,
-  `AccountingRepository`.
-- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **11 times** in
-  `pl.najem.acc.application`. `BoardService`, `LedgerService`, `CorrectionService`,
-  `IngestionService`, `SuspenseService`, `DepositService` and others are each a service and their
-  own repository at once.
+- **Behind ports:** the `allocate` path — `PaymentRepository`, `InvoiceRepository`,
+  `AccountingRepository` — and the arrears board, which reads through `InvoiceRepository` and
+  writes through `ArrearsStandingProjection`.
+- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **10 times** in
+  `pl.najem.acc.application`. `LedgerService`, `CorrectionService`, `IngestionService`,
+  `SuspenseService`, `DepositService` and others are each a service and their own repository at
+  once.
 
-Each of those imports is a port that has not been named yet. `BoardService` holding a
+Each of those imports is a port that has not been named yet. `LedgerService` holding a
 `JdbcTemplate` is not a violation of A5 — it is a class the extraction has not reached. The
 distinction is practical: a violation blocks a merge, a migration front is tracked and worked
 down. Treating them alike is how a rule stops being believed.

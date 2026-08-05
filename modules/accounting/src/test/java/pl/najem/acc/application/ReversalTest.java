@@ -64,7 +64,7 @@ class ReversalTest {
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         // The board colours are a function of today, so the clock is fixed a day past DUE. Left on
         // the system clock these assertions would read green/yellow until 2027 and red after it.
-        var board = new BoardService(jdbc, Clock.fixed(
+        var board = PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(
             DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
         ledger = new LedgerService(store, jdbc, new WarningService(jdbc), board);
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
