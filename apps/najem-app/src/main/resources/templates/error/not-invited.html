@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!--/*
+  Signed in at Keycloak, but no NAJEM account exists for that subject.
+
+  Not the shared layout: that shell asks the seam for an agency, and this person has no account
+  for an agency to hang off. It is also the sibling of no-agency.html rather than a copy of it —
+  the two look alike and mean different things. There, an account exists and belongs to no agency
+  yet. Here, there is no account at all, and one is never created by arriving with a valid token.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org" lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Konto niezaproszone — NAJEM</title>
+    <link rel="stylesheet" th:href="@{/css/najem.css}">
+</head>
+<body class="login">
+<main class="login__panel">
+    <h1 class="login__brand">NAJEM</h1>
+    <p>Zalogowano, ale to konto nie ma jeszcze dostępu do NAJEM.</p>
+    <p class="login__hint">
+        NAJEM działa na zaproszenia. Poproś osobę zarządzającą agencją o zaproszenie na ten
+        adres — konto powstaje dopiero po jego przyjęciu.
+    </p>
+    <!--/*
+      A way out that is not the browser's back button. Without it the only action available to
+      somebody who signed in as the wrong person is to close the tab.
+    */-->
+    <form th:action="@{/logout}" method="post">
+        <button class="login__button" type="submit">Wyloguj się</button>
+    </form>
+</main>
+</body>
+</html>

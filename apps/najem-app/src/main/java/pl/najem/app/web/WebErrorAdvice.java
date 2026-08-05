@@ -2,6 +2,7 @@ package pl.najem.app.web;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
+import pl.najem.um.application.NotInvitedException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -15,6 +16,18 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  */
 @ControllerAdvice(basePackageClasses = WebErrorAdvice.class)
 public class WebErrorAdvice {
+
+    /**
+     * Still a refusal and still a 403 — being signed in grants nothing here. What changes is the
+     * words: NAJEM is invite-only, so somebody with a valid Keycloak account and no invitation has
+     * an invitation problem, and "Brak dostępu" describes a permissions problem they do not have.
+     * Ordered before the AccessDeniedException handler by being the more specific type.
+     */
+    @ExceptionHandler(NotInvitedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public String notInvited() {
+        return "error/not-invited";
+    }
 
     @ExceptionHandler(AccessDeniedException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)

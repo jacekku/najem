@@ -245,3 +245,71 @@ main {
     color: #6b6660;
     font-variant: small-caps;
 }
+
+/* The sign-in page. It has no masthead, so it centres its own panel rather than
+   inheriting the layout's grid — everything else on this page is one column. */
+.login {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+}
+
+.login__panel {
+    width: min(24rem, 90vw);
+    text-align: center;
+}
+
+.login__brand {
+    font-size: 2rem;
+    letter-spacing: 0.12em;
+    margin: 0 0 0.25rem;
+}
+
+.login__lead {
+    color: #6b6660;
+    margin: 0 0 2rem;
+}
+
+.login__button {
+    display: block;
+    padding: 0.7rem 1rem;
+    background: var(--ink);
+    color: var(--paper);
+    text-decoration: none;
+    border-radius: 2px;
+}
+
+.login__hint {
+    color: #6b6660;
+    font-size: 0.875rem;
+    margin: 0.75rem 0 0;
+}
+
+.login__notice,
+.login__error {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--rule);
+    margin: 0 0 1rem;
+}
+
+/* Stated in words as well as colour: a red box is not a message to somebody who
+   cannot distinguish it from the one above. */
+.login__error {
+    border-color: #a4302a;
+    color: #a4302a;
+}
+
+/* Sign-out sits at the far end of the masthead, after the agency and the search. */
+.masthead__signout {
+    margin-left: auto;
+}
+
+.masthead__signout button {
+    font: inherit;
+    color: #6b6660;
+    background: none;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+}

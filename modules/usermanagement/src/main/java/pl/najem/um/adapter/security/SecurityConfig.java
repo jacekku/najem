@@ -1,15 +1,20 @@
 package pl.najem.um.adapter.security;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
@@ -52,68 +57,140 @@ public class SecurityConfig {
     /** Which {@code aud} this deployment accepts. Required whenever an issuer is configured. */
     static final String AUDIENCE = "najem.security.audience";
 
-    @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, Environment environment) throws Exception {
-        String issuer = environment.getProperty(ISSUER_URI);
+    private final Environment environment;
 
-        // On for the screens, off for the API — because the two surfaces carry their authority
-        // differently and CSRF is an attack on ambient authority specifically.
-        //
-        // /api/** authenticates with a bearer token, which a browser does NOT attach to a
-        // cross-site request. A forged call there cannot authenticate, so protection buys nothing
-        // and costs every machine client a 403 — a real regression traded for no security.
-        //
-        // The screens are the opposite case. The agency a person is working in lives in the
-        // HttpSession, which IS cookie-backed, and cookies DO ride along cross-site. The forgeable
-        // action is not "read data" or "write data" — it is silently changing WHICH agency the
-        // victim's next action happens in. A manager follows a link, their session flips to their
-        // other agency, and the payment they record next lands in books they did not choose.
-        //
-        // Every other control still passes while that happens: the token is valid, the audience
-        // matches, and membership is re-checked on every request — because the victim really is a
-        // member of both agencies. Nothing else in the stack asks whether the person INTENDED the
-        // switch, and that is the only question CSRF protection answers. It is rule 7's harm — a
-        // write into a workspace nobody named — reached by a route that needs no default at all.
-        //
-        // Found by najem-frontend, who asked why their form worked without a token.
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"));
+    /**
+     * Validating in the constructor is what makes "refuse to start" true. The checks used to live
+     * inside the filter-chain bean, which was fine while there was one chain — now that the posture
+     * decides WHICH chains exist, a check inside any one of them would be a check that a differently
+     * configured deployment never runs.
+     */
+    public SecurityConfig(Environment environment) {
+        this.environment = environment;
+        refuseToStartIfTheDeploymentNamedNoPosture();
+    }
 
-        if (issuer == null || issuer.isBlank()) {
-            // Compared as a string on purpose. Binding to Boolean makes an unparseable value throw
-            // Spring's "Invalid boolean value 'x'", which still refuses to start but explains
-            // nothing about what NAJEM wanted. Absent, empty and garbled all mean "not opted in".
-            if (!"true".equalsIgnoreCase(environment.getProperty(PERMIT_ALL, "").trim())) {
+    private void refuseToStartIfTheDeploymentNamedNoPosture() {
+        if (issuerConfigured()) {
+            // Boot's default validator checks signature, exp/nbf and iss — but NOT aud. Without
+            // this, ANY token the realm mints for ANY client authenticates against NAJEM, so the
+            // day that realm hosts a second application, that application's tokens are NAJEM
+            // tokens (najem-reviewer finding #5). Required rather than optional: an issuer
+            // configured without an audience is a deployment that believes it is secured and is not.
+            if (environment.getProperty(AUDIENCE, "").trim().isEmpty()) {
                 throw new IllegalStateException(
-                    "Refusing to start: no identity provider is configured and permit-all was not "
-                        + "explicitly requested. Set '" + ISSUER_URI + "' to secure this deployment, "
-                        + "or set '" + PERMIT_ALL + "=true' to run without security (tests and local "
-                        + "development only). NAJEM will not choose the permissive option for you.");
+                    "Refusing to start: '" + ISSUER_URI + "' is set but '" + AUDIENCE + "' is not. "
+                        + "Without an expected audience, every token this issuer mints for any client "
+                        + "is accepted as a NAJEM token. Set '" + AUDIENCE + "' to this deployment's "
+                        + "client id.");
             }
-            http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
-            return http.build();
+            return;
         }
-
-        // Boot's default validator checks signature, exp/nbf and iss — but NOT aud. Without this,
-        // ANY token the realm mints for ANY client authenticates against NAJEM, so the day that
-        // realm hosts a second application, that application's tokens are NAJEM tokens
-        // (najem-reviewer finding #5). Required rather than optional: an issuer configured without
-        // an audience is a deployment that believes it is secured and is not.
-        String audience = environment.getProperty(AUDIENCE, "").trim();
-        if (audience.isEmpty()) {
+        // Compared as a string on purpose. Binding to Boolean makes an unparseable value throw
+        // Spring's "Invalid boolean value 'x'", which still refuses to start but explains
+        // nothing about what NAJEM wanted. Absent, empty and garbled all mean "not opted in".
+        if (!"true".equalsIgnoreCase(environment.getProperty(PERMIT_ALL, "").trim())) {
             throw new IllegalStateException(
-                "Refusing to start: '" + ISSUER_URI + "' is set but '" + AUDIENCE + "' is not. "
-                    + "Without an expected audience, every token this issuer mints for any client "
-                    + "is accepted as a NAJEM token. Set '" + AUDIENCE + "' to this deployment's "
-                    + "client id.");
+                "Refusing to start: no identity provider is configured and permit-all was not "
+                    + "explicitly requested. Set '" + ISSUER_URI + "' to secure this deployment, "
+                    + "or set '" + PERMIT_ALL + "=true' to run without security (tests and local "
+                    + "development only). NAJEM will not choose the permissive option for you.");
         }
+    }
 
+    private boolean issuerConfigured() {
+        String issuer = environment.getProperty(ISSUER_URI);
+        return issuer != null && !issuer.isBlank();
+    }
+
+    /**
+     * No identity provider, and somebody said so explicitly. Everything is open.
+     *
+     * <p>CSRF is left on for the screens even here, so the protection is exercised by the local
+     * runs and the test suite rather than only existing in the posture nobody develops against.
+     */
+    @Bean
+    @Conditional(IssuerNotConfigured.class)
+    SecurityFilterChain permitAllFilterChain(HttpSecurity http) throws Exception {
         http
+            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
+            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+        return http.build();
+    }
+
+    /**
+     * The API: bearer tokens, no login page, no session.
+     *
+     * <p>Ordered ahead of the browser chain and matched on {@code /api/**} so the two never
+     * negotiate for the same request. Without the split, an unauthenticated API call would be
+     * answered with a <b>302 to Keycloak's login form</b> — a redirect to HTML where a machine
+     * client expected 401, which reads as a broken endpoint rather than as a missing token.
+     */
+    @Bean
+    @Order(1)
+    @Conditional(IssuerConfigured.class)
+    SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher("/api/**")
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public by design: the invitation token IS the credential (decision D4) and the
-                // invitee has no account yet — requiring one would make invite-only unusable.
                 .requestMatchers("/api/um/invitations/accept").permitAll()
                 .anyRequest().authenticated())
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));
+        return http.build();
+    }
+
+    /**
+     * The screens: sign in at Keycloak, come back with a session.
+     *
+     * <p><b>NAJEM never sees a password.</b> Keycloak is the identity provider (human ruling) and
+     * this is the authorization-code flow — {@code /login} is a NAJEM page carrying a link, and the
+     * form that asks for credentials is Keycloak's own. Nothing here stores, hashes, compares or
+     * resets a password, and there is no code path that could begin to.
+     *
+     * <p>The token is still trusted for exactly one claim, {@code sub}. Roles and agency membership
+     * come from this module's projection (decision D1) — signing in proves who somebody is and
+     * grants them nothing.
+     *
+     * <p>CSRF stays on here. This is the cookie-backed surface, and the session carries which agency
+     * a person is acting in, so a forged request can change where their next action lands.
+     */
+    @Bean
+    @Order(2)
+    @Conditional(IssuerConfigured.class)
+    SecurityFilterChain browserFilterChain(HttpSecurity http,
+                                           ObjectProvider<ClientRegistrationRepository> clients)
+        throws Exception {
+        // A secured deployment with no client registration can validate tokens and cannot sign
+        // anybody in — so every screen answers 403 and the application looks broken rather than
+        // misconfigured. Named here rather than left to Spring, whose own failure for this is a
+        // NoSuchBeanDefinitionException for a type nobody set out to configure.
+        if (clients.getIfAvailable() == null) {
+            throw new IllegalStateException(
+                "Refusing to start: '" + ISSUER_URI + "' is set, so the screens require a sign-in, "
+                    + "but no OAuth2 client is registered. Set "
+                    + "'spring.security.oauth2.client.registration.keycloak.client-id' and "
+                    + "'spring.security.oauth2.client.provider.keycloak.issuer-uri' so people can "
+                    + "actually log in.");
+        }
+        http
+            .authorizeHttpRequests(auth -> auth
+                // The sign-in page itself, and the static assets it needs to render. A login page
+                // that requires being logged in is a redirect loop.
+                .requestMatchers("/login", "/css/**", "/vendor/**", "/favicon.ico").permitAll()
+                .anyRequest().authenticated())
+            .oauth2Login(login -> login
+                // Ours rather than Spring's generated one, so an unauthenticated visitor meets a
+                // NAJEM page in Polish rather than being bounced straight out to Keycloak with no
+                // explanation of where they are going.
+                .loginPage("/login")
+                .defaultSuccessUrl("/", true))
+            .logout(logout -> logout
+                .logoutSuccessUrl("/login?wylogowano")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID"));
         return http.build();
     }
 

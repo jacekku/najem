@@ -34,6 +34,22 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @SpringBootTest(properties = {
     "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://issuer.invalid/realms/najem",
     "najem.security.audience=najem-app",
+    // The screens now sign people in, so the secured posture needs a client registration as well
+    // as a resource server -- it refuses to start without one, on purpose. Provider endpoints are
+    // given explicitly rather than as an issuer-uri so that nothing attempts OIDC discovery
+    // against a host that does not exist.
+    "spring.security.oauth2.client.registration.keycloak.client-id=najem-app",
+    "spring.security.oauth2.client.registration.keycloak.client-authentication-method=none",
+    "spring.security.oauth2.client.registration.keycloak.authorization-grant-type=authorization_code",
+    "spring.security.oauth2.client.registration.keycloak.scope=openid",
+    // Boot defaults this only when the provider is given as an issuer-uri, and this test cannot
+    // use one without attempting discovery against a host that does not resolve.
+    "spring.security.oauth2.client.registration.keycloak.redirect-uri={baseUrl}/login/oauth2/code/{registrationId}",
+    "spring.security.oauth2.client.provider.keycloak.authorization-uri=https://issuer.invalid/auth",
+    "spring.security.oauth2.client.provider.keycloak.token-uri=https://issuer.invalid/token",
+    "spring.security.oauth2.client.provider.keycloak.user-info-uri=https://issuer.invalid/userinfo",
+    "spring.security.oauth2.client.provider.keycloak.jwk-set-uri=https://issuer.invalid/certs",
+    "spring.security.oauth2.client.provider.keycloak.user-name-attribute=sub",
     // Replaces the real decoder's bean DEFINITION rather than competing with it. A second
     // @Primary bean would not help: SecurityConfig's decoder is eager on purpose, so a bad issuer
     // fails at boot rather than on the first request, and it would still try OIDC discovery
@@ -53,25 +69,84 @@ class SecuredBranchTest {
     @Autowired
     MockMvc mvc;
 
+    /**
+     * A screen now offers the sign-in page rather than answering 401.
+     *
+     * <p>This assertion used to be {@code 401} and the change is deliberate: a person typing a URL
+     * into a browser cannot do anything with a 401, and telling them to present a bearer token is
+     * an instruction for a program. The refusal is identical — nothing is served — but it ends
+     * somewhere a human can act.
+     */
     @Test
-    void anUnauthenticatedRequestIsRejectedRatherThanServed() throws Exception {
-        int status = mvc.perform(get("/workspace")).andReturn().getResponse().getStatus();
+    void anUnauthenticatedScreenOffersTheSignInPage() throws Exception {
+        var response = mvc.perform(get("/workspace")).andReturn().getResponse();
 
-        assertThat(status)
-            .as("with an issuer configured every screen requires a token; this is the branch a "
-                + "real deployment runs and nothing exercised it before")
-            .isEqualTo(401);
+        assertThat(response.getStatus()).isEqualTo(302);
+        assertThat(response.getRedirectedUrl()).endsWith("/login");
     }
 
-    /** Not 401 — the token authenticates; the refusal now comes from having no workspace. */
+    /**
+     * The API keeps answering 401, and that is the reason the two chains exist.
+     *
+     * <p>Left to one chain, this call would be redirected to Keycloak's login form — HTML, 302,
+     * where a machine client expected 401. It would read as a broken endpoint rather than as a
+     * missing token, and it is the failure a single-chain configuration produces silently.
+     */
     @Test
-    void anAuthenticatedRequestReachesTheWorkspaceSeam() throws Exception {
-        int status = mvc.perform(get("/workspace").header("Authorization", "Bearer any-token"))
-            .andReturn().getResponse().getStatus();
+    void anUnauthenticatedApiCallIsRefusedRatherThanRedirected() throws Exception {
+        var response = mvc.perform(get("/api/acc/board")).andReturn().getResponse();
 
-        assertThat(status)
-            .as("the token authenticates; this subject simply belongs to no workspace")
-            .isEqualTo(403);
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getRedirectedUrl())
+            .as("a redirect here would send a machine client to a login page")
+            .isNull();
+    }
+
+    /** The sign-in page itself must be reachable, or the redirect above is a loop. */
+    @Test
+    void theSignInPageIsReachableWithoutSigningIn() throws Exception {
+        var response = mvc.perform(get("/login")).andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getContentAsString())
+            .as("a link to the identity provider, and no password field: NAJEM never sees one")
+            .contains("/oauth2/authorization/keycloak")
+            .doesNotContain("type=\"password\"");
+    }
+
+    /**
+     * A bearer token does not sign anybody into the screens, and that is deliberate.
+     *
+     * <p>This assertion used to expect 403 — the token authenticated, and the workspace seam
+     * refused. Now the screens are session-only: the browser chain has no resource server, so a
+     * token presented to a screen is simply not a credential there and the person is offered the
+     * sign-in page. Two surfaces, two ways of proving who you are, neither borrowing the other's.
+     */
+    @Test
+    void aBearerTokenIsNotACredentialForTheScreens() throws Exception {
+        var response = mvc.perform(get("/workspace").header("Authorization", "Bearer any-token"))
+            .andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(302);
+        assertThat(response.getRedirectedUrl()).endsWith("/login");
+    }
+
+    /**
+     * Where a bearer token IS a credential, it authenticates and the request reaches the seam —
+     * which is the half of the original assertion worth keeping. Answering at all proves the token
+     * was accepted; what it answers is this subject having no agencies rather than a refusal.
+     */
+    @Test
+    void anAuthenticatedApiCallReachesTheWorkspaceSeam() throws Exception {
+        var response = mvc.perform(get("/api/um/me").header("Authorization", "Bearer any-token"))
+            .andReturn().getResponse();
+
+        // 403, not 401, and not a redirect. The distinction is the whole point: the token was
+        // accepted, so the request got past authentication and was answered by NAJEM's own rule —
+        // this subject has no account, because accounts come from invitations and never from
+        // presenting a valid token. A 401 would mean the token was rejected.
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getRedirectedUrl()).isNull();
     }
 
     @TestConfiguration

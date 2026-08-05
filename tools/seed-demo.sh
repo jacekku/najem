@@ -30,13 +30,30 @@ command -v jq >/dev/null || { echo "seed-demo needs jq"; exit 1; }
 # reporting an empty screen as a failure.
 SETTLE=2
 
+# A token, when the deployment requires one. With login enabled every call here needs to be
+# somebody, and the somebody has to be the person the app was told is its operator -- otherwise the
+# agency gets created by an account nobody can then log in as.
+#
+# Empty when the app runs permit-all, and the calls below are unauthenticated exactly as before.
+AUTH=()
+if [ -n "${KC_USER:-}" ] || [ -n "${NAJEM_TOKEN:-}" ]; then
+  TOKEN="${NAJEM_TOKEN:-}"
+  if [ -z "$TOKEN" ]; then
+    TOKEN=$(curl -sS -X POST "${KC_ISSUER:-http://localhost:8180/realms/najem}/protocol/openid-connect/token" \
+      -d "client_id=${KC_CLIENT:-najem-app}" -d grant_type=password -d scope=openid \
+      -d "username=${KC_USER}" -d "password=${KC_PASS:-${KC_USER}}" | jq -r '.access_token // empty')
+  fi
+  [ -n "$TOKEN" ] || { echo "seed-demo: could not obtain a token for ${KC_USER:-<token>}" >&2; exit 1; }
+  AUTH=(-H "Authorization: Bearer $TOKEN")
+fi
+
 api() {
   local method=$1 path=$2 body=${3:-}
   if [ -n "$body" ]; then
-    curl -sS -X "$method" "$BASE$path" \
+    curl -sS -X "$method" "$BASE$path" "${AUTH[@]}" \
       -H "Content-Type: application/json" -H "X-Workspace-Id: $WORKSPACE" -d "$body"
   else
-    curl -sS -X "$method" "$BASE$path" -H "X-Workspace-Id: $WORKSPACE"
+    curl -sS -X "$method" "$BASE$path" "${AUTH[@]}" -H "X-Workspace-Id: $WORKSPACE"
   fi
 }
 
@@ -44,7 +61,7 @@ if [ -z "$WORKSPACE" ]; then
   # Creating it through /api/um/workspaces makes the caller its first ADMIN, which is
   # the only legitimate way an agency comes into being (invite-only, human ruling).
   # It needs najem.bootstrap.operator-subject set on the running app.
-  WORKSPACE=$(curl -sS -X POST "$BASE/api/um/workspaces" -H "Content-Type: application/json" \
+  WORKSPACE=$(curl -sS -X POST "$BASE/api/um/workspaces" "${AUTH[@]}" -H "Content-Type: application/json" \
     -d '{"name":"Nieruchomości Śródmieście"}' | jq -r '.workspaceId // empty')
   [ -n "$WORKSPACE" ] || {
     echo "Could not create an agency. Start the app with --najem.bootstrap.operator-subject=<uuid>,"

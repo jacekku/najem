@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!--/*
+  Deliberately not the shared layout. That shell carries the agency name, the search box and the
+  projection-lag notice — all of which need a resolved workspace, and nobody signing in has one.
+  Rendering it here would mean asking the seam for an agency on behalf of a person we cannot name.
+
+  There is no password field on this page and there is no route behind one. Keycloak asks for the
+  password; NAJEM is told a subject afterwards and nothing else.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org" lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Logowanie — NAJEM</title>
+    <link rel="stylesheet" th:href="@{/css/najem.css}">
+</head>
+<body class="login">
+<main class="login__panel">
+    <h1 class="login__brand">NAJEM</h1>
+    <p class="login__lead">Zarządzanie najmem długoterminowym.</p>
+
+    <p class="login__notice" th:if="${signedOut}">Wylogowano.</p>
+    <p class="login__error" th:if="${failed}">
+        Logowanie nie powiodło się. Spróbuj ponownie.
+    </p>
+
+    <!--/*
+      A link, not a form: this starts the authorization-code flow and the credentials are entered
+      at the identity provider. Said plainly underneath, because being sent to another site to type
+      a password is exactly the shape of a phishing redirect, and a person who was not told to
+      expect it is right to hesitate.
+    */-->
+    <a class="login__button" th:href="@{/oauth2/authorization/keycloak}">Zaloguj się</a>
+    <p class="login__hint">Przeniesiemy Cię do Keycloak, gdzie podasz hasło.</p>
+
+    <p class="login__hint">
+        NAJEM działa na zaproszenia. Jeśli nie masz konta, poproś o zaproszenie osobę
+        zarządzającą Twoją agencją.
+    </p>
+</main>
+</body>
+</html>

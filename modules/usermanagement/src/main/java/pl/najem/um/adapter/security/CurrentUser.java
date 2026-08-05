@@ -1,6 +1,9 @@
 package pl.najem.um.adapter.security;
 
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import pl.najem.um.application.UserService;
@@ -8,6 +11,7 @@ import pl.najem.um.application.WorkspaceAccess;
 import pl.najem.um.domain.Role;
 
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -30,8 +34,42 @@ public class CurrentUser {
         if (jwt == null) {
             throw new AccessDeniedException("no authenticated caller");
         }
+        return asSubject(jwt.getSubject());
+    }
+
+    /**
+     * The caller's subject, whichever way they authenticated.
+     *
+     * <p>A browser signs in through the authorization-code flow and its principal is an
+     * {@link OidcUser}; a machine client presents a bearer token and its principal is a {@link Jwt}.
+     * Controllers ask for a {@code Jwt}, so a signed-in person arrives as {@code null} there — and
+     * the fallback for "no token" is the platform operator. <b>Without this, every person who logged
+     * in would act as the operator</b>, which is one account doing everything and an audit trail
+     * naming the wrong human.
+     *
+     * <p>Empty means nobody is authenticated, which is a different thing from being refused: under
+     * permit-all there is genuinely no caller, and the operator fallback is correct there.
+     */
+    public Optional<UUID> authenticatedSubject() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return Optional.empty();
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof OidcUser oidc) {
+            return Optional.of(asSubject(oidc.getSubject()));
+        }
+        if (principal instanceof Jwt jwt) {
+            return Optional.of(asSubject(jwt.getSubject()));
+        }
+        // An anonymous authentication, or a principal shape nobody here understands. Both are
+        // "we cannot say who this is", and a caller we cannot name is not a caller we trust.
+        return Optional.empty();
+    }
+
+    private static UUID asSubject(String claim) {
         try {
-            return UUID.fromString(jwt.getSubject());
+            return UUID.fromString(claim);
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new AccessDeniedException("token subject is not a Keycloak user id");
         }

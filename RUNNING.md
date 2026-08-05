@@ -34,33 +34,54 @@ export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
 Serves MT940 statements and a transactions API for reconciliation. Without it
 the app still starts; it just reconciles against nothing.
 
-## 4. The application (port 8080)
+## 4. Sign-in (Keycloak)
+
+NAJEM does not have a password. Keycloak is the identity provider, the sign-in
+page is a link rather than a form, and the only thing NAJEM ever learns about a
+person is their subject id. Prepare the realm and a person to be:
 
 ```sh
-./gradlew :apps:najem-app:bootRun --args="\
-  --najem.security.permit-all=true \
-  --najem.bank.fake.enabled=true \
-  --najem.bank.base-url=http://localhost:8081 \
-  --najem.bootstrap.operator-subject=$(uuidgen | tr 'A-Z' 'a-z')"
+./tools/seed-keycloak.sh          # creates the realm, client, audience mapper and user demo/demo
 ```
 
-There is no longer a `--najem.bank.iban`. Each agency registers its own account
+It prints a subject id. That id is who the application will let create the first
+agency, and the same id has to be given to the seeding script below — an agency
+created by one account and logged into as another shows an empty screen.
+
+## 5. The application (port 8080)
+
+```sh
+KCU=http://localhost:8180/realms/najem
+./gradlew :apps:najem-app:bootRun --args="\
+  --spring.security.oauth2.client.registration.keycloak.client-id=najem-app \
+  --spring.security.oauth2.client.registration.keycloak.client-authentication-method=none \
+  --spring.security.oauth2.client.registration.keycloak.scope=openid,profile,email \
+  --spring.security.oauth2.client.provider.keycloak.issuer-uri=$KCU \
+  --spring.security.oauth2.resourceserver.jwt.issuer-uri=$KCU \
+  --najem.security.audience=najem-app \
+  --najem.bootstrap.operator-subject=<the subject seed-keycloak.sh printed> \
+  --najem.bank.fake.enabled=true \
+  --najem.bank.base-url=http://localhost:8081"
+```
+
+`client-authentication-method=none` says the client is public, which is what
+makes Spring send a PKCE challenge. Keycloak is configured to require one, so
+without this flag every sign-in fails at the authorization endpoint.
+
+There is no `--najem.bank.iban`. Each agency registers its own account
 (`PUT /api/acc/workspace-account`), because a deployment-wide IBAN answered
-"whose money is this?" with a setting rather than with the data — one agency's
-transfers would have been reconciled into another's books.
+"whose money is this?" with a setting rather than with the data.
 
-`--najem.bootstrap.operator-subject` is what lets you create the first agency:
-until somebody belongs to one, nobody can make one. Any UUID will do for local
-play, and the same one must be passed to `tools/seed-demo.sh` as
-`NAJEM_OPERATOR_SUBJECT`.
+### Running without any sign-in
 
-`--najem.security.permit-all=true` is the explicit opt-out of authentication,
-for local play only. Omit it and the app refuses to start rather than silently
-serving every endpoint unauthenticated — which is what it used to do.
+For a click-through with no Keycloak at all, replace every `spring.security.*`
+flag with `--najem.security.permit-all=true`. Omit both and the app refuses to
+start rather than silently serving every endpoint unauthenticated.
 
-To run the *real* posture instead, drop that flag and supply
-`--spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:8180/realms/najem`.
-Every request then needs a token, so use the API sections below only with one.
+The application also refuses to start if an issuer is configured without
+`najem.security.audience`, or without a client registration — a deployment that
+can validate tokens but cannot sign anybody in serves screens that only ever
+answer 403.
 
 ### If Flyway refuses to start
 
@@ -78,7 +99,7 @@ docker exec najem-postgres-1 psql -U najem -d postgres \
   -c "drop database if exists najem;" -c "create database najem owner najem;"
 ```
 
-## 5. Poke at it
+## 6. Poke at it
 
 The home page is server-rendered Thymeleaf with htmx served from the app itself
 (no CDN), and the copy is Polish:
@@ -97,8 +118,13 @@ one with no reference at all. Nothing writes a projection directly, so the
 colours on the arrears board were computed by the code you are looking at.
 
 ```sh
-NAJEM_OPERATOR_SUBJECT=<the same uuid you started the app with> ./tools/seed-demo.sh
+KC_USER=demo KC_PASS=demo ./tools/seed-demo.sh        # signs in to seed
 ```
+
+With `permit-all` instead, drop `KC_USER` and pass
+`NAJEM_OPERATOR_SUBJECT=<the same uuid you started the app with>`. Everything
+the script does goes through the public API, so with sign-in enabled it needs a
+token like any other client.
 
 It prints the agency id. **Put that in `X-Workspace-Id` for every call below.**
 
@@ -107,9 +133,10 @@ To start over, **drop and recreate the database** (below) rather than emptying
 collide with the new agency in ways that surface several steps later. FakeBank
 keeps its scenarios in memory with no reset, so restart it too.
 
-`GET /workspace` returns **403** until your subject belongs to a workspace.
-That is the seam working, not a bug: an ambiguous or absent workspace resolves
-to denied rather than to a guess.
+Signing in grants nothing by itself. A valid Keycloak account with no NAJEM
+invitation is refused — in those words, rather than "access denied", because it
+is an invitation problem and not a permissions one. Somebody who has an account
+but belongs to no agency gets a screen explaining that instead.
 
 ### A round trip through the API
 
@@ -155,9 +182,11 @@ breath as the write that feeds it and you will legitimately see the old answer.
 
 ## What is not built yet
 
-- **Roles.** A caller's membership of the workspace they name is now checked
-  (`WorkspaceHeaderInterceptor`), but *which* role they hold is not consulted
-  by the REST APIs — any member may do anything their agency can do.
+- **Roles.** Membership of the agency a caller names is checked, but *which*
+  role they hold is not consulted by the REST APIs — any member may do anything
+  their agency can do.
+- **Invitations by email.** An account is created by accepting an invitation,
+  and issuing one still means calling the API rather than clicking a screen.
 - **A second agency cannot register a bank account** if another already holds
   that IBAN. The refusal is correct — an account belongs to one agency — but it
   arrives as a 500 carrying a raw Postgres constraint error, and the symptom

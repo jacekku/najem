@@ -37,6 +37,17 @@
     </form>
     <span class="masthead__stale" th:if="${projectionsBehind}"
           title="Widok nadąża za zapisami z opóźnieniem — odśwież za chwilę">aktualizacja…</span>
+    <!--/*
+      A POST, not a link: logging out changes state, and a GET that ends a session can be triggered
+      by anything that fetches a URL — a prefetch, an image tag on another site. Thymeleaf injects
+      the CSRF token, which is the same protection the agency switcher relies on.
+
+      Rendered only when somebody is actually signed in. Under permit-all there is no session to
+      end, and a button that cannot do anything is a bug report waiting to be filed.
+    */-->
+    <form class="masthead__signout" th:if="${signedInAs}" th:action="@{/logout}" method="post">
+        <button type="submit" th:title="'Zalogowano jako ' + ${signedInAs}">Wyloguj</button>
+    </form>
 </header>
 <main th:replace="${content}">
     <p>Screen content renders here.</p>

@@ -18,6 +18,9 @@ dependencies {
     // can name the types it already runs against — Jwt, AccessDeniedException. Nothing about the
     // running application changes; SecurityConfig stays UserManagement's and stays untouched.
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
+    // The browser half of the same conversation: /api/** validates bearer tokens, the screens run
+    // the authorization-code flow so a person can sign in at Keycloak. NAJEM never sees a password.
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.flywaydb:flyway-core")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")

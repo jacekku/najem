@@ -2,6 +2,7 @@ package pl.najem.app.web;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -30,6 +31,24 @@ public class ActiveAgencyAdvice {
 
     public ActiveAgencyAdvice(WebWorkspaceResolver resolver) {
         this.resolver = resolver;
+    }
+
+    /**
+     * Who is signed in, for the sign-out control — and only when somebody actually is.
+     *
+     * <p>Under permit-all there is no session to end, so this is absent and the masthead renders no
+     * button. A sign-out control in a deployment with no sign-in would be a control that cannot do
+     * its job, which is worse than not offering it.
+     *
+     * <p>The preferred username, not the subject: a masthead saying which UUID you are is the same
+     * defect as an agency screen showing its id instead of its name.
+     */
+    @ModelAttribute("signedInAs")
+    public String signedInAs(@AuthenticationPrincipal OidcUser person) {
+        if (person == null) {
+            return null;
+        }
+        return person.getPreferredUsername() != null ? person.getPreferredUsername() : person.getSubject();
     }
 
     @ModelAttribute("activeAgency")

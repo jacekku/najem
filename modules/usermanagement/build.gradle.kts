@@ -22,6 +22,9 @@ dependencies {
     implementation("org.springframework:spring-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
+    // oauth2Login lives here because SecurityConfig does: this module owns the security posture,
+    // and the browser chain is one of the postures rather than a UI concern.
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.security:spring-security-config")
     implementation("org.springframework.security:spring-security-web")
 
