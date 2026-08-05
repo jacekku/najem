@@ -41,8 +41,16 @@ public class BankUiController {
     private final StatementRenderer renderer;
     private final AccountRegistry accounts;
 
-    /** Monotonic across the process: see {@link #mintId}. */
+    /** Monotonic within the process: see {@link #mintId}. */
     private final java.util.concurrent.atomic.AtomicLong booked = new java.util.concurrent.atomic.AtomicLong();
+
+    /**
+     * Distinguishes this process from the last one. Deliberately random rather than derived from a
+     * clock: the only requirement is that it differ across restarts, and two processes started in
+     * the same second would share a timestamp — which is the failure being closed, not a new one.
+     */
+    private final String run = Long.toUnsignedString(new java.security.SecureRandom().nextLong(), 36)
+        .substring(0, 4);
 
     public BankUiController(TransactionStore store, StatementRenderer renderer, AccountRegistry accounts) {
         this.store = store;
@@ -206,10 +214,18 @@ public class BankUiController {
      * anywhere. Unlikely with one person clicking, and the failure is invisible when it happens,
      * which is the combination worth spending an {@code AtomicLong} on.
      *
+     * <p><strong>The counter alone is not enough, because it restarts and accounting does not.</strong>
+     * {@link TransactionStore} is wiped by a restart; {@code acc_payment} in Postgres is not. So a
+     * transfer booked in one process and ingested, then a different transfer booked after a restart,
+     * would mint the same id — and ingestion would recognise the second as already-imported and
+     * record nothing. A real payment disappearing with no error anywhere, reached by restarting
+     * rather than by double-clicking, which is the same asymmetry that makes re-seeding this bank
+     * dangerous: its state does not outlive its process and accounting's does.
+     *
      * <p>Still readable, because it ends up in a payment row somebody may have to explain.
      */
     private String mintId(String iban) {
-        return "reczna/" + iban + "/" + booked.incrementAndGet();
+        return "reczna/" + iban + "/" + run + "/" + booked.incrementAndGet();
     }
 
     /** A bank reference the bank invented, distinct from anything the payer wrote. */

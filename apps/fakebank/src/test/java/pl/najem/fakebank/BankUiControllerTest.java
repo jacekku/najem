@@ -300,4 +300,31 @@ class BankUiControllerTest {
         assertThat(store.find(iban, null)).extracting(BankTransactionDto::id)
             .doesNotHaveDuplicates().hasSize(5);
     }
+
+    /**
+     * Two processes must not mint the same id. FakeBank's store is wiped by a restart and
+     * accounting's payments are not, so a repeated id means the next real transfer is taken for an
+     * already-ingested duplicate and dropped.
+     *
+     * <p>Asserted on the run token rather than by restarting a JVM: two controllers stand in for two
+     * processes, which is the part of a restart that matters here.
+     */
+    @Test
+    void twoProcessesDoNotMintTheSameId() {
+        var one = new BankUiController(store, new StatementRenderer(), new AccountRegistry());
+        var two = new BankUiController(store, new StatementRenderer(), new AccountRegistry());
+
+        assertThat(idsFrom(one)).doesNotContainAnyElementsOf(idsFrom(two));
+    }
+
+    private static java.util.List<String> idsFrom(BankUiController controller) {
+        var flash = new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap();
+        var ids = new java.util.ArrayList<String>();
+        for (int i = 0; i < 3; i++) {
+            controller.book("PLRUN", new BigDecimal("100.00"), "CRDT", null,
+                LocalDate.of(2026, 9, 10), null, null, null, null, flash);
+            ids.add(String.valueOf(flash.getFlashAttributes().get("booked")));
+        }
+        return ids;
+    }
 }
