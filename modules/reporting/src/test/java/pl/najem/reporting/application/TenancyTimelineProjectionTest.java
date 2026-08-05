@@ -97,7 +97,7 @@ class TenancyTimelineProjectionTest {
         var portfolio = new PortfolioService(store, jdbc);
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
-        var invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
+        var invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
         var ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         var reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
 

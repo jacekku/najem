@@ -29,11 +29,6 @@ public class ReconciliationService {
         this.clock = clock;
     }
 
-    /** Reconciliation with its own collaborators, for tests and callers outside the context. */
-    public ReconciliationService(JdbcTemplate jdbc, AccountingService accounting) {
-        this(jdbc, new WarningService(jdbc), accounting, Clock.systemDefaultZone());
-    }
-
     /**
      * Confirms a suggested match. A payment belonging to another workspace is invisible rather than
      * forbidden — the query scopes the boundary, so there is nothing to confirm and nothing happens.
@@ -85,7 +80,7 @@ public class ReconciliationService {
             where workspace_id = ? and counterparty_iban = ? and tenancy_id = ?
             """, Integer.class, workspaceId, iban, tenancyId) > 0;
         if (!known.isEmpty() && !alreadyKnownHere) {
-            warnings.raise(workspaceId, tenancyId, List.of(Warning.of(WarningKind.PAYER_ACCOUNT_AMBIGUOUS,
+            warnings.raise(workspaceId, tenancyId, List.of(new WarningToRaise(WarningKind.PAYER_ACCOUNT_AMBIGUOUS,
                 "konto " + iban + " płaci za więcej niż jeden najem (" + known.getFirst() + ", "
                     + tenancyId + "); nie podpowiadamy już najmu na podstawie samego konta")));
         }

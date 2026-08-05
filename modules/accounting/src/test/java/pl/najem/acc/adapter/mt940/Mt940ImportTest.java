@@ -82,7 +82,7 @@ class Mt940ImportTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, applicationMapper(), registry);
-        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
         imports = new Mt940Import(new IngestionService((since, iban) -> List.of(), store, jdbc));
     }
 

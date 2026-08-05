@@ -60,7 +60,7 @@ public class DepositService {
         if (amount == null || amount.signum() <= 0) {
             return Optional.empty();
         }
-        var raised = new ArrayList<Warning>();
+        var raised = new ArrayList<WarningToRaise>();
         // The cap is a multiple of the czynsz, so with no czynsz there is no multiple to compare and
         // the check cannot run. Saying so is the whole point: a multiplier of zero is not greater
         // than any cap, so passing one to the comparison below reports a check that never happened,
@@ -68,20 +68,20 @@ public class DepositService {
         // deposit would be placed beyond the cap's reach.
         boolean checkable = rentAtCharge != null && rentAtCharge.signum() > 0;
         if (!checkable) {
-            raised.add(Warning.of(WarningKind.DEPOSIT_CAP_UNCHECKABLE,
+            raised.add(new WarningToRaise(WarningKind.DEPOSIT_CAP_UNCHECKABLE,
                 "kaucja " + amount + " zł; czynsz wynosi 0, więc nie sprawdzono ustawowego limitu"));
         }
         BigDecimal multiplier = multiplierOf(amount, rentAtCharge);
         LegalForm.of(legalForm).ifPresentOrElse(
             form -> {
                 if (checkable && multiplier.compareTo(BigDecimal.valueOf(form.depositCapInMonths())) > 0) {
-                    raised.add(Warning.of(WarningKind.DEPOSIT_CAP_EXCEEDED,
+                    raised.add(new WarningToRaise(WarningKind.DEPOSIT_CAP_EXCEEDED,
                         "kaucja " + amount + " zł to " + multiplier + "-krotność czynszu "
                             + rentAtCharge + " zł; ustawowy limit dla formy " + form.name()
                             + " to " + form.depositCapInMonths() + "-krotność"));
                 }
             },
-            () -> raised.add(Warning.of(WarningKind.UNKNOWN_LEGAL_FORM,
+            () -> raised.add(new WarningToRaise(WarningKind.UNKNOWN_LEGAL_FORM,
                 "nieznana forma najmu \"" + legalForm + "\"; nie sprawdzono limitu kaucji")));
 
         UUID chargeId = postDepositCharge(workspaceId, tenancyId, amount, dueDate, paymentReference);

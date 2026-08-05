@@ -104,9 +104,10 @@ Rule A5 is the destination. As of 2026-08-05 the accounting module is partway th
 
 - **Behind ports:** the `allocate` path — `PaymentRepository`, `InvoiceRepository`,
   `AccountingRepository` — the arrears board, which reads through `InvoiceRepository` and writes
-  through `ArrearsStandingProjection`, and the posting path: `InvoiceService` (was `LedgerService`)
-  asserts, withdraws and credits obligations through that same `InvoiceRepository`.
-- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **9 times** in
+  through `ArrearsStandingProjection`, the posting path: `InvoiceService` (was `LedgerService`)
+  asserts, withdraws and credits obligations through that same `InvoiceRepository`, and the warning
+  register behind `WarningRepository`.
+- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **8 times** in
   `pl.najem.acc.application`. `CorrectionService`, `IngestionService`, `SuspenseService`,
   `DepositService` and others are each a service and their own repository at once.
 

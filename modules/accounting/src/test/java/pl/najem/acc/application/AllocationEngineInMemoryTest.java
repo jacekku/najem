@@ -6,9 +6,6 @@ import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.Component;
 import pl.najem.acc.domain.PaymentAllocated;
 import pl.najem.acc.domain.PaymentStatus;
-import pl.najem.eventstore.EventStore;
-import pl.najem.eventstore.StreamEvents;
-import pl.najem.contracts.events.IntegrationEvent;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -259,22 +256,5 @@ class AllocationEngineInMemoryTest {
 
     private PaymentStatus statusOf(UUID paymentId) {
         return payments.find(WS, paymentId).status();
-    }
-
-    /** Keeps what was appended so the events can be asserted on without a store behind them. */
-    private static final class RecordingEventStore implements EventStore {
-
-        private final List<Object> appended = new ArrayList<>();
-
-        @Override
-        public void append(UUID streamId, String streamType, long expectedVersion,
-                           List<Object> events, List<IntegrationEvent> integrationEvents) {
-            appended.addAll(events);
-        }
-
-        @Override
-        public StreamEvents load(UUID streamId, String streamType) {
-            return new StreamEvents(appended.size(), List.copyOf(appended));
-        }
     }
 }

@@ -43,14 +43,14 @@ public record MonthlyBreakdown(BigDecimal monthlyTotal, boolean componentSplitIn
         return List.copyOf(lines);
     }
 
-    public List<Warning> warnings() {
-        var warnings = new ArrayList<Warning>();
+    public List<WarningToRaise> warnings() {
+        var warnings = new ArrayList<WarningToRaise>();
         if (!componentSplitInContract) {
-            warnings.add(Warning.of(WarningKind.COLLAPSE_RULE,
+            warnings.add(new WarningToRaise(WarningKind.COLLAPSE_RULE,
                 "no contractual split: the entire amount enters the ryczałt base "
                     + "and the deposit valorization base"));
         } else if (splitIsEmpty()) {
-            warnings.add(Warning.of(WarningKind.COLLAPSE_RULE,
+            warnings.add(new WarningToRaise(WarningKind.COLLAPSE_RULE,
                 "no contractual split: a split was declared but no components were given, "
                     + "so the whole amount was charged as rent"));
         } else {
@@ -58,7 +58,7 @@ public record MonthlyBreakdown(BigDecimal monthlyTotal, boolean componentSplitIn
                 .map(InvoiceLine::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (sum.compareTo(monthlyTotal) != 0) {
-                warnings.add(Warning.of(WarningKind.BREAKDOWN_MISMATCH,
+                warnings.add(new WarningToRaise(WarningKind.BREAKDOWN_MISMATCH,
                     "the contractual breakdown (" + sum + ") does not sum to the agreed monthly total ("
                         + monthlyTotal + "); the breakdown was charged"));
             }

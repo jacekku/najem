@@ -47,7 +47,7 @@ class ReconciliationServiceTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
     }

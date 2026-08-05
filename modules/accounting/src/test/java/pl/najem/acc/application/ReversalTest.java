@@ -69,7 +69,7 @@ class ReversalTest {
         // the system clock these assertions would read green/yellow until 2027 and red after it.
         var board = PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(
             DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
-        invoicing = new InvoiceService(store, new PostgresInvoiceRepository(jdbc), new WarningService(jdbc), board);
+        invoicing = new InvoiceService(store, new PostgresInvoiceRepository(jdbc), PostgresAccounting.warningService(jdbc), board);
         ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
         var accounting = new AccountingService(
             PostgresAccounting.allocationService(store, jdbc), board);

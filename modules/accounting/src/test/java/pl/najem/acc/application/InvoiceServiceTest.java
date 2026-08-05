@@ -49,7 +49,7 @@ class InvoiceServiceTest {
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         // Fixed a month before the charge falls due, so the colour asserted below stays what it
         // means rather than turning red once the wall clock passes September 2026.
-        service = new InvoiceService(store, new PostgresInvoiceRepository(jdbc), new WarningService(jdbc),
+        service = new InvoiceService(store, new PostgresInvoiceRepository(jdbc), PostgresAccounting.warningService(jdbc),
             PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(LocalDate.of(2026, 8, 1).atStartOfDay(ZoneId.systemDefault()).toInstant(),
                 ZoneId.systemDefault())));
     }

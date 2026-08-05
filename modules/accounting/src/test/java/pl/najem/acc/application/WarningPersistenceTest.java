@@ -53,7 +53,7 @@ class WarningPersistenceTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        warnings = new WarningService(jdbc);
+        warnings = PostgresAccounting.warningService(jdbc);
         invoicing = PostgresAccounting.invoiceService(store, jdbc, warnings);
     }
 

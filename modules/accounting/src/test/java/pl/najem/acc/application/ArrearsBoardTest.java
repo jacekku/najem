@@ -187,7 +187,7 @@ class ArrearsBoardTest {
     }
 
     private static InvoiceService invoicing() {
-        return PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
+        return PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
     }
 
     private static ArrearsColour colourOn(UUID tenancyId, LocalDate asOf) {

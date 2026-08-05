@@ -61,12 +61,20 @@ public final class PostgresAccounting {
             arrearsBoardService(jdbc, Clock.systemDefaultZone()));
     }
 
+    /**
+     * The register the postings flag into. A parameter on the services that raise warnings, and
+     * built here for the callers that only need one.
+     */
+    public static WarningService warningService(JdbcTemplate jdbc) {
+        return new WarningService(new PostgresWarningRepository(jdbc));
+    }
+
     public static SuspenseService suspenseService(EventStore store, JdbcTemplate jdbc) {
         return new SuspenseService(store, jdbc, accountingService(store, jdbc));
     }
 
     public static ReconciliationService reconciliationService(EventStore store, JdbcTemplate jdbc) {
-        return new ReconciliationService(jdbc, new WarningService(jdbc),
+        return new ReconciliationService(jdbc, warningService(jdbc),
             accountingService(store, jdbc), Clock.systemDefaultZone());
     }
 }

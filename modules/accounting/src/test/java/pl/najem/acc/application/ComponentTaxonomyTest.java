@@ -54,7 +54,7 @@ class ComponentTaxonomyTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         charges = new PostgresInvoiceRepository(jdbc);
-        invoicing = PostgresAccounting.invoiceService(store, jdbc, new WarningService(jdbc));
+        invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
     }
 
     @Test
