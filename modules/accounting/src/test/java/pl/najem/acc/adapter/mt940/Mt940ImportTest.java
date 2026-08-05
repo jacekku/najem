@@ -34,6 +34,7 @@ import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Objects;
 import java.time.LocalDate;
 import java.util.List;
@@ -46,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class Mt940ImportTest {
 
     private static final UUID WORKSPACE = TestWorkspace.ID;
+    private static final String ACCOUNT = "PL61109010140000071219812874";
 
     /** A credit and a debit on one statement, in the shape a Polish bank sends. */
     private static final String STATEMENT = """
@@ -60,9 +62,6 @@ class Mt940ImportTest {
         :62F:C260911PLN2212,57
         -
         """;
-
-    private static final String CREDIT_ID = "mt940/PL61109010140000071219812874/5/1/0";
-    private static final String DEBIT_ID = "mt940/PL61109010140000071219812874/5/1/1";
 
     @Container
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
@@ -100,40 +99,119 @@ class Mt940ImportTest {
 
     @Test
     void importsEveryLineOfTheStatementUnderADeterministicId() {
-        int imported = imports.importStatement(WORKSPACE, STATEMENT);
+        int imported = imports.importStatement(WORKSPACE, statement("A"));
 
         assertThat(imported).isEqualTo(2);
-        // Scoped to this statement's number: the container is shared across test methods, so a
-        // 'mt940/%' query would also see every other method's import.
-        assertThat(jdbc.queryForList(
-            "select external_id from acc_payment where external_id like 'mt940/%/5/1/%' order by external_id",
-            String.class))
-            .containsExactly(CREDIT_ID, DEBIT_ID);
+        assertThat(idsAmong(creditId("A"), debitId("A")))
+            .containsExactly(creditId("A"), debitId("A"));
     }
 
     @Test
     void reUploadingTheSameStatementIngestsNothingNew() {
-        String text = STATEMENT.replace(":28C:5/1", ":28C:6/1");
+        String text = statement("B");
 
         imports.importStatement(WORKSPACE, text);
         imports.importStatement(WORKSPACE, text);
 
-        assertThat(jdbc.queryForObject("""
-            select count(*) from acc_payment where external_id like 'mt940/%/6/1/%'
-            """, Integer.class)).isEqualTo(2);
+        assertThat(paymentsReferencing("BNPCB", "BNPDB")).isEqualTo(2);
+    }
+
+    /**
+     * The case the positional key could not survive.
+     *
+     * <p>A bank re-sends a statement with a correcting entry inserted above the lines already
+     * imported. Nothing about those lines changed — same money, same dates, same counterparties —
+     * but every one of them moved down a row. Under {@code account/statementNumber/index} that made
+     * each of them a new id and therefore a new payment, so a manager's books gained a second copy
+     * of every transfer on the statement and the arrears board went green on money that arrived
+     * once.
+     *
+     * <p>The id now comes from what the transaction owns, so only the genuinely new line is new.
+     */
+    @Test
+    void aStatementResentWithACorrectionPrependedDoesNotDuplicateTheLinesBelowIt() {
+        String original = statement("P");
+        String corrected = original.replace(":61:2609100910C2500,00",
+            """
+            :61:2609090909C100,00NTRFNONREF//BNPCORRP
+            :86:~20NAJEM/T0/2026~32NAJEMCA T0~38PL99000000000000000000000003
+            :61:2609100910C2500,00""");
+
+        imports.importStatement(WORKSPACE, original);
+        imports.importStatement(WORKSPACE, corrected);
+
+        assertThat(paymentsReferencing("BNPCP", "BNPDP"))
+            .as("the two original lines must still be two payments, not four")
+            .isEqualTo(2);
+        assertThat(paymentsReferencing("BNPCORRP"))
+            .as("the correction is genuinely new and must be ingested")
+            .isEqualTo(1);
+    }
+
+    /**
+     * The statement number is the sending bank's, not the transaction's.
+     *
+     * <p>@najem-fakebank derives it from the set of currencies on the account, so booking a transfer
+     * in a currency the account had not seen renumbers the statement every other line already
+     * belongs to — nothing anyone would call a bug at the time. Under a key containing that number,
+     * every payment already ingested would arrive again as new.
+     */
+    @Test
+    void aStatementRenumberedByTheBankDoesNotDuplicateWhatItAlreadySent() {
+        String text = statement("N");
+
+        imports.importStatement(WORKSPACE, text);
+        imports.importStatement(WORKSPACE, text.replace(":28C:5/1", ":28C:2/1"));
+
+        assertThat(paymentsReferencing("BNPCN", "BNPDN")).isEqualTo(2);
+    }
+
+    /**
+     * NONREF is the literal a bank sends when it has no reference to give, so it identifies nothing
+     * and every line carrying it would collide with every other. Those lines fall back to a digest
+     * of their own content, which is still stable when an unrelated line is inserted above them.
+     */
+    @Test
+    void aLineTheBankGaveNoReferenceForIsIdentifiedByItsOwnContent() {
+        imports.importStatement(WORKSPACE, UNREFERENCED);
+        imports.importStatement(WORKSPACE, UNREFERENCED.replace(":61:2609100910C1500,00",
+            """
+            :61:2609090909C77,00NTRFNONREF//NONREF
+            :86:~20INNA WPLATA~32KTOS INNY~38PL99000000000000000000000009
+            :61:2609100910C1500,00"""));
+
+        // Counted per title rather than summed. A total of two is also what you get when the
+        // original line duplicates and the genuinely new one is swallowed in its place — the two
+        // failures cancel, and an assertion on the sum calls that success.
+        assertThat(paymentsTitled("NAJEM/U1/2026"))
+            .as("the line that was already imported must not arrive again")
+            .isEqualTo(1);
+        assertThat(paymentsTitled("INNA WPLATA"))
+            .as("the line that is genuinely new must not be mistaken for one already seen")
+            .isEqualTo(1);
+    }
+
+    /**
+     * Two transfers can be identical in every field a statement carries — same day, same amount,
+     * same payer, same title — and still be two payments of real money. With no reference to tell
+     * them apart, the count of indistinguishable lines seen so far does it.
+     */
+    @Test
+    void twoIdenticalUnreferencedTransfersStayTwoPayments() {
+        imports.importStatement(WORKSPACE, TWINS);
+
+        assertThat(paymentsTitled("BLIZNIACZA WPLATA")).isEqualTo(2);
     }
 
     @Test
     void carriesTheWholeLineThroughToThePayment() {
-        String text = STATEMENT.replace(":28C:5/1", ":28C:7/1");
-
-        imports.importStatement(WORKSPACE, text);
+        imports.importStatement(WORKSPACE, statement("C"));
 
         var payment = jdbc.queryForMap("""
             select amount, title, booking_date, value_date, counterparty_name, counterparty_iban,
                    bank_reference, direction, currency
             from acc_payment where external_id = ?
-            """, "mt940/PL61109010140000071219812874/7/1/0");
+            """, creditId("C"));
 
         assertThat((BigDecimal) payment.get("amount")).isEqualByComparingTo("2500.00");
         assertThat(payment.get("title")).isEqualTo("NAJEM/T1/2026");
@@ -141,7 +219,7 @@ class Mt940ImportTest {
         assertThat(payment.get("value_date").toString()).isEqualTo("2026-09-10");
         assertThat(payment.get("counterparty_name")).isEqualTo("NAJEMCA T1");
         assertThat(payment.get("counterparty_iban")).isEqualTo("PL99000000000000000000000001");
-        assertThat(payment.get("bank_reference")).isEqualTo("BNP00123456");
+        assertThat(payment.get("bank_reference")).isEqualTo("BNPCC");
         assertThat(payment.get("direction")).isEqualTo("CRDT");
         assertThat(payment.get("currency")).isEqualTo("PLN");
     }
@@ -152,12 +230,10 @@ class Mt940ImportTest {
         ledger.postRentCharge(WORKSPACE, tenancyId, new BigDecimal("287.43"),
             LocalDate.of(2026, 9, 11), "OPLATA ZA MEDIA");
 
-        String text = STATEMENT.replace(":28C:5/1", ":28C:8/1");
-        imports.importStatement(WORKSPACE, text);
+        imports.importStatement(WORKSPACE, statement("D"));
 
         assertThat(jdbc.queryForObject(
-            "select status from acc_payment where external_id = ?", String.class,
-            "mt940/PL61109010140000071219812874/8/1/1"))
+            "select status from acc_payment where external_id = ?", String.class, debitId("D")))
             .isEqualTo("unmatched");
     }
 
@@ -167,14 +243,11 @@ class Mt940ImportTest {
         ledger.postRentCharge(WORKSPACE, tenancyId, new BigDecimal("2500.00"),
             LocalDate.of(2026, 9, 10), "NAJEM/T9/2026");
 
-        String text = STATEMENT
-            .replace(":28C:5/1", ":28C:9/1")
-            .replace("~20NAJEM/T1/2026", "~20NAJEM/T9/2026");
-        imports.importStatement(WORKSPACE, text);
+        imports.importStatement(WORKSPACE,
+            statement("E").replace("~20NAJEM/T1/2026", "~20NAJEM/T9/2026"));
 
         assertThat(jdbc.queryForObject(
-            "select status from acc_payment where external_id = ?", String.class,
-            "mt940/PL61109010140000071219812874/9/1/0"))
+            "select status from acc_payment where external_id = ?", String.class, creditId("E")))
             .isEqualTo("suggested");
     }
 
@@ -194,7 +267,7 @@ class Mt940ImportTest {
         imports.importStatement(WORKSPACE, text);
 
         var payment = jdbc.queryForMap("select title, counterparty_name, counterparty_iban " +
-            "from acc_payment where external_id = ?", "mt940/PL61109010140000071219812874/10/1/0");
+            "from acc_payment where external_id = ?", "mt940/" + ACCOUNT + "/BNP00111111");
         assertThat(payment.get("title")).isEqualTo("PRZELEW NA RACHUNEK");
         assertThat(payment.get("counterparty_name")).isNull();
         assertThat(payment.get("counterparty_iban")).isNull();
@@ -218,16 +291,12 @@ class Mt940ImportTest {
 
     @Test
     void unreadableTextIsRejectedAndIngestsNothingAtAll() {
-        String text = STATEMENT
-            .replace(":28C:5/1", ":28C:11/1")
-            .replace("C2500,00NTRF", "Ctwo-thousandNTRF");
+        String text = statement("G").replace("C2500,00NTRF", "Ctwo-thousandNTRF");
 
         assertThatThrownBy(() -> imports.importStatement(WORKSPACE, text))
             .isInstanceOf(Mt940FormatException.class);
 
-        assertThat(jdbc.queryForObject("""
-            select count(*) from acc_payment where external_id like 'mt940/%/11/1/%'
-            """, Integer.class)).isZero();
+        assertThat(count(creditId("G"), debitId("G"))).isZero();
     }
 
     /**
@@ -304,15 +373,96 @@ class Mt940ImportTest {
      */
     @Test
     void storesDatesInTheEncodingTheApplicationWrites() {
-        imports.importStatement(WORKSPACE, STATEMENT.replace(":28C:5/1", ":28C:12/1"));
+        imports.importStatement(WORKSPACE, statement("H"));
 
         String payload = jdbc.queryForObject("""
             select payload::text from events
             where stream_type = 'Payment' and payload->>'externalId' = ?
-            """, String.class, "mt940/PL61109010140000071219812874/12/1/0");
+            """, String.class, creditId("H"));
 
         // A quoted ISO string, not the [2026,9,10] array a bare JavaTimeModule mapper writes.
         // Whitespace-insensitive because jsonb::text normalises to "key": "value".
         assertThat(payload.replace(" ", "")).contains("\"bookingDate\":\"2026-09-10\"");
+    }
+
+    /** Every line carries NONREF, so nothing here can be identified by a bank reference. */
+    private static final String UNREFERENCED = """
+        :20:NAJEMU
+        :25:PL61109010140000071219812874
+        :28C:20/1
+        :60F:C260910PLN0,00
+        :61:2609100910C1500,00NTRFNONREF//NONREF
+        :86:~20NAJEM/U1/2026~32NAJEMCA U1~38PL99000000000000000000000004
+        :62F:C260910PLN1500,00
+        -
+        """;
+
+    /** Two lines a statement cannot tell apart, and neither can anyone reading it. */
+    private static final String TWINS = """
+        :20:NAJEMW
+        :25:PL61109010140000071219812874
+        :28C:21/1
+        :60F:C260910PLN0,00
+        :61:2609100910C640,00NTRFNONREF//NONREF
+        :86:~20BLIZNIACZA WPLATA~32BLIZNIAK~38PL99000000000000000000000005
+        :61:2609100910C640,00NTRFNONREF//NONREF
+        :86:~20BLIZNIACZA WPLATA~32BLIZNIAK~38PL99000000000000000000000005
+        :62F:C260910PLN1280,00
+        -
+        """;
+
+    /**
+     * The shared statement with per-test bank references.
+     *
+     * <p>These used to be isolated by giving each method its own {@code :28C:} statement number,
+     * which worked only because the number was part of the id. It is not any more — and that is the
+     * point of the change — so the reference is what varies. The container is shared across methods,
+     * and two methods importing the same reference would silently deduplicate against each other.
+     */
+    private static String statement(String tag) {
+        return STATEMENT.replace("BNP00123456", "BNPC" + tag).replace("BNP00999999", "BNPD" + tag);
+    }
+
+    private static String creditId(String tag) {
+        return "mt940/" + ACCOUNT + "/BNPC" + tag;
+    }
+
+    private static String debitId(String tag) {
+        return "mt940/" + ACCOUNT + "/BNPD" + tag;
+    }
+
+    private static List<String> idsAmong(String... externalIds) {
+        return jdbc.queryForList("select external_id from acc_payment where external_id in ("
+            + placeholders(externalIds) + ") order by external_id", String.class,
+            (Object[]) externalIds);
+    }
+
+    /**
+     * How many payments the module is holding for these bank references.
+     *
+     * <p>Counted by what the bank said, not by the id this module derives, on purpose. The
+     * duplication tests are about whether one transfer became two payments — an invariant that has
+     * to survive any future change to how the key is spelled. Asserting the id here instead would
+     * make every one of them fail on a rename and pass on a genuine duplication, which is backwards.
+     * The id format is pinned once, deliberately, in
+     * {@link #importsEveryLineOfTheStatementUnderADeterministicId()}.
+     */
+    private static Integer paymentsReferencing(String... bankReferences) {
+        return jdbc.queryForObject("select count(*) from acc_payment where bank_reference in ("
+            + placeholders(bankReferences) + ")", Integer.class, (Object[]) bankReferences);
+    }
+
+    private static Integer paymentsTitled(String title) {
+        return jdbc.queryForObject(
+            "select count(*) from acc_payment where title = ?", Integer.class, title);
+    }
+
+    private static Integer count(String... externalIds) {
+        return jdbc.queryForObject("select count(*) from acc_payment where external_id in ("
+            + placeholders(externalIds) + ")", Integer.class, (Object[]) externalIds);
+    }
+
+    private static String placeholders(String[] values) {
+        return String.join(",", Collections.nCopies(values.length, "?"));
     }
 }
