@@ -55,7 +55,28 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, Environment environment) throws Exception {
         String issuer = environment.getProperty(ISSUER_URI);
-        http.csrf(csrf -> csrf.disable());
+
+        // On for the screens, off for the API — because the two surfaces carry their authority
+        // differently and CSRF is an attack on ambient authority specifically.
+        //
+        // /api/** authenticates with a bearer token, which a browser does NOT attach to a
+        // cross-site request. A forged call there cannot authenticate, so protection buys nothing
+        // and costs every machine client a 403 — a real regression traded for no security.
+        //
+        // The screens are the opposite case. The agency a person is working in lives in the
+        // HttpSession, which IS cookie-backed, and cookies DO ride along cross-site. The forgeable
+        // action is not "read data" or "write data" — it is silently changing WHICH agency the
+        // victim's next action happens in. A manager follows a link, their session flips to their
+        // other agency, and the payment they record next lands in books they did not choose.
+        //
+        // Every other control still passes while that happens: the token is valid, the audience
+        // matches, and membership is re-checked on every request — because the victim really is a
+        // member of both agencies. Nothing else in the stack asks whether the person INTENDED the
+        // switch, and that is the only question CSRF protection answers. It is rule 7's harm — a
+        // write into a workspace nobody named — reached by a route that needs no default at all.
+        //
+        // Found by najem-frontend, who asked why their form worked without a token.
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"));
 
         if (issuer == null || issuer.isBlank()) {
             // Compared as a string on purpose. Binding to Boolean makes an unparseable value throw

@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
@@ -95,9 +96,14 @@ class WebWorkspaceChoiceTest {
         assertThat(html).contains("Agencja A").contains("Agencja B");
     }
 
+    /**
+     * Carries a CSRF token deliberately. Without one this still answers 403 — but for want of a
+     * token rather than for want of membership, and the test would stay green with the membership
+     * check deleted. A refusal test has to pin down WHICH refusal it got.
+     */
     @Test
     void choosingAnAgencyTheSubjectDoesNotBelongToIsRefused() throws Exception {
-        int status = mvc.perform(post("/agencies/" + UUID.randomUUID()))
+        int status = mvc.perform(post("/agencies/" + UUID.randomUUID()).with(csrf()))
             .andReturn().getResponse().getStatus();
 
         assertThat(status).isEqualTo(403);
@@ -114,7 +120,7 @@ class WebWorkspaceChoiceTest {
     void choosingAnAgencyThenActsInIt() throws Exception {
         var session = new MockHttpSession();
 
-        mvc.perform(post("/agencies/" + first).session(session))
+        mvc.perform(post("/agencies/" + first).session(session).with(csrf()))
             .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isEqualTo("/"));
 
         String html = mvc.perform(get("/workspace").session(session))
