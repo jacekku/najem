@@ -165,6 +165,14 @@ public class DepositService {
      * <p>Scoped by workspace and required to have been paid. A charge nobody settled is not money in
      * hand, and valorizing it would invent funds — so the unpaid case refuses rather than returning
      * a figure that looks like a settlement.
+     *
+     * <p>Taking the single row is safe because {@code acc_deposit} is unique on
+     * {@code (workspace_id, tenancy_id)} — so a redelivered activation, which the at-least-once
+     * outbox is entitled to produce, is refused by the database rather than producing a second
+     * deposit with a different amount and a different answer to what the tenant gets back. That
+     * constraint is the reason this query needs no tie-break, and it is asserted by name in
+     * {@code AccountingSchemaShapeTest} so that dropping it fails a test rather than silently making
+     * a refund depend on row order.
      */
     private Map<String, Object> held(UUID workspaceId, UUID tenancyId) {
         var rows = jdbc.queryForList("""

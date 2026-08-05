@@ -5,6 +5,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -18,7 +19,6 @@ import pl.najem.eventstore.JdbcEventStore;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -193,6 +193,24 @@ class DepositSettlementTest {
             .isEqualByComparingTo("5000");
     }
 
+    /**
+     * A redelivered activation does not charge the deposit a second time. The outbox is
+     * at-least-once, so the redelivery itself is expected; what must not happen is a tenancy ending
+     * up with two deposits of different amounts and no lawful way to choose which one goes back.
+     * The database refuses it, which is why {@code held} can take the single row without a tie-break.
+     */
+    @Test
+    void aRedeliveredActivationCannotChargeASecondDeposit() {
+        var tenancyId = chargedDeposit("6000", "3000", "S10");
+
+        assertThatThrownBy(() -> deposits.chargeOnActivation(WS, tenancyId, new BigDecimal("9000"),
+            new BigDecimal("4500"), "ZWYKLY", START, "KAUCJA/S10B/2027"))
+            .isInstanceOf(DuplicateKeyException.class);
+
+        assertThat(jdbc.queryForObject("select count(*) from acc_deposit where tenancy_id = ?",
+            Integer.class, tenancyId)).isEqualTo(1);
+    }
+
     /** A settlement belongs to one workspace; another may not reach it. */
     @Test
     void aDepositCannotBeSettledFromAnotherWorkspace() {
@@ -231,9 +249,5 @@ class DepositSettlementTest {
             select coalesce(sum(amount - allocated_amount), 0) from acc_charge
             where workspace_id = ? and tenancy_id = ? and active and component <> ?
             """, BigDecimal.class, WS, tenancyId, Component.DEPOSIT.wireName());
-    }
-
-    static {
-        List.of();
     }
 }
