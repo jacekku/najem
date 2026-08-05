@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The tab mark. Vendored like every other asset here, for the reason given in layout.html.
+
+  It carries its own background rather than drawing a bare glyph, so it does not have to guess
+  the tab colour: a dark-on-transparent mark disappears in a dark browser chrome and a
+  light-on-transparent one disappears in a light chrome. A filled tile reads on both, which is
+  why no prefers-color-scheme rule is needed inside this file.
+
+  16px is the size that actually ships. The stem weight and counters are set for that, not for
+  how it looks enlarged.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="NAJEM">
+    <rect width="32" height="32" rx="6" fill="#1c1b19"/>
+    <path d="M9 23V9h3.4l7.2 9.1V9H23v14h-3.4l-7.2-9.1V23H9z" fill="#fbfaf8"/>
+</svg>

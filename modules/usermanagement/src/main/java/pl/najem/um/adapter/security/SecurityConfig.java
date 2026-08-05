@@ -179,7 +179,13 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // The sign-in page itself, and the static assets it needs to render. A login page
                 // that requires being logged in is a redirect loop.
-                .requestMatchers("/login", "/css/**", "/vendor/**", "/favicon.ico").permitAll()
+                //
+                // /theme is here because the sign-in page carries the light/dark control, and a
+                // person who cannot comfortably read a light screen meets that page before they
+                // have a session. It sets one cookie naming a colour scheme, reads nothing, and
+                // is still CSRF-protected by the browser chain.
+                .requestMatchers("/login", "/theme", "/css/**", "/vendor/**",
+                    "/favicon.ico", "/favicon.svg").permitAll()
                 .anyRequest().authenticated())
             .oauth2Login(login -> login
                 // Ours rather than Spring's generated one, so an unauthenticated visitor meets a

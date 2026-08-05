@@ -21,12 +21,18 @@
           typed; expectedReference is what the charge asked for. At tier 1 they are equal — at
           tier 2 the difference IS the judgement being handed over, so both are on screen.
         */-->
-        <table class="board" th:unless="${suggestions.isEmpty()}">
+        <!--/*
+          Seven columns, and the two reference columns hold whatever a payer typed. The wrapper
+          lets the table scroll inside itself instead of pushing the document sideways — a page
+          that scrolls horizontally takes the masthead, and with it the agency name, off screen.
+        */-->
+        <div class="board-scroll" th:unless="${suggestions.isEmpty()}">
+        <table class="board">
             <thead>
             <tr>
                 <th>Poziom</th>
-                <th>Wpłata</th>
-                <th>Należność</th>
+                <th class="amount">Wpłata</th>
+                <th class="amount">Należność</th>
                 <th>Tytuł podany</th>
                 <th>Tytuł oczekiwany</th>
                 <th>Wpłacający</th>
@@ -71,6 +77,7 @@
             </tr>
             </tbody>
         </table>
+        </div>
     </section>
 
     <section>
@@ -80,10 +87,11 @@
             Wszystko trafiło na swoje miejsce.
         </p>
 
-        <table class="board" th:unless="${suspense.isEmpty()}">
+        <div class="board-scroll" th:unless="${suspense.isEmpty()}">
+        <table class="board">
             <thead>
             <tr>
-                <th>Kwota</th>
+                <th class="amount">Kwota</th>
                 <th>Tytuł</th>
                 <th>Wpłacający</th>
                 <th>Zaksięgowano</th>
@@ -106,6 +114,7 @@
             </tr>
             </tbody>
         </table>
+        </div>
     </section>
 
     <section>

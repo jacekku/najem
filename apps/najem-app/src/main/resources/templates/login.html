@@ -7,11 +7,12 @@
   There is no password field on this page and there is no route behind one. Keycloak asks for the
   password; NAJEM is told a subject afterwards and nothing else.
 */-->
-<html xmlns:th="http://www.thymeleaf.org" lang="pl">
+<html xmlns:th="http://www.thymeleaf.org" lang="pl" th:attr="data-theme=${theme}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Logowanie — NAJEM</title>
+    <link rel="icon" th:href="@{/favicon.svg}" type="image/svg+xml">
     <link rel="stylesheet" th:href="@{/css/najem.css}">
 </head>
 <body class="login">
@@ -37,6 +38,18 @@
         NAJEM działa na zaproszenia. Jeśli nie masz konta, poproś o zaproszenie osobę
         zarządzającą Twoją agencją.
     </p>
+
+    <!--/*
+      The theme control is here too, not only in the masthead this page deliberately does not
+      render. Somebody who cannot comfortably read a light screen meets this page first, and a
+      preference they can only set after signing in is one they cannot reach.
+    */-->
+    <form class="login__theme" th:action="@{/theme}" method="post">
+        <input type="hidden" name="theme" th:value="${themeToOffer}">
+        <input type="hidden" name="return" th:value="${currentPath}">
+        <button type="submit"
+                th:text="${themeToOffer == 'dark'} ? 'Ciemny motyw' : 'Jasny motyw'">Ciemny motyw</button>
+    </form>
 </main>
 </body>
 </html>

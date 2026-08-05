@@ -8,11 +8,21 @@
 
   This layout holds no workspace and no data. Screens receive a workspace; they never resolve one.
 */-->
-<html xmlns:th="http://www.thymeleaf.org" lang="pl" th:fragment="page(title, content)">
+<!--/*
+  data-theme is stamped here, on the server, or left off entirely.
+
+  Left off means "follow the operating system", which the stylesheet handles with a media query.
+  Only somebody who has used the toggle gets an attribute, and then it overrides their machine.
+  Resolving it here rather than in the browser is what keeps the first paint correct: a script
+  that fixes the theme after the document renders is a script that flashes the wrong one first.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org" lang="pl" th:fragment="page(title, content)"
+      th:attr="data-theme=${theme}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="${title}">NAJEM</title>
+    <link rel="icon" th:href="@{/favicon.svg}" type="image/svg+xml">
     <script th:src="@{/vendor/htmx.min.js}" defer></script>
     <link rel="stylesheet" th:href="@{/css/najem.css}">
 </head>
@@ -45,6 +55,25 @@
       Rendered only when somebody is actually signed in. Under permit-all there is no session to
       end, and a button that cannot do anything is a bug report waiting to be filed.
     */-->
+    <!--/*
+      Light or dark, chosen explicitly. A POST for the same reason sign-out is one: it sets a
+      cookie, and a GET that changes state can be fired by anything that fetches a URL.
+
+      It carries the current path so the switch keeps you on the screen you were reading rather
+      than returning you home mid-reconciliation. That field is attacker-controllable and becomes
+      a redirect target, so ThemeController validates it again rather than trusting this.
+
+      Rendered on every screen including before sign-in: somebody who cannot read the login page
+      in the dark cannot get far enough to fix it afterwards.
+    */-->
+    <form class="masthead__theme" th:action="@{/theme}" method="post">
+        <input type="hidden" name="theme" th:value="${themeToOffer}">
+        <input type="hidden" name="return" th:value="${currentPath}">
+        <button type="submit"
+                th:title="${themeToOffer == 'dark'} ? 'Przełącz na ciemny motyw'
+                                                    : 'Przełącz na jasny motyw'"
+                th:text="${themeToOffer == 'dark'} ? 'Ciemny' : 'Jasny'">Ciemny</button>
+    </form>
     <form class="masthead__signout" th:if="${signedInAs}" th:action="@{/logout}" method="post">
         <button type="submit" th:title="'Zalogowano jako ' + ${signedInAs}">Wyloguj</button>
     </form>

@@ -9,15 +9,16 @@
         Ta agencja nie ma jeszcze żadnych nieruchomości.
     </p>
 
-    <table class="board" th:unless="${properties.isEmpty()}">
+    <div class="board-scroll" th:unless="${properties.isEmpty()}">
+    <table class="board">
         <thead>
         <tr>
             <th>Adres</th>
-            <th>Wynajęte</th>
-            <th>Wolne</th>
-            <th>Wyłączone</th>
-            <th>Nieogłoszone</th>
-            <th>Razem</th>
+            <th class="amount">Wynajęte</th>
+            <th class="amount">Wolne</th>
+            <th class="amount">Wyłączone</th>
+            <th class="amount">Nieogłoszone</th>
+            <th class="amount">Razem</th>
         </tr>
         </thead>
         <tbody>
@@ -40,6 +41,7 @@
         </tr>
         </tbody>
     </table>
+    </div>
 </main>
 </body>
 </html>

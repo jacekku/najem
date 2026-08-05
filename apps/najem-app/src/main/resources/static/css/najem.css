@@ -1,108 +1,361 @@
-/* Minimal, deliberately: styling decisions belong with the screens that need them. */
+/*
+  NAJEM — "Kancelaria": an editorial register.
+
+  Hairlines rather than boxes, a serif for headings, warm paper rather than white. The look is
+  chosen for what these screens hold: rent ledgers, arrears with a statutory consequence, and bank
+  reconciliation a person signs off on. It is meant to read like a register somebody keeps, not
+  like a dashboard.
+
+  ── Two rules this file inherits and must not break ──────────────────────────────────────────
+
+  1. THE COLOURS ONLY DIFFER; THEY NEVER DECIDE. Every status colour here is accompanied by words
+     in the template that renders it. Roughly 8% of men cannot separate red from green, and a
+     board whose only account of "in arrears" is a hue is a board that tells them nothing. Do not
+     add a state that is carried by colour alone, and do not remove the words from one that isn't.
+
+  2. NO ASSET COMES FROM A THIRD PARTY. Same reason htmx is vendored (see layout.html): a page
+     whose render depends on a CDN being reachable is a page that can fail for a reason unrelated
+     to this application, while handling tenancy-scoped financial data. So: system font stacks
+     only. No @import, no @font-face pointing outward, no remote images.
+
+  ── Contrast ────────────────────────────────────────────────────────────────────────────────
+
+  Every pair below was measured, not eyeballed. Body, muted, link and status text clear WCAG AA
+  (4.5:1) in both themes — the worst pair is --muted at 5.45:1 on light. Control borders and the
+  focus ring clear 1.4.11 (3:1); --rule-strong is 3.85:1 light / 3.78:1 dark and is the token to
+  use for anything you must SEE to operate. --rule is a decorative hairline, is far below 3:1 on
+  purpose, and must never bound a control.
+
+  Recheck with tools/contrast if you change a value. A colour that fails is not visibly wrong to
+  the person who picked it — that is the whole problem with picking colours by eye.
+*/
+
+/* ═══ Tokens: light ══════════════════════════════════════════════════════════════════════ */
+
 :root {
-    --ink: #1c1b19;
+    color-scheme: light;
+
     --paper: #fbfaf8;
-    --rule: #d8d4cd;
+    --paper-sunk: #f3f1ec;
+    --ink: #1c1b19;
+    --muted: #6b6660;
+
+    --rule: #dcd7ce;
+    --rule-strong: #857e73;
+
+    --link: #2f5d50;
+    --focus: #2f5d50;
+    --btn-fill: #1c1b19;
+    --btn-label: #fbfaf8;
+
+    /* Status. Used for BOTH the dot and its words, so the two can never disagree. */
+    --ok: #1f6b3a;
+    --warn: #8a5a00;
+    --late: #a4302a;
+    --critical: #8b1a12;
+    --golden: #8a6d1f;
+
+    /* Type */
+    --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+    /* Space — a scale, so screens agree with each other without negotiating each time. */
+    --s1: 0.25rem;
+    --s2: 0.5rem;
+    --s3: 0.75rem;
+    --s4: 1rem;
+    --s5: 1.5rem;
+    --s6: 2rem;
+    --s7: 3rem;
+}
+
+/*
+  Dark, two ways, and the order matters.
+
+  The media query is the default: it follows the operating system with no control, no stored
+  state and nothing to get out of sync. The attribute selector is the override, written second
+  so it wins — a person who has chosen light explicitly must keep light on a dark-set machine,
+  which the media query alone cannot express.
+
+  :root:not([data-theme="light"]) rather than a bare :root, or an explicit choice of light would
+  be overridden by the OS rather than overriding it.
+
+  Both are resolved on the SERVER (the cookie is read in ThemeAdvice and stamped on <html>), so
+  there is no first-paint flash of the wrong theme and no blocking script to cause one.
+*/
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        color-scheme: dark;
+
+        --paper: #14130f;
+        --paper-sunk: #1c1b17;
+        --ink: #ede8de;
+        --muted: #9a948a;
+
+        --rule: #33302a;
+        --rule-strong: #767063;
+
+        --link: #8fbfa9;
+        --focus: #8fbfa9;
+        --btn-fill: #ede8de;
+        --btn-label: #14130f;
+
+        --ok: #79c79a;
+        --warn: #d9a93b;
+        --late: #e8877e;
+        --critical: #ff9a8f;
+        --golden: #d4af37;
+    }
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --paper: #14130f;
+    --paper-sunk: #1c1b17;
+    --ink: #ede8de;
+    --muted: #9a948a;
+
+    --rule: #33302a;
+    --rule-strong: #767063;
+
+    --link: #8fbfa9;
+    --focus: #8fbfa9;
+    --btn-fill: #ede8de;
+    --btn-label: #14130f;
+
+    --ok: #79c79a;
+    --warn: #d9a93b;
+    --late: #e8877e;
+    --critical: #ff9a8f;
+    --golden: #d4af37;
+}
+
+/* ═══ Base ═══════════════════════════════════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
 }
 
 body {
     margin: 0;
-    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 16px/1.55 var(--sans);
     color: var(--ink);
     background: var(--paper);
+    -webkit-text-size-adjust: 100%;
 }
 
+h1,
+h2,
+h3 {
+    font-family: var(--serif);
+    font-weight: 400;
+    line-height: 1.2;
+}
+
+h1 {
+    font-size: 1.75rem;
+    margin: 0 0 var(--s5);
+}
+
+h2 {
+    font-size: 1.2rem;
+    margin: var(--s6) 0 var(--s3);
+}
+
+a {
+    color: var(--link);
+    text-underline-offset: 0.15em;
+}
+
+/*
+  Visible focus, on everything, in both themes. Keyboard is not an edge case here: reconciling a
+  bank statement is a two-hundred-tab job, and an invisible focus ring makes "which row am I
+  about to confirm" unanswerable. :focus-visible so a mouse click does not paint rings.
+*/
+:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 1px;
+}
+
+/* ═══ Masthead ═══════════════════════════════════════════════════════════════════════════ */
+
+/*
+  Flex, which is what `margin-left: auto` on the sign-out control always assumed. Without it that
+  control was not pushed anywhere — it wrapped onto a second line, on every screen, at every
+  width. Wrap is allowed deliberately so a narrow window stacks rather than clipping.
+*/
 .masthead {
-    padding: 0.75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--s2) var(--s4);
+    padding: var(--s3) var(--s5);
     border-bottom: 1px solid var(--rule);
-}
-
-.masthead__agency {
-    margin-left: 1rem;
-    font-weight: 500;
-}
-
-.masthead__search {
-    display: inline-block;
-    margin-left: 1rem;
-}
-
-.masthead__search input {
-    font: inherit;
-    padding: 0.15rem 0.4rem;
-    border: 1px solid var(--rule);
-    border-radius: 3px;
-    background: #fff;
-}
-
-.hits {
-    list-style: none;
-    padding: 0;
-}
-
-.hits li {
-    padding: 0.3rem 0;
-    border-bottom: 1px solid var(--rule);
-}
-
-.search input {
-    font: inherit;
-    padding: 0.3rem 0.5rem;
-    min-width: 18rem;
-}
-
-.masthead__stale {
-    margin-left: 1rem;
-    color: #8a4b12;
-    font-size: 0.85em;
 }
 
 .masthead__brand {
+    font-family: var(--serif);
     font-weight: 600;
-    letter-spacing: 0.04em;
+    font-size: 1.05rem;
+    letter-spacing: 0.14em;
     text-decoration: none;
     color: inherit;
 }
 
-main {
-    padding: 1.25rem;
+.masthead__agency {
+    margin-left: 0;
+    font-size: 0.9rem;
 }
 
-/* Anything not yet wired to a backend says so, in a tone that reads as unfinished rather than
-   broken. A screen showing plausible content from nowhere is worse in front of a person than in
-   a test (najem-build seq 314). */
+.masthead__search {
+    display: inline-block;
+    margin-left: 0;
+}
+
+.masthead__search input {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: var(--s1) var(--s2);
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    background: var(--paper);
+    color: inherit;
+    width: 11rem;
+    max-width: 40vw;
+}
+
+.masthead__stale {
+    margin-left: 0;
+    color: var(--warn);
+    font-size: 0.8rem;
+}
+
+/* Sign-out and the theme control sit together at the far end. */
+.masthead__signout {
+    margin-left: auto;
+}
+
+.masthead__theme + .masthead__signout {
+    margin-left: 0;
+}
+
+.masthead__theme {
+    margin-left: auto;
+}
+
+.masthead__signout button,
+.masthead__theme button {
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    padding: var(--s1) var(--s3);
+    cursor: pointer;
+}
+
+.masthead__signout button:hover,
+.masthead__theme button:hover {
+    color: var(--ink);
+}
+
+/* ═══ Page ═══════════════════════════════════════════════════════════════════════════════ */
+
+main {
+    /*
+      A measure, not the full window. These are reading screens — a table stretched across a
+      27" monitor puts the address and its status a foot apart, and the eye loses the row.
+    */
+    max-width: 66rem;
+    padding: var(--s5);
+}
+
+section + section {
+    margin-top: var(--s6);
+}
+
+/*
+  Anything not yet wired to a backend says so, in a tone that reads as unfinished rather than
+  broken. A screen showing plausible content from nowhere is worse in front of a person than in
+  a test (najem-build seq 314).
+*/
 .provisional,
 .muted,
+.empty,
+.vacant,
+.upcoming,
 .entry__pending {
-    color: #6b6660;
+    color: var(--muted);
 }
 
 .provisional code {
     font-size: 0.85em;
 }
 
-.entry {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-    margin-top: 1.5rem;
-}
-
 .entry__pending {
     font-style: italic;
 }
 
+.role {
+    color: var(--muted);
+    margin: calc(-1 * var(--s3)) 0 var(--s5);
+}
+
+.role strong {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+code {
+    font-family: var(--mono);
+    font-size: 0.85em;
+    background: var(--paper-sunk);
+    padding: 0.05em 0.3em;
+    border-radius: 2px;
+}
+
+/* ═══ Entry navigation (home) ════════════════════════════════════════════════════════════ */
+
+.entry {
+    display: flex;
+    gap: var(--s4);
+    flex-wrap: wrap;
+    margin-top: var(--s5);
+    padding-top: var(--s4);
+    border-top: 1px solid var(--rule);
+}
+
+/* ═══ Tables ═════════════════════════════════════════════════════════════════════════════ */
+
 .board {
     border-collapse: collapse;
     width: 100%;
-    max-width: 60rem;
 }
 
-.board th,
+.board th {
+    text-align: left;
+    padding: 0 var(--s4) var(--s2) 0;
+    border-bottom: 1px solid var(--rule-strong);
+    font: 600 0.7rem/1 var(--sans);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
 .board td {
     text-align: left;
-    padding: 0.4rem 0.75rem 0.4rem 0;
+    padding: var(--s2) var(--s4) var(--s2) 0;
     border-bottom: 1px solid var(--rule);
+}
+
+.board tbody tr:hover {
+    background: var(--paper-sunk);
 }
 
 .board .amount {
@@ -112,146 +365,259 @@ main {
     white-space: nowrap;
 }
 
+/*
+  A wide table (the bank screen has seven columns) scrolls inside itself rather than pushing the
+  page sideways — a horizontally scrolling document loses the masthead.
+*/
+.board-scroll {
+    overflow-x: auto;
+}
+
+/* ═══ Status ═════════════════════════════════════════════════════════════════════════════ */
+
 /* Three states, not two — see units.html. The colours only differ; they never decide. */
 .state--open {
-    color: #1f6b3a;
+    color: var(--ok);
 }
 
 .state--closed {
-    color: #8a4b12;
+    color: var(--warn);
 }
 
 .state--inventory {
-    color: #6b6660;
-}
-
-.vacant,
-.upcoming,
-.empty {
-    color: #6b6660;
+    color: var(--muted);
 }
 
 /* The tier is shown, never averaged into a confidence of our own — the colours only differ. */
+.tier {
+    font-variant: small-caps;
+    font-size: 0.95em;
+    white-space: nowrap;
+}
+
 .tier--1 {
-    color: #1f6b3a;
+    color: var(--ok);
 }
 
 .tier--2,
 .tier--3 {
-    color: #8a4b12;
+    color: var(--warn);
 }
 
 .tier--4 {
-    color: #6b6660;
+    color: var(--muted);
 }
 
 .part {
-    color: #8a4b12;
+    color: var(--warn);
     font-size: 0.85em;
 }
 
-/* Accounting's colours, rendered as accounting names them. BRIGHT_RED is the one with legal
-   weight — a whole rent period elapsed unpaid — so it is the only one that also carries words. */
+/*
+  Accounting's colours, rendered as accounting names them. Two of the five carry a ring rather
+  than only a hue, because they are the two that must not be mistaken for their neighbour:
+  GOLDEN sits next to YELLOW on the scale and means the opposite (paid through the end of the
+  tenancy, versus unpaid but not yet due), and BRIGHT_RED sits next to RED but is the one with
+  legal weight — a whole rent period elapsed unpaid, so the art. 11 clock is running.
+
+  The ring is structure, not decoration: it survives a greyscale print and a colour-blind reader,
+  neither of which can separate #a4302a from #8b1a12.
+*/
 .colour {
     display: inline-block;
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 0.7rem;
+    height: 0.7rem;
     border-radius: 50%;
-    margin-right: 0.4rem;
+    margin-right: var(--s2);
     vertical-align: baseline;
 }
 
 .colour--GOLDEN {
-    background: #d4af37;
-    box-shadow: 0 0 0 1px #8a6d1f;
+    background: var(--golden);
+    box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--golden);
 }
 
 .colour--GREEN {
-    background: #1f6b3a;
+    background: var(--ok);
 }
 
-/* Distinct from GOLDEN on purpose: they are adjacent on the scale and mean opposite things —
-   paid through the end of the tenancy, versus something unpaid that is not yet due. */
 .colour--YELLOW {
-    background: #e8b100;
+    background: var(--warn);
 }
 
 .colour--RED {
-    background: #b3261e;
+    background: var(--late);
 }
 
 .colour--BRIGHT_RED {
-    background: #ff1a1a;
-    box-shadow: 0 0 0 2px #b3261e;
+    background: var(--critical);
+    box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--critical);
 }
 
 .legend {
     list-style: none;
     padding: 0;
-    margin: 0 0 1rem;
-    color: #6b6660;
-    font-size: 0.9em;
+    margin: 0 0 var(--s5);
+    color: var(--muted);
+    font-size: 0.88rem;
 }
 
-.warnings {
+.legend li {
+    padding: var(--s1) 0;
+}
+
+.legend strong {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+/* ═══ Buttons ════════════════════════════════════════════════════════════════════════════ */
+
+.board button,
+.warnings button {
+    font: inherit;
+    font-size: 0.8rem;
+    padding: var(--s1) var(--s3);
+    background: var(--btn-fill);
+    color: var(--btn-label);
+    border: 1px solid var(--btn-fill);
+    border-radius: 2px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.board button:hover,
+.warnings button:hover {
+    opacity: 0.85;
+}
+
+/* ═══ Lists ══════════════════════════════════════════════════════════════════════════════ */
+
+.warnings,
+.agencies,
+.hits,
+.timeline {
     list-style: none;
     padding: 0;
+    margin: 0;
 }
 
 .warnings li {
     display: flex;
     align-items: baseline;
-    gap: 0.75rem;
-    padding: 0.35rem 0;
+    gap: var(--s3);
+    padding: var(--s2) 0;
     border-bottom: 1px solid var(--rule);
 }
 
 .warnings__kind {
-    color: #6b6660;
+    color: var(--muted);
     font-variant: small-caps;
+    white-space: nowrap;
 }
 
-.agencies {
-    list-style: none;
-    padding: 0;
+.warnings li form {
+    margin-left: auto;
 }
 
 .agencies li form {
     display: flex;
     align-items: baseline;
-    gap: 0.75rem;
-    padding: 0.35rem 0;
+    gap: var(--s3);
+    padding: var(--s2) 0;
+    border-bottom: 1px solid var(--rule);
+}
+
+.agencies li button {
+    font: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--link);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+    cursor: pointer;
 }
 
 .agencies__role {
-    color: #6b6660;
+    color: var(--muted);
+    font-variant: small-caps;
+}
+
+.hits li {
+    padding: var(--s2) 0;
+    border-bottom: 1px solid var(--rule);
 }
 
 .timeline {
-    list-style: none;
-    padding: 0;
-    max-width: 50rem;
+    max-width: 52rem;
 }
 
 .timeline li {
     display: grid;
-    grid-template-columns: 7rem 10rem 1fr;
-    gap: 0.5rem;
-    padding: 0.35rem 0;
+    grid-template-columns: 7rem 11rem 1fr;
+    gap: var(--s2);
+    padding: var(--s2) 0;
     border-bottom: 1px solid var(--rule);
 }
 
+.timeline time {
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+}
+
 .timeline__kind {
-    color: #6b6660;
+    color: var(--muted);
     font-variant: small-caps;
 }
 
-/* The sign-in page. It has no masthead, so it centres its own panel rather than
-   inheriting the layout's grid — everything else on this page is one column. */
+@media (max-width: 34rem) {
+    .timeline li {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+}
+
+/* ═══ Search ═════════════════════════════════════════════════════════════════════════════ */
+
+.search {
+    display: flex;
+    gap: var(--s2);
+    margin-bottom: var(--s5);
+}
+
+.search input {
+    font: inherit;
+    padding: var(--s2) var(--s3);
+    min-width: 18rem;
+    max-width: 100%;
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    background: var(--paper);
+    color: inherit;
+}
+
+.search button {
+    font: inherit;
+    padding: var(--s2) var(--s4);
+    background: var(--btn-fill);
+    color: var(--btn-label);
+    border: 1px solid var(--btn-fill);
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+/* ═══ Sign-in ════════════════════════════════════════════════════════════════════════════ */
+
+/*
+  The sign-in page. It has no masthead, so it centres its own panel rather than inheriting the
+  layout's grid — everything else on this page is one column.
+*/
 .login {
     display: grid;
     place-items: center;
     min-height: 100vh;
+    padding: var(--s5);
 }
 
 .login__panel {
@@ -260,56 +626,70 @@ main {
 }
 
 .login__brand {
+    font-family: var(--serif);
     font-size: 2rem;
-    letter-spacing: 0.12em;
-    margin: 0 0 0.25rem;
+    font-weight: 400;
+    letter-spacing: 0.16em;
+    margin: 0 0 var(--s1);
 }
 
 .login__lead {
-    color: #6b6660;
-    margin: 0 0 2rem;
+    color: var(--muted);
+    margin: 0 0 var(--s6);
 }
 
 .login__button {
     display: block;
-    padding: 0.7rem 1rem;
-    background: var(--ink);
-    color: var(--paper);
+    padding: var(--s3) var(--s4);
+    background: var(--btn-fill);
+    color: var(--btn-label);
     text-decoration: none;
+    border: 1px solid var(--btn-fill);
     border-radius: 2px;
+    font: inherit;
+    width: 100%;
+    cursor: pointer;
 }
 
 .login__hint {
-    color: #6b6660;
+    color: var(--muted);
     font-size: 0.875rem;
-    margin: 0.75rem 0 0;
+    margin: var(--s3) 0 0;
 }
 
 .login__notice,
 .login__error {
-    padding: 0.6rem 0.75rem;
-    border: 1px solid var(--rule);
-    margin: 0 0 1rem;
-}
-
-/* Stated in words as well as colour: a red box is not a message to somebody who
-   cannot distinguish it from the one above. */
-.login__error {
-    border-color: #a4302a;
-    color: #a4302a;
-}
-
-/* Sign-out sits at the far end of the masthead, after the agency and the search. */
-.masthead__signout {
-    margin-left: auto;
-}
-
-.masthead__signout button {
-    font: inherit;
-    color: #6b6660;
-    background: none;
-    border: 1px solid var(--rule);
+    padding: var(--s2) var(--s3);
+    border: 1px solid var(--rule-strong);
     border-radius: 2px;
-    padding: 0.2rem 0.6rem;
+    margin: 0 0 var(--s4);
+    font-size: 0.9rem;
+}
+
+/*
+  Stated in words as well as colour: a red box is not a message to somebody who cannot
+  distinguish it from the one above.
+*/
+.login__error {
+    border-color: var(--late);
+    color: var(--late);
+}
+
+.login__theme {
+    margin-top: var(--s6);
+}
+
+.login__theme button {
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    padding: var(--s1) var(--s3);
     cursor: pointer;
+}
+
+.login__theme button:hover {
+    color: var(--ink);
 }

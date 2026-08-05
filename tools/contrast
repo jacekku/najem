@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""
+Check every colour pair in najem.css against WCAG, in both themes.
+
+    tools/contrast            # check, print a table, exit non-zero on any failure
+    tools/contrast --quiet    # exit code only
+
+Why this exists as a tool rather than as a one-off: a colour that fails contrast looks fine to
+the person who chose it. That is the entire failure mode — you cannot review it by opening the
+page, because the page looks the way you expected. So it is checked the way a test is checked,
+by something that can say no.
+
+It parses najem.css rather than holding its own copy of the palette. A checker with a duplicated
+table passes forever after somebody edits the stylesheet.
+
+Two thresholds, and which one applies is a judgement about USE, not about the colour:
+
+  4.5:1  text (WCAG 1.4.3 AA)
+  3.0:1  boundaries of controls you must perceive to operate, and focus indicators (1.4.11)
+
+--rule is deliberately exempt. It is a decorative hairline between table rows whose content is
+already legible; 1.4.11 governs things you must see in order to operate something. If you ever
+use --rule to bound an input or a button, it becomes a control boundary and this exemption
+becomes a bug — use --rule-strong instead, which is checked.
+"""
+import re
+import sys
+import pathlib
+
+CSS = pathlib.Path(__file__).resolve().parents[1] / \
+    "apps/najem-app/src/main/resources/static/css/najem.css"
+
+# token -> (threshold, what it is measured against)
+TEXT = 4.5
+CONTROL = 3.0
+CHECKS = {
+    "ink":         (TEXT,    "paper"),
+    "muted":       (TEXT,    "paper"),
+    "link":        (TEXT,    "paper"),
+    "ok":          (TEXT,    "paper"),
+    "warn":        (TEXT,    "paper"),
+    "late":        (TEXT,    "paper"),
+    "critical":    (TEXT,    "paper"),
+    "golden":      (CONTROL, "paper"),   # a dot fill, never text
+    "rule-strong": (CONTROL, "paper"),
+    "focus":       (CONTROL, "paper"),
+    "btn-fill":    (CONTROL, "paper"),
+    "btn-label":   (TEXT,    "btn-fill"),
+}
+EXEMPT = {"rule": "decorative hairline; never bounds a control"}
+
+
+def _lin(c):
+    c /= 255.0
+    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def luminance(hexv):
+    h = hexv.lstrip("#")
+    if len(h) == 3:
+        h = "".join(x * 2 for x in h)
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+
+
+def ratio(a, b):
+    la, lb = luminance(a), luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def blocks(css):
+    """The token blocks, as (theme-name, {token: hex})."""
+    out = []
+    # :root { ... }  and  :root:not(...) { ... }  and  :root[data-theme="dark"] { ... }
+    for m in re.finditer(r"(:root[^{]*)\{([^}]*)\}", css):
+        selector, body = m.group(1).strip(), m.group(2)
+        tokens = dict(re.findall(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;", body))
+        if tokens:
+            name = "light" if selector == ":root" else \
+                   "dark (OS)" if "not(" in selector else "dark (chosen)"
+            out.append((name, tokens))
+    return out
+
+
+def main():
+    quiet = "--quiet" in sys.argv
+    css = CSS.read_text(encoding="utf-8")
+    found = blocks(css)
+    if not found:
+        print(f"contrast: no token blocks found in {CSS}", file=sys.stderr)
+        return 2
+
+    failures = 0
+    for theme, tokens in found:
+        if not quiet:
+            print(f"\n{theme}")
+        for token, (need, against) in CHECKS.items():
+            if token not in tokens or against not in tokens:
+                continue
+            r = ratio(tokens[against], tokens[token])
+            ok = r >= need
+            failures += 0 if ok else 1
+            if not quiet or not ok:
+                stream = sys.stdout if ok else sys.stderr
+                print(f"  {'ok  ' if ok else 'FAIL'} --{token:12s} on --{against:9s} "
+                      f"{r:5.2f}:1  needs {need}", file=stream)
+        if not quiet:
+            for token, why in EXEMPT.items():
+                if token in tokens:
+                    print(f"  --   --{token:12s} exempt — {why}")
+
+    if failures:
+        print(f"\n{failures} pair(s) below threshold.", file=sys.stderr)
+        return 1
+    if not quiet:
+        print("\nAll pairs pass.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
