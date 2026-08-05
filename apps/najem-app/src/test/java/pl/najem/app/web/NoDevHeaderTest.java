@@ -19,17 +19,28 @@ import static org.assertj.core.api.Assertions.assertThat;
  * client — which is not a boundary. The web layer calls application services in process with an
  * explicitly resolved workspace instead (plan decision C, najem-build seq 156).
  *
- * <p>This guard's blast radius stops at this package. Ten write endpoints elsewhere still accept
- * the header with a DEV fallback (najem-build seq 154/155) — that is a separate, reported problem
- * and this test cannot see it.
+ * <p>This guard's blast radius stops at this package, and deliberately carries no count of what
+ * lies outside it: the writes it originally named have since been fixed and the reads have not,
+ * so a number here goes stale silently and reads as current. Modules elsewhere still take the
+ * workspace from a client-supplied header and check it against nothing — a separate, reported
+ * problem (najem-build seq 272) that this test cannot see.
  */
 class NoDevHeaderTest {
 
     private static final String FORBIDDEN = "X-Workspace-Id";
 
+    /**
+     * {@code WorkspaceHeaderInterceptor} is the single exemption, and the distinction is the whole
+     * point rather than a convenience: it names the header in order to <em>reject</em> it, never to
+     * consume it as truth. Everything else in this package must not know the header exists.
+     *
+     * <p>This guard caught that interceptor on its first full build — which is the guard working.
+     * The fix was to name one file with a reason, not to soften the rule: an exemption list that
+     * grows by "someone needed it" is the convention this test replaced.
+     */
     @Test
-    void noSourceFileInTheWebPackageMentionsTheDevWorkspaceHeader() throws IOException {
-        assertThat(sourcesContaining(FORBIDDEN, "NoDevHeaderTest.java"))
+    void onlyTheInterceptorThatRejectsTheDevHeaderMayNameIt() throws IOException {
+        assertThat(sourcesContaining(FORBIDDEN, "NoDevHeaderTest.java", "WorkspaceHeaderInterceptor.java"))
             .as("%s must not appear in pl.najem.app.web — the UI resolves a workspace, "
                 + "it does not assert one", FORBIDDEN)
             .isEmpty();

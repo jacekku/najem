@@ -2,6 +2,7 @@ package pl.najem.app.web;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
@@ -20,13 +21,25 @@ import java.util.List;
 public class WebConfig implements WebMvcConfigurer {
 
     private final WebWorkspaceArgumentResolver workspaces;
+    private final WorkspaceHeaderInterceptor headerCheck;
 
-    public WebConfig(WebWorkspaceArgumentResolver workspaces) {
+    public WebConfig(WebWorkspaceArgumentResolver workspaces, WorkspaceHeaderInterceptor headerCheck) {
         this.workspaces = workspaces;
+        this.headerCheck = headerCheck;
     }
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(workspaces);
+    }
+
+    /**
+     * Scoped to {@code /api/**} deliberately. The screens resolve their workspace through
+     * {@link WebWorkspaceResolver} and never send the header — applying this to them would demand
+     * of a screen the very thing the seam exists to stop it sending.
+     */
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(headerCheck).addPathPatterns("/api/**");
     }
 }
