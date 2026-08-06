@@ -1,8 +1,7 @@
 package pl.najem.pm.application;
 
-import pl.najem.pm.adapter.persistence.PostgresOpenRepairQuery;
-import pl.najem.pm.adapter.persistence.PostgresRepairProjection;
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
+
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -48,8 +47,8 @@ class RepairServiceTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
+        portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        repairs = PostgresPropertyManagement.repairService(store, jdbc);
     }
 
     /** Same rule as units: a child never takes a caller-supplied workspace. */

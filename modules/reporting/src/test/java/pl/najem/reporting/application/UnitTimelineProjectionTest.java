@@ -1,9 +1,8 @@
 package pl.najem.reporting.application;
 
-import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
-import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
 
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -77,8 +76,8 @@ class UnitTimelineProjectionTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
-        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
+        var portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        var tenancies = PostgresPropertyManagement.tenancyService(store, jdbc);
 
         workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Długa 7, Wrocław",

@@ -1,9 +1,8 @@
 package pl.najem.pm.application;
 
-import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
-import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
 
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -63,9 +62,9 @@ class RentChangeProcessTest {
         registry.register(TenancyActivatedEvent.class);
         registry.register(RentChangeAppliedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        var due = new PostgresProcessDueRepository(jdbc);
-        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), due);
+        var due = PostgresPropertyManagement.processDue(jdbc);
+        portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        tenancies = PostgresPropertyManagement.tenancyService(store, jdbc);
         process = new RentChangeProcess(due, tenancies, Clock.systemDefaultZone());
     }
 

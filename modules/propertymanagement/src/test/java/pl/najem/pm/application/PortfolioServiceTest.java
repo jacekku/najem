@@ -1,6 +1,7 @@
 package pl.najem.pm.application;
 
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -49,7 +50,7 @@ class PortfolioServiceTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        service = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
+        service = PostgresPropertyManagement.portfolioService(store, jdbc);
     }
 
     @Test

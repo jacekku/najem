@@ -1,9 +1,8 @@
 package pl.najem.reporting.application;
 
-import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
-import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
 
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -98,9 +97,9 @@ class TenancyTimelineProjectionTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
 
-        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
-        var checklists = new ChecklistService(store);
+        var portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        var tenancies = PostgresPropertyManagement.tenancyService(store, jdbc);
+        var checklists = PostgresPropertyManagement.checklistService(store);
         var invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
         var ingestion = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc);
         var reconciliation = PostgresAccounting.reconciliationService(store, jdbc);

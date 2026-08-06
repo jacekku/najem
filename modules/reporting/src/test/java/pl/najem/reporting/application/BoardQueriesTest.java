@@ -1,9 +1,8 @@
 package pl.najem.reporting.application;
 
-import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
-import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
 
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -97,8 +96,8 @@ class BoardQueriesTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
-        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
+        var portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        var tenancies = PostgresPropertyManagement.tenancyService(store, jdbc);
 
         workspace = UUID.randomUUID();
         otherWorkspace = UUID.randomUUID();

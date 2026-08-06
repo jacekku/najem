@@ -1,13 +1,8 @@
 package pl.najem.pm.application;
 
-import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
-import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
 
-import pl.najem.pm.adapter.persistence.PostgresInspectionProjection;
-import pl.najem.pm.adapter.persistence.PostgresOverdueInspectionQuery;
-import pl.najem.pm.adapter.persistence.PostgresOpenRepairQuery;
-import pl.najem.pm.adapter.persistence.PostgresRepairProjection;
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -93,12 +88,11 @@ class OutboundEventsTest {
         registry.register(TenancyEndedEvent.class);
         registry.register(MoveOutProtocolRecordedEvent.class);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
-        checklists = new ChecklistService(store);
-        repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
-        compliance = new ComplianceService(store, new PostgresInspectionProjection(jdbc),
-            new PostgresOverdueInspectionQuery(jdbc));
+        portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        tenancies = PostgresPropertyManagement.tenancyService(store, jdbc);
+        checklists = PostgresPropertyManagement.checklistService(store);
+        repairs = PostgresPropertyManagement.repairService(store, jdbc);
+        compliance = PostgresPropertyManagement.complianceService(store, jdbc);
     }
 
     /**

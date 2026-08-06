@@ -1,9 +1,8 @@
 package pl.najem.pm.application;
 
-import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
-import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
 
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -73,10 +72,10 @@ class EndOfTenancyProcessTest {
         registry.register(TenancyEndedEvent.class);
         registry.register(MoveOutProtocolRecordedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        due = new PostgresProcessDueRepository(jdbc);
-        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), due);
-        checklists = new ChecklistService(store);
+        due = PostgresPropertyManagement.processDue(jdbc);
+        portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        tenancies = PostgresPropertyManagement.tenancyService(store, jdbc);
+        checklists = PostgresPropertyManagement.checklistService(store);
         process = new EndOfTenancyProcess(due, tenancies, Clock.systemDefaultZone());
     }
 

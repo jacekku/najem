@@ -1,9 +1,8 @@
 package pl.najem.pm.application;
 
-import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
-import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
 
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -59,8 +58,8 @@ class TenancyReservationTest {
         PmEventTypes.register(registry);
         registry.register(TenancyActivatedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
+        portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        tenancies = PostgresPropertyManagement.tenancyService(store, jdbc);
     }
 
     @Test

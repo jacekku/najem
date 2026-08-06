@@ -3,3 +3,8 @@ build/
 .idea/
 *.iml
 out/
+
+# MSYS/Git-Bash crash dumps. Written into the working directory by bash.exe itself when its
+# fork() emulation fails; they are a Windows toolchain artefact, never a build output, and one
+# reached a commit before this line existed.
+*.stackdump

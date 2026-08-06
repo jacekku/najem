@@ -1,12 +1,8 @@
 package pl.najem.pm.application;
 
-import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
-import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
-import pl.najem.pm.adapter.persistence.PostgresAttentionListsProjection;
+import pl.najem.pm.adapter.persistence.PostgresPropertyManagement;
 
-import pl.najem.pm.adapter.persistence.PostgresOpenRepairQuery;
-import pl.najem.pm.adapter.persistence.PostgresRepairProjection;
-import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -61,10 +57,10 @@ class AttentionListsQueryTest {
         PmEventTypes.register(registry);
         registry.register(TenancyActivatedEvent.class);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
-        repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
-        attention = new AttentionListsService(new PostgresAttentionListsProjection(jdbc), new PostgresOpenRepairQuery(jdbc));
+        portfolio = PostgresPropertyManagement.portfolioService(store, jdbc);
+        tenancies = PostgresPropertyManagement.tenancyService(store, jdbc);
+        repairs = PostgresPropertyManagement.repairService(store, jdbc);
+        attention = PostgresPropertyManagement.attentionListsService(jdbc);
     }
 
     @Test
