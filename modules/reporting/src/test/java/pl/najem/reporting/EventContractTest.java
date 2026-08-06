@@ -1,5 +1,8 @@
 package pl.najem.reporting;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,7 +28,7 @@ import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.application.ChecklistService;
 import pl.najem.pm.application.PortfolioService;
-import pl.najem.pm.application.ProcessDueStore;
+import pl.najem.pm.application.ProcessDueRepository;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.ChecklistPhase;
 import pl.najem.pm.domain.EndReason;
@@ -153,7 +156,7 @@ class EventContractTest {
         var store = new JdbcEventStore(jdbc, json, registry);
 
         var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
         var checklists = new ChecklistService(store);
         var invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
         var ingestion = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc);
@@ -166,25 +169,27 @@ class EventContractTest {
         portfolio.openUnitToRent(workspace, unitId, "ready to let");
 
         // A cancelled reservation, so TenancyPeriodReleased and the cancellation both really happen.
-        var cancelled = tenancies.reserve(reservation(unitId, LocalDate.of(2026, 1, 1)));
-        tenancies.cancelReservation(cancelled.tenancyId(), "tenant withdrew");
+        var cancelled = tenancies.reserve(workspace, reservation(unitId, LocalDate.of(2026, 1, 1)));
+        tenancies.cancelReservation(workspace, cancelled.tenancyId(), "tenant withdrew");
 
-        var tenancyId = tenancies.reserve(reservation(unitId, LocalDate.of(2026, 9, 1))).tenancyId();
-        checklists.addItem(tenancyId, "keys-handed-over", ChecklistPhase.PRE_ACTIVATION);
-        checklists.completeItem(tenancyId, "keys-handed-over");
-        checklists.recordHandover(tenancyId, new HandoverProtocol(ChecklistPhase.PRE_ACTIVATION,
+        var tenancyId = tenancies.reserve(workspace, reservation(unitId, LocalDate.of(2026, 9, 1))).tenancyId();
+        checklists.addItem(workspace, tenancyId, "keys-handed-over", ChecklistPhase.PRE_ACTIVATION);
+        checklists.completeItem(workspace, tenancyId, "keys-handed-over");
+        checklists.recordHandover(workspace, tenancyId, new HandoverProtocol(ChecklistPhase.PRE_ACTIVATION,
             List.of(new MeterReading("m-1", "electricity", new BigDecimal("1234"))),
             "clean, no damage", List.of("photo-1"), "doc-1", LocalDate.of(2026, 9, 1)));
-        tenancies.activate(tenancyId, LocalDate.of(2026, 9, 1));
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 9, 2), LocalDate.of(2027, 1, 1),
+        tenancies.activate(workspace, tenancyId, LocalDate.of(2026, 9, 1));
+        tenancies.scheduleRentChange(workspace, tenancyId, LocalDate.of(2026, 9, 2), LocalDate.of(2027, 1, 1),
             new MonthlyAmount(new BigDecimal("2600"), null), pl.najem.pm.domain.ChangeType.AGREED_CHANGE);
-        tenancies.applyRentChange(tenancyId, LocalDate.of(2027, 1, 1));
+        // The production path: a scheduled change is applied by the timer armed for it, never
+        // by a caller naming the date. applyRentChange is package-private for that reason.
+        tenancies.applyDueRentChange(tenancyId, LocalDate.of(2027, 1, 1));
 
         // Termination and ending, driven BEFORE the accounting block below: PM cannot rehydrate a
         // Tenancy once accounting has written to the shared stream (najem-build seq 103).
-        tenancies.giveTerminationNotice(tenancyId, "art. 11 ust. 2 pkt 2",
+        tenancies.giveTerminationNotice(workspace, tenancyId, "art. 11 ust. 2 pkt 2",
             LocalDate.of(2027, 2, 1), LocalDate.of(2027, 5, 1), "doc-notice-1");
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 5, 1), LocalDate.of(2027, 5, 3),
+        tenancies.end(workspace, tenancyId, new EndTenancy(LocalDate.of(2027, 5, 1), LocalDate.of(2027, 5, 3),
             EndReason.LANDLORD_NOTICE, "moved out on time", true));
 
         portfolio.closeUnitToRent(workspace, unitId, "renovation");

@@ -182,6 +182,37 @@ next person to hit a disagreement needs to know which to trust before they start
 is what a merge runs. The tag is a claim about cost, not about worth — nothing is skipped at a
 merge, and the slow tier is still the authority when the two disagree.
 
+## Pushing a caller's identity down
+
+**19. Not every entry point has a caller.**
+Thirteen of `TenancyService`'s methods took the acting workspace and checked it against the
+aggregate. Three did not, and must not: `activateIfDue`, `applyDueRentChange` and
+`flagEndingSoonIfDue` are a scheduler firing a timer the module armed itself. There is nobody whose
+workspace it is. Threading one through for uniformity would mean inventing a value to compare
+against a value derived from it, which passes every test and checks nothing — the definition of
+theatre. The tell is that the argument would have to be *fetched from the subject being checked*.
+
+The same distinction split `activate` in two: a public one that takes a workspace because a manager
+is acting, and a private one the timer calls. Two methods was the honest answer to two callers with
+different standing, and it is cheaper than the alternative of an `Optional<UUID> caller` that every
+reader has to decode.
+
+**20. A check with two accepted forms must assert both are still used.**
+`WorkspaceBoundaryTest` accepted either a controller-side guard or the workspace being handed to the
+service, and carried a companion test asserting each branch still matched something — because a
+two-branch check degrades silently to a one-branch check the moment one branch matches nothing, and
+a predicate that never matches is indistinguishable from a predicate that is wrong. It went red on
+this merge, exactly as its javadoc said it would, and the instruction it carried was *delete the
+dead branch, do not widen this*. Write that instruction into the test when you add the second form;
+the person who hits it is under pressure to make it green, and "widen the regex" is the fast way.
+
+**21. Mutate a tripwire you just rewrote before believing it.**
+The rewritten boundary test was green, which proves nothing about a test whose whole job is to be
+red one day. Breaking one controller's workspace argument turned
+`everyWriteMappingChecksTheWorkspaceOrHandsItOn` red, and planting a `guard.` call turned
+`nocontrollerChecksOwnershipForItself` red. Both reverted. A security tripwire that has never been
+seen to fail is a comment.
+
 ## Reporting
 
 **17. Enumerate behaviour changes explicitly — then have someone check the count.**

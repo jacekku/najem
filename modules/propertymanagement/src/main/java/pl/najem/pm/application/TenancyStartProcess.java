@@ -21,11 +21,11 @@ public class TenancyStartProcess {
 
     public static final String KIND = "tenancy-start";
 
-    private final ProcessDueStore due;
+    private final ProcessDueRepository due;
     private final TenancyService tenancies;
     private final Clock clock;
 
-    public TenancyStartProcess(ProcessDueStore due, TenancyService tenancies, Clock clock) {
+    public TenancyStartProcess(ProcessDueRepository due, TenancyService tenancies, Clock clock) {
         this.due = due;
         this.tenancies = tenancies;
         this.clock = clock;

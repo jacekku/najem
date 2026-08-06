@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.TenancyService;
-import pl.najem.pm.application.WorkspaceGuard;
 import pl.najem.pm.domain.ChangeType;
 import pl.najem.pm.domain.DocType;
 import pl.najem.pm.domain.EndReason;
@@ -59,18 +58,15 @@ public class TenancyController {
     private static final int DEFAULT_RENT_DAY = 10;
 
     private final TenancyService tenancies;
-    private final WorkspaceGuard guard;
 
-    public TenancyController(TenancyService tenancies, WorkspaceGuard guard) {
+    public TenancyController(TenancyService tenancies) {
         this.tenancies = tenancies;
-        this.guard = guard;
     }
 
     @PostMapping
     public Map<String, Object> reserve(@ActingWorkspace UUID workspaceId,
                                        @RequestBody ReserveRequest request) {
-        guard.requireUnit(workspaceId, request.unitId());
-        var reservation = tenancies.reserve(toCommand(request));
+        var reservation = tenancies.reserve(workspaceId, toCommand(request));
         return Map.of("tenancyId", reservation.tenancyId(), "warnings", reservation.warnings());
     }
 
@@ -78,29 +74,25 @@ public class TenancyController {
     public Map<String, Object> activate(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                         @RequestBody ActivateRequest request) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        return Map.of("warnings", tenancies.activate(tenancyId, request.activatedOn()));
+        return Map.of("warnings", tenancies.activate(workspaceId, tenancyId, request.activatedOn()));
     }
 
     @PostMapping("/{tenancyId}/cancel")
     public void cancel(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody(required = false) CancelRequest request) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        tenancies.cancelReservation(tenancyId, request == null ? "" : request.reason());
+        tenancies.cancelReservation(workspaceId, tenancyId, request == null ? "" : request.reason());
     }
 
     @PostMapping("/{tenancyId}/tenants")
     public void addTenant(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody ContactRequest request) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        tenancies.addTenant(tenancyId, request.contactId());
+        tenancies.addTenant(workspaceId, tenancyId, request.contactId());
     }
 
     @PostMapping("/{tenancyId}/tenants/{contactId}/remove")
     public void removeTenant(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @PathVariable UUID contactId) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        tenancies.removeTenant(tenancyId, contactId);
+        tenancies.removeTenant(workspaceId, tenancyId, contactId);
     }
 
     @PostMapping("/{tenancyId}/rent-changes")
@@ -112,8 +104,7 @@ public class TenancyController {
             breakdown = new MonthlyAmount.Breakdown(
                 orZero(request.rent()), orZero(request.adminFee()), orZero(request.mediaAdvance()));
         }
-        guard.requireTenancy(workspaceId, tenancyId);
-        return Map.of("warnings", tenancies.scheduleRentChange(tenancyId, request.decidedOn(),
+        return Map.of("warnings", tenancies.scheduleRentChange(workspaceId, tenancyId, request.decidedOn(),
             request.effectiveFrom(), new MonthlyAmount(request.monthlyTotal(), breakdown),
             ChangeType.valueOf(request.changeType().toUpperCase().replace('-', '_'))));
     }
@@ -122,24 +113,21 @@ public class TenancyController {
     public void cancelRentChange(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                  @PathVariable LocalDate effectiveFrom) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        tenancies.cancelRentChange(tenancyId, effectiveFrom);
+        tenancies.cancelRentChange(workspaceId, tenancyId, effectiveFrom);
     }
 
     @PostMapping("/{tenancyId}/termination-notice")
     public void giveTerminationNotice(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                       @RequestBody NoticeRequest request) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        tenancies.giveTerminationNotice(tenancyId, request.ground(), request.noticeDate(),
+        tenancies.giveTerminationNotice(workspaceId, tenancyId, request.ground(), request.noticeDate(),
             request.effectiveDate(), request.noticeDocRef());
     }
 
     @PostMapping("/{tenancyId}/end")
     public void end(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody EndRequest request) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        tenancies.end(tenancyId, new EndTenancy(request.endDate(), request.vacateDate(),
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(request.endDate(), request.vacateDate(),
             endReasonOf(request.reasonType()), request.comment(),
             // Absent means "not back to market": reopening a unit is an explicit decision, and
             // a missing field must not silently advertise a flat the manager said nothing about.
@@ -149,23 +137,20 @@ public class TenancyController {
     @PostMapping("/{tenancyId}/comments")
     public void addComment(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody CommentRequest request) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        tenancies.addComment(tenancyId, request.text());
+        tenancies.addComment(workspaceId, tenancyId, request.text());
     }
 
     @PostMapping("/{tenancyId}/corrections")
     public Map<String, Object> correctDetails(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                               @RequestBody Map<String, String> corrections) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        return Map.of("warnings", tenancies.correctDetails(tenancyId, corrections));
+        return Map.of("warnings", tenancies.correctDetails(workspaceId, tenancyId, corrections));
     }
 
     @PostMapping("/{tenancyId}/documents")
     public void attachDocument(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody DocumentRequest request) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        tenancies.attachDocument(tenancyId, docTypeOf(request.docType()), request.s3Ref(),
+        tenancies.attachDocument(workspaceId, tenancyId, docTypeOf(request.docType()), request.s3Ref(),
             request.validFrom(), request.validTo(), request.date());
     }
 

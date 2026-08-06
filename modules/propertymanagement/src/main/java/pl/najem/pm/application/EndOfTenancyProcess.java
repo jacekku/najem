@@ -29,11 +29,11 @@ public class EndOfTenancyProcess {
      */
     public static final String DEPOSIT_SETTLEMENT_KIND = "deposit-settlement";
 
-    private final ProcessDueStore due;
+    private final ProcessDueRepository due;
     private final TenancyService tenancies;
     private final Clock clock;
 
-    public EndOfTenancyProcess(ProcessDueStore due, TenancyService tenancies, Clock clock) {
+    public EndOfTenancyProcess(ProcessDueRepository due, TenancyService tenancies, Clock clock) {
         this.due = due;
         this.tenancies = tenancies;
         this.clock = clock;

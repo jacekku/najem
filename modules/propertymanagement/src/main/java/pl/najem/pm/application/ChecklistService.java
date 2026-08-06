@@ -11,7 +11,14 @@ import pl.najem.pm.domain.Tenancy;
 import java.util.List;
 import java.util.UUID;
 
-/** Pre-activation and end-of-tenancy checklists, plus the typed handover protocols. */
+/**
+ * Pre-activation and end-of-tenancy checklists, plus the typed handover protocols.
+ *
+ * <p>Every command takes the caller's workspace and asks the tenancy itself whether it is theirs.
+ * That was {@code WorkspaceGuard.requireTenancy} in {@code ChecklistController}, asked of
+ * pm_tenancy — a projection — while the aggregate holding the same fact was being rebuilt one line
+ * later anyway.
+ */
 @Service
 @Transactional
 public class ChecklistService {
@@ -22,16 +29,20 @@ public class ChecklistService {
         this.store = store;
     }
 
-    public void addItem(UUID tenancyId, String key, ChecklistPhase phase) {
+    public void addItem(UUID workspaceId, UUID tenancyId, String key, ChecklistPhase phase) {
         var stream = store.load(tenancyId, "Tenancy");
+        var tenancy = Tenancy.from(stream.events());
+        tenancy.requireOwnedBy(workspaceId);
         store.append(tenancyId, "Tenancy", stream.version(),
-            Tenancy.from(stream.events()).addChecklistItem(key, phase), List.of());
+            tenancy.addChecklistItem(key, phase), List.of());
     }
 
-    public void completeItem(UUID tenancyId, String key) {
+    public void completeItem(UUID workspaceId, UUID tenancyId, String key) {
         var stream = store.load(tenancyId, "Tenancy");
+        var tenancy = Tenancy.from(stream.events());
+        tenancy.requireOwnedBy(workspaceId);
         store.append(tenancyId, "Tenancy", stream.version(),
-            Tenancy.from(stream.events()).completeChecklistItem(key), List.of());
+            tenancy.completeChecklistItem(key), List.of());
     }
 
     /**
@@ -39,9 +50,10 @@ public class ChecklistService {
      * flat's condition; the move-out one carries the readings Accounting trues media up against
      * and the date that, with the vacate date, fixes their deposit-settlement deadline.
      */
-    public void recordHandover(UUID tenancyId, HandoverProtocol protocol) {
+    public void recordHandover(UUID workspaceId, UUID tenancyId, HandoverProtocol protocol) {
         var stream = store.load(tenancyId, "Tenancy");
         var tenancy = Tenancy.from(stream.events());
+        tenancy.requireOwnedBy(workspaceId);
         store.append(tenancyId, "Tenancy", stream.version(),
             tenancy.recordHandoverProtocol(protocol),
             protocol.type() != ChecklistPhase.END_OF_TENANCY ? List.of()

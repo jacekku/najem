@@ -1,5 +1,8 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +47,9 @@ class RentChangeProcessTest {
     static JdbcEventStore store;
     static PortfolioService portfolio;
     static TenancyService tenancies;
+
+    /** One agency for the whole class: what is under test here is not the boundary. */
+    static final UUID workspaceId = UUID.randomUUID();
     static RentChangeProcess process;
 
     @BeforeAll
@@ -57,16 +63,16 @@ class RentChangeProcessTest {
         registry.register(TenancyActivatedEvent.class);
         registry.register(RentChangeAppliedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        var due = new ProcessDueStore(jdbc);
+        var due = new PostgresProcessDueRepository(jdbc);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, jdbc, due);
+        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), due);
         process = new RentChangeProcess(due, tenancies, Clock.systemDefaultZone());
     }
 
     @Test
     void appliesTheChangeOneDayBeforeItsEffectiveDate() {
         var tenancyId = activeTenancy();
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 3, 15), LocalDate.of(2026, 6, 1),
+        tenancies.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 3, 15), LocalDate.of(2026, 6, 1),
             new MonthlyAmount(new BigDecimal("2600"), null), ChangeType.AGREED_CHANGE);
 
         process.runDue(LocalDate.of(2026, 5, 30));
@@ -81,9 +87,9 @@ class RentChangeProcessTest {
     @Test
     void cancelledChangeSendsNothing() {
         var tenancyId = activeTenancy();
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 3, 15), LocalDate.of(2026, 6, 1),
+        tenancies.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 3, 15), LocalDate.of(2026, 6, 1),
             new MonthlyAmount(new BigDecimal("2600"), null), ChangeType.AGREED_CHANGE);
-        tenancies.cancelRentChange(tenancyId, LocalDate.of(2026, 6, 1));
+        tenancies.cancelRentChange(workspaceId, tenancyId, LocalDate.of(2026, 6, 1));
 
         process.runDue(LocalDate.of(2026, 5, 31));
 
@@ -94,7 +100,7 @@ class RentChangeProcessTest {
     @Test
     void theBreakdownRidesTheChangeBecauseValorizationNeedsTheRentComponent() {
         var tenancyId = activeTenancy();
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 3, 15), LocalDate.of(2026, 7, 1),
+        tenancies.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 3, 15), LocalDate.of(2026, 7, 1),
             new MonthlyAmount(new BigDecimal("2800"),
                 new MonthlyAmount.Breakdown(new BigDecimal("2400"), new BigDecimal("200"),
                     new BigDecimal("200"))),
@@ -113,9 +119,9 @@ class RentChangeProcessTest {
     @Test
     void twoQueuedChangesBothApplyInOrder() {
         var tenancyId = activeTenancy();
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 1, 15), LocalDate.of(2026, 4, 1),
+        tenancies.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 1, 15), LocalDate.of(2026, 4, 1),
             new MonthlyAmount(new BigDecimal("2600"), null), ChangeType.AGREED_CHANGE);
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 1, 15), LocalDate.of(2026, 10, 1),
+        tenancies.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 1, 15), LocalDate.of(2026, 10, 1),
             new MonthlyAmount(new BigDecimal("2700"), null), ChangeType.AGREED_CHANGE);
 
         process.runDue(LocalDate.of(2026, 3, 31));
@@ -131,7 +137,7 @@ class RentChangeProcessTest {
     @Test
     void runningTwiceAppliesOnlyOnce() {
         var tenancyId = activeTenancy();
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 3, 15), LocalDate.of(2027, 2, 1),
+        tenancies.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 3, 15), LocalDate.of(2027, 2, 1),
             new MonthlyAmount(new BigDecimal("2900"), null), ChangeType.AGREED_CHANGE);
 
         process.runDue(LocalDate.of(2027, 1, 31));
@@ -141,16 +147,15 @@ class RentChangeProcessTest {
     }
 
     private static UUID activeTenancy() {
-        var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
         var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
-        var tenancyId = tenancies.reserve(new ReserveTenancy(null, null, unitId,
+        var tenancyId = tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitId,
             List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 1, 1),
             new Term.FixedTerm(LocalDate.of(2028, 12, 31)), LegalForm.ZWYKLY,
             new MonthlyAmount(new BigDecimal("2500"), null), 10, null,
             "NAJEM/" + UUID.randomUUID())).tenancyId();
-        tenancies.activate(tenancyId, LocalDate.of(2026, 1, 1));
+        tenancies.activate(workspaceId, tenancyId, LocalDate.of(2026, 1, 1));
         return tenancyId;
     }
 

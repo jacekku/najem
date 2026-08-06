@@ -1,5 +1,8 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,7 +29,7 @@ import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.application.ChecklistService;
 import pl.najem.pm.application.PortfolioService;
-import pl.najem.pm.application.ProcessDueStore;
+import pl.najem.pm.application.ProcessDueRepository;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.ChangeType;
 import pl.najem.pm.domain.ChecklistPhase;
@@ -96,7 +99,7 @@ class TenancyTimelineProjectionTest {
         var store = new JdbcEventStore(jdbc, json, registry);
 
         var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
         var checklists = new ChecklistService(store);
         var invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
         var ingestion = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc);
@@ -108,13 +111,13 @@ class TenancyTimelineProjectionTest {
         var unitId = portfolio.addUnit(workspace, propertyId, "m. 3", new BigDecimal("2400"));
         portfolio.openUnitToRent(workspace, unitId, "ready to let");
 
-        cancelledTenancyId = tenancies.reserve(reserve(unitId, LocalDate.of(2026, 3, 1))).tenancyId();
-        tenancies.cancelReservation(cancelledTenancyId, "tenant withdrew");
+        cancelledTenancyId = tenancies.reserve(workspace, reserve(unitId, LocalDate.of(2026, 3, 1))).tenancyId();
+        tenancies.cancelReservation(workspace, cancelledTenancyId, "tenant withdrew");
 
-        tenancyId = tenancies.reserve(reserve(unitId, LocalDate.of(2026, 9, 1))).tenancyId();
-        checklists.addItem(tenancyId, "keys-handed-over", ChecklistPhase.PRE_ACTIVATION);
-        checklists.completeItem(tenancyId, "keys-handed-over");
-        tenancies.activate(tenancyId, LocalDate.of(2026, 9, 1));
+        tenancyId = tenancies.reserve(workspace, reserve(unitId, LocalDate.of(2026, 9, 1))).tenancyId();
+        checklists.addItem(workspace, tenancyId, "keys-handed-over", ChecklistPhase.PRE_ACTIVATION);
+        checklists.completeItem(workspace, tenancyId, "keys-handed-over");
+        tenancies.activate(workspace, tenancyId, LocalDate.of(2026, 9, 1));
 
         // Charging BEFORE the rent change is the natural order, and it is deliberately restored
         // here: it used to throw, because PM and accounting shared one stream per tenancy until
@@ -127,16 +130,18 @@ class TenancyTimelineProjectionTest {
         reconciliation.confirm(workspace, jdbc.queryForObject(
             "select payment_id from acc_payment where external_id = 'tl-ext-1'", UUID.class));
 
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 10, 1), LocalDate.of(2027, 1, 1),
+        tenancies.scheduleRentChange(workspace, tenancyId, LocalDate.of(2026, 10, 1), LocalDate.of(2027, 1, 1),
             new MonthlyAmount(new BigDecimal("2600"), null), ChangeType.AGREED_CHANGE);
-        tenancies.applyRentChange(tenancyId, LocalDate.of(2027, 1, 1));
+        // The production path: a scheduled change is applied by the timer armed for it, never
+        // by a caller naming the date. applyRentChange is package-private for that reason.
+        tenancies.applyDueRentChange(tenancyId, LocalDate.of(2027, 1, 1));
 
         // A second agency's tenancy, so the workspace boundary is asserted rather than assumed.
         var otherWorkspace = UUID.randomUUID();
         var otherProperty = portfolio.createProperty(otherWorkspace, "ul. Inna 1, Gdańsk",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
         var otherUnit = portfolio.addUnit(otherWorkspace, otherProperty, "m. 1", new BigDecimal("1800"));
-        otherWorkspaceTenancyId = tenancies.reserve(reserve(otherUnit, LocalDate.of(2026, 9, 1))).tenancyId();
+        otherWorkspaceTenancyId = tenancies.reserve(otherWorkspace, reserve(otherUnit, LocalDate.of(2026, 9, 1))).tenancyId();
 
         projection = new TenancyTimelineProjection(jdbc);
         runner = new ProjectionRunner(new EventFeed(jdbc, json), jdbc,

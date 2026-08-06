@@ -1,5 +1,8 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -19,7 +22,7 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.application.PortfolioService;
-import pl.najem.pm.application.ProcessDueStore;
+import pl.najem.pm.application.ProcessDueRepository;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.EndReason;
 import pl.najem.pm.domain.EndTenancy;
@@ -95,7 +98,7 @@ class BoardQueriesTest {
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
         var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
 
         workspace = UUID.randomUUID();
         otherWorkspace = UUID.randomUUID();
@@ -106,8 +109,8 @@ class BoardQueriesTest {
 
         occupiedUnit = portfolio.addUnit(workspace, letProperty, "m. 1", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, occupiedUnit, "ready");
-        currentTenancy = tenancies.reserve(reserve(occupiedUnit)).tenancyId();
-        tenancies.activate(currentTenancy, LocalDate.of(2026, 1, 1));
+        currentTenancy = tenancies.reserve(workspace, reserve(occupiedUnit)).tenancyId();
+        tenancies.activate(workspace, currentTenancy, LocalDate.of(2026, 1, 1));
 
         var onTheMarket = portfolio.addUnit(workspace, letProperty, "m. 2", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, onTheMarket, "ready");
@@ -119,9 +122,9 @@ class BoardQueriesTest {
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
         pastUnit = portfolio.addUnit(workspace, pastProperty, "m. 1", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, pastUnit, "ready");
-        endedTenancy = tenancies.reserve(reserve(pastUnit)).tenancyId();
-        tenancies.activate(endedTenancy, LocalDate.of(2026, 1, 1));
-        tenancies.end(endedTenancy, new EndTenancy(LocalDate.of(2026, 6, 30), LocalDate.of(2026, 6, 30),
+        endedTenancy = tenancies.reserve(workspace, reserve(pastUnit)).tenancyId();
+        tenancies.activate(workspace, endedTenancy, LocalDate.of(2026, 1, 1));
+        tenancies.end(workspace, endedTenancy, new EndTenancy(LocalDate.of(2026, 6, 30), LocalDate.of(2026, 6, 30),
             EndReason.TENANT_NOTICE, "moved out", true));
 
         // A property with nothing in it yet.

@@ -375,6 +375,21 @@ public class Tenancy {
         });
     }
 
+    /**
+     * Refuses a caller who does not own this tenancy — asked of the tenancy rebuilt from its own
+     * stream, as {@code Unit}, {@code Property} and {@code Repair} answer the same question.
+     *
+     * <p>A tenancy's workspace is inherited from its unit at reservation and never moves, so this
+     * is the same answer the unit would give, one load closer to the decision. It replaces
+     * {@code WorkspaceGuard.requireTenancy}, which asked pm_tenancy — a projection written by a
+     * second statement after the append, and therefore allowed to lag the stream this is read from.
+     */
+    public void requireOwnedBy(UUID caller) {
+        if (caller == null || workspaceId == null || !workspaceId.equals(caller)) {
+            throw new UnknownInThisWorkspaceException("tenancy " + id);
+        }
+    }
+
     public State state() {
         return state;
     }

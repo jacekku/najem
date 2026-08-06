@@ -1,5 +1,8 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -49,9 +52,12 @@ class EndOfTenancyProcessTest {
 
     static JdbcTemplate jdbc;
     static JdbcEventStore store;
-    static ProcessDueStore due;
+    static ProcessDueRepository due;
     static PortfolioService portfolio;
     static TenancyService tenancies;
+
+    /** One agency for the whole class: what is under test here is not the boundary. */
+    static final UUID workspaceId = UUID.randomUUID();
     static ChecklistService checklists;
     static EndOfTenancyProcess process;
 
@@ -67,9 +73,9 @@ class EndOfTenancyProcessTest {
         registry.register(TenancyEndedEvent.class);
         registry.register(MoveOutProtocolRecordedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        due = new ProcessDueStore(jdbc);
+        due = new PostgresProcessDueRepository(jdbc);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, jdbc, due);
+        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), due);
         checklists = new ChecklistService(store);
         process = new EndOfTenancyProcess(due, tenancies, Clock.systemDefaultZone());
     }
@@ -88,7 +94,7 @@ class EndOfTenancyProcessTest {
     @Test
     void terminationNoticeRearmsEndingSoonToTheEarlierDate() {
         var tenancyId = activeTenancyEnding(LocalDate.of(2027, 8, 31));
-        tenancies.giveTerminationNotice(tenancyId, "tenant notice", LocalDate.of(2026, 10, 1),
+        tenancies.giveTerminationNotice(workspaceId, tenancyId, "tenant notice", LocalDate.of(2026, 10, 1),
             LocalDate.of(2026, 12, 31), "s3://docs/notice.pdf");
 
         process.runDue(LocalDate.of(2026, 11, 30));
@@ -106,7 +112,7 @@ class EndOfTenancyProcessTest {
 
         assertThat(armedDate(EndOfTenancyProcess.KIND, tenancyId)).isNull();
 
-        tenancies.giveTerminationNotice(tenancyId, "landlord notice", LocalDate.of(2027, 1, 1),
+        tenancies.giveTerminationNotice(workspaceId, tenancyId, "landlord notice", LocalDate.of(2027, 1, 1),
             LocalDate.of(2027, 4, 30), null);
 
         assertThat(armedDate(EndOfTenancyProcess.KIND, tenancyId))
@@ -118,7 +124,7 @@ class EndOfTenancyProcessTest {
         var unitId = openUnit();
         var tenancyId = activeTenancyOn(unitId, LocalDate.of(2027, 8, 31));
 
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
             LocalDate.of(2027, 9, 2), EndReason.AGREEMENT_EXPIRY, "", true));
 
         assertThat(Unit.from(store.load(unitId, "Unit").events()).marketState())
@@ -136,7 +142,7 @@ class EndOfTenancyProcessTest {
         var unitId = openUnit();
         var tenancyId = activeTenancyOn(unitId, LocalDate.of(2027, 8, 31));
 
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
             LocalDate.of(2027, 9, 2), EndReason.MUTUAL_AGREEMENT, "renovation planned", false));
 
         assertThat(Unit.from(store.load(unitId, "Unit").events()).marketState())
@@ -148,7 +154,7 @@ class EndOfTenancyProcessTest {
     void endingArmsTheDepositSettlementDeadlineOneMonthAfterVacating() {
         var tenancyId = activeTenancyEnding(LocalDate.of(2027, 8, 31));
 
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
             LocalDate.of(2027, 9, 2), EndReason.AGREEMENT_EXPIRY, "", true));
 
         assertThat(armedDate(EndOfTenancyProcess.DEPOSIT_SETTLEMENT_KIND, tenancyId))
@@ -160,7 +166,7 @@ class EndOfTenancyProcessTest {
     void anAnnulledTenancyArmsNoDepositDeadline() {
         var tenancyId = activeTenancyEnding(LocalDate.of(2027, 8, 31));
 
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2026, 9, 2), null,
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2026, 9, 2), null,
             EndReason.ERROR_ANNULLED, "wrong unit", false));
 
         assertThat(armedDate(EndOfTenancyProcess.DEPOSIT_SETTLEMENT_KIND, tenancyId)).isNull();
@@ -169,10 +175,10 @@ class EndOfTenancyProcessTest {
     @Test
     void endingDisarmsTheStartAndRentChangeTimers() {
         var tenancyId = activeTenancyEnding(LocalDate.of(2027, 8, 31));
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 10, 1), LocalDate.of(2027, 1, 1),
+        tenancies.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 10, 1), LocalDate.of(2027, 1, 1),
             new MonthlyAmount(new BigDecimal("2600"), null), pl.najem.pm.domain.ChangeType.AGREED_CHANGE);
 
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2026, 11, 30),
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2026, 11, 30),
             LocalDate.of(2026, 12, 1), EndReason.MUTUAL_AGREEMENT, "", true));
 
         assertThat(armedDate(RentChangeProcess.KIND, tenancyId)).isNull();
@@ -186,7 +192,7 @@ class EndOfTenancyProcessTest {
         var unitId = openUnit();
         var tenancyId = activeTenancyOn(unitId, LocalDate.of(2027, 8, 31));
 
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
             LocalDate.of(2027, 9, 2), EndReason.AGREEMENT_EXPIRY, "keys returned", true));
 
         var payload = outboxPayload("TenancyEndedEvent", tenancyId);
@@ -202,13 +208,13 @@ class EndOfTenancyProcessTest {
     void theMoveOutProtocolIsPublishedButTheMoveInOneIsNot() {
         var tenancyId = activeTenancyEnding(LocalDate.of(2027, 8, 31));
 
-        checklists.recordHandover(tenancyId, new HandoverProtocol(ChecklistPhase.PRE_ACTIVATION,
+        checklists.recordHandover(workspaceId, tenancyId, new HandoverProtocol(ChecklistPhase.PRE_ACTIVATION,
             List.of(new MeterReading("cw-1", "cold-water", new BigDecimal("100"))),
             "clean", List.of(), null, LocalDate.of(2026, 9, 1)));
 
         assertThat(outboxCount("MoveOutProtocolRecordedEvent", tenancyId)).isZero();
 
-        checklists.recordHandover(tenancyId, new HandoverProtocol(ChecklistPhase.END_OF_TENANCY,
+        checklists.recordHandover(workspaceId, tenancyId, new HandoverProtocol(ChecklistPhase.END_OF_TENANCY,
             List.of(new MeterReading("cw-1", "cold-water", new BigDecimal("189.5"))),
             "scuffed wall", List.of(), "s3://docs/moveout.pdf", LocalDate.of(2027, 9, 2)));
 
@@ -253,10 +259,10 @@ class EndOfTenancyProcessTest {
     @Test
     void endingAnAlreadyEndedTenancyIsRejected() {
         var tenancyId = activeTenancyEnding(LocalDate.of(2027, 8, 31));
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
             LocalDate.of(2027, 9, 2), EndReason.AGREEMENT_EXPIRY, "", true));
 
-        assertThatThrownBy(() -> tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 9, 30),
+        assertThatThrownBy(() -> tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2027, 9, 30),
                 null, EndReason.MUTUAL_AGREEMENT, "", true)))
             .isInstanceOf(IllegalStateException.class);
     }
@@ -264,7 +270,6 @@ class EndOfTenancyProcessTest {
     // --- fixtures ---
 
     private static UUID openUnit() {
-        var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
         var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
@@ -273,12 +278,12 @@ class EndOfTenancyProcessTest {
     }
 
     private static UUID activeTenancyOn(UUID unitId, LocalDate endDate) {
-        var tenancyId = tenancies.reserve(new ReserveTenancy(null, null, unitId,
+        var tenancyId = tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitId,
             List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 9, 1),
             new Term.FixedTerm(endDate), LegalForm.ZWYKLY,
             new MonthlyAmount(new BigDecimal("2500"), null), 10, new BigDecimal("2500"),
             "NAJEM/" + UUID.randomUUID())).tenancyId();
-        tenancies.activate(tenancyId, LocalDate.of(2026, 9, 1));
+        tenancies.activate(workspaceId, tenancyId, LocalDate.of(2026, 9, 1));
         return tenancyId;
     }
 
@@ -287,12 +292,12 @@ class EndOfTenancyProcessTest {
     }
 
     private static UUID activeIndefiniteTenancy() {
-        var tenancyId = tenancies.reserve(new ReserveTenancy(null, null, openUnit(),
+        var tenancyId = tenancies.reserve(workspaceId, new ReserveTenancy(null, null, openUnit(),
             List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 9, 1),
             new Term.Indefinite(), LegalForm.ZWYKLY,
             new MonthlyAmount(new BigDecimal("2500"), null), 10, null,
             "NAJEM/" + UUID.randomUUID())).tenancyId();
-        tenancies.activate(tenancyId, LocalDate.of(2026, 9, 1));
+        tenancies.activate(workspaceId, tenancyId, LocalDate.of(2026, 9, 1));
         return tenancyId;
     }
 

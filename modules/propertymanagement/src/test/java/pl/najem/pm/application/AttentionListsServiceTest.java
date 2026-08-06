@@ -1,5 +1,9 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+import pl.najem.pm.adapter.persistence.PostgresAttentionListsProjection;
+
 import pl.najem.pm.adapter.persistence.PostgresOpenRepairQuery;
 import pl.najem.pm.adapter.persistence.PostgresRepairProjection;
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
@@ -17,7 +21,7 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 
-import pl.najem.pm.application.AttentionListsQuery.TenancyAttentionRow;
+import pl.najem.pm.application.TenancyAttentionRow;
 import pl.najem.pm.domain.DocType;
 import pl.najem.pm.domain.LegalForm;
 import pl.najem.pm.domain.MonthlyAmount;
@@ -45,7 +49,7 @@ class AttentionListsQueryTest {
     static PortfolioService portfolio;
     static TenancyService tenancies;
     static RepairService repairs;
-    static AttentionListsQuery attention;
+    static AttentionListsService attention;
 
     @BeforeAll
     static void setUp() {
@@ -58,9 +62,9 @@ class AttentionListsQueryTest {
         registry.register(TenancyActivatedEvent.class);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
         repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
-        attention = new AttentionListsQuery(jdbc, new PostgresOpenRepairQuery(jdbc));
+        attention = new AttentionListsService(new PostgresAttentionListsProjection(jdbc), new PostgresOpenRepairQuery(jdbc));
     }
 
     @Test
@@ -106,7 +110,7 @@ class AttentionListsQueryTest {
     void insuranceExpiringUsesTheSameOneMonthWindowAsEndingSoon() {
         var workspaceId = UUID.randomUUID();
         var tenancyId = activeTenancy(workspaceId, LocalDate.of(2028, 8, 31));
-        tenancies.attachDocument(tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc.pdf",
+        tenancies.attachDocument(workspaceId, tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc.pdf",
             LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31), LocalDate.of(2026, 8, 20));
 
         assertThat(attention.insuranceExpiring(workspaceId, LocalDate.of(2027, 8, 1)))
@@ -119,9 +123,9 @@ class AttentionListsQueryTest {
     void arenewedPolicyLeavesTheExpiringList() {
         var workspaceId = UUID.randomUUID();
         var tenancyId = activeTenancy(workspaceId, LocalDate.of(2029, 8, 31));
-        tenancies.attachDocument(tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc-1.pdf",
+        tenancies.attachDocument(workspaceId, tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc-1.pdf",
             LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31), LocalDate.of(2026, 8, 20));
-        tenancies.attachDocument(tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc-2.pdf",
+        tenancies.attachDocument(workspaceId, tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc-2.pdf",
             LocalDate.of(2027, 9, 1), LocalDate.of(2028, 8, 31), LocalDate.of(2027, 8, 20));
 
         assertThat(attention.insuranceExpiring(workspaceId, LocalDate.of(2027, 8, 1))).isEmpty();
@@ -146,7 +150,7 @@ class AttentionListsQueryTest {
     void noattentionListEverCrossesWorkspaces() {
         var workspaceId = UUID.randomUUID();
         var tenancyId = activeTenancy(workspaceId, LocalDate.of(2027, 8, 31));
-        tenancies.attachDocument(tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc.pdf",
+        tenancies.attachDocument(workspaceId, tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc.pdf",
             null, LocalDate.of(2027, 8, 31), LocalDate.of(2026, 8, 20));
         repairs.report(workspaceId, RepairScope.UNIT, unitIn(workspaceId), "leaking tap", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
@@ -164,7 +168,7 @@ class AttentionListsQueryTest {
     }
 
     private static UUID reservedTenancy(UUID workspaceId, LocalDate startDate) {
-        return tenancies.reserve(new ReserveTenancy(null, null, unitIn(workspaceId),
+        return tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitIn(workspaceId),
             List.of(UUID.randomUUID()), List.of(), startDate,
             new Term.FixedTerm(startDate.plusYears(1)), LegalForm.ZWYKLY,
             new MonthlyAmount(new BigDecimal("2500"), null), 10, null,
@@ -172,22 +176,22 @@ class AttentionListsQueryTest {
     }
 
     private static UUID activeTenancy(UUID workspaceId, LocalDate endDate) {
-        var tenancyId = tenancies.reserve(new ReserveTenancy(null, null, unitIn(workspaceId),
+        var tenancyId = tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitIn(workspaceId),
             List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 9, 1),
             new Term.FixedTerm(endDate), LegalForm.ZWYKLY,
             new MonthlyAmount(new BigDecimal("2500"), null), 10, null,
             "NAJEM/" + UUID.randomUUID())).tenancyId();
-        tenancies.activate(tenancyId, LocalDate.of(2026, 9, 1));
+        tenancies.activate(workspaceId, tenancyId, LocalDate.of(2026, 9, 1));
         return tenancyId;
     }
 
     private static UUID indefiniteTenancy(UUID workspaceId) {
-        var tenancyId = tenancies.reserve(new ReserveTenancy(null, null, unitIn(workspaceId),
+        var tenancyId = tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitIn(workspaceId),
             List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 9, 1),
             new Term.Indefinite(), LegalForm.ZWYKLY,
             new MonthlyAmount(new BigDecimal("2500"), null), 10, null,
             "NAJEM/" + UUID.randomUUID())).tenancyId();
-        tenancies.activate(tenancyId, LocalDate.of(2026, 9, 1));
+        tenancies.activate(workspaceId, tenancyId, LocalDate.of(2026, 9, 1));
         return tenancyId;
     }
 

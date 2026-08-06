@@ -1,5 +1,8 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresInspectionProjection;
 import pl.najem.pm.adapter.persistence.PostgresOverdueInspectionQuery;
 import pl.najem.pm.adapter.persistence.PostgresOpenRepairQuery;
@@ -91,7 +94,7 @@ class OutboundEventsTest {
         registry.register(MoveOutProtocolRecordedEvent.class);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
         checklists = new ChecklistService(store);
         repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
         compliance = new ComplianceService(store, new PostgresInspectionProjection(jdbc),
@@ -120,34 +123,34 @@ class OutboundEventsTest {
         repairs.complete(workspaceId, repairId, LocalDate.of(2026, 8, 3), "done");
 
         // A reservation that gets cancelled — cancellation is PM's own fact.
-        var abandoned = reserve(unitId, LocalDate.of(2029, 1, 1), LocalDate.of(2029, 12, 31));
-        tenancies.cancelReservation(abandoned, "tenant withdrew");
+        var abandoned = reserve(workspaceId, unitId, LocalDate.of(2029, 1, 1), LocalDate.of(2029, 12, 31));
+        tenancies.cancelReservation(workspaceId, abandoned, "tenant withdrew");
 
-        var tenancyId = reserve(unitId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31));
-        checklists.addItem(tenancyId, "keys", ChecklistPhase.PRE_ACTIVATION);
-        checklists.completeItem(tenancyId, "keys");
-        checklists.recordHandover(tenancyId, new HandoverProtocol(ChecklistPhase.PRE_ACTIVATION,
+        var tenancyId = reserve(workspaceId, unitId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31));
+        checklists.addItem(workspaceId, tenancyId, "keys", ChecklistPhase.PRE_ACTIVATION);
+        checklists.completeItem(workspaceId, tenancyId, "keys");
+        checklists.recordHandover(workspaceId, tenancyId, new HandoverProtocol(ChecklistPhase.PRE_ACTIVATION,
             List.of(new MeterReading("cw-1", "cold-water", new BigDecimal("100"))),
             "clean", List.of(), null, LocalDate.of(2026, 9, 1)));
 
-        tenancies.activate(tenancyId, LocalDate.of(2026, 9, 1));            // -> Activated
-        tenancies.addComment(tenancyId, "parking spot from January");
-        tenancies.correctDetails(tenancyId, java.util.Map.of("rentDay", "5"));
-        tenancies.attachDocument(tenancyId, DocType.INSURANCE_POLICY, "s3://oc.pdf",
+        tenancies.activate(workspaceId, tenancyId, LocalDate.of(2026, 9, 1));            // -> Activated
+        tenancies.addComment(workspaceId, tenancyId, "parking spot from January");
+        tenancies.correctDetails(workspaceId, tenancyId, java.util.Map.of("rentDay", "5"));
+        tenancies.attachDocument(workspaceId, tenancyId, DocType.INSURANCE_POLICY, "s3://oc.pdf",
             LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31), LocalDate.of(2026, 8, 20));
-        tenancies.addTenant(tenancyId, UUID.randomUUID());
+        tenancies.addTenant(workspaceId, tenancyId, UUID.randomUUID());
 
-        tenancies.scheduleRentChange(tenancyId, LocalDate.of(2026, 10, 1),
+        tenancies.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 10, 1),
             LocalDate.of(2027, 1, 1), new MonthlyAmount(new BigDecimal("2700"), null),
             ChangeType.AGREED_CHANGE);
         tenancies.applyRentChange(tenancyId, LocalDate.of(2027, 1, 1));      // -> RentChange
 
-        tenancies.giveTerminationNotice(tenancyId, "tenant notice", LocalDate.of(2027, 4, 1),
+        tenancies.giveTerminationNotice(workspaceId, tenancyId, "tenant notice", LocalDate.of(2027, 4, 1),
             LocalDate.of(2027, 7, 31), null);
-        checklists.recordHandover(tenancyId, new HandoverProtocol(ChecklistPhase.END_OF_TENANCY,
+        checklists.recordHandover(workspaceId, tenancyId, new HandoverProtocol(ChecklistPhase.END_OF_TENANCY,
             List.of(new MeterReading("cw-1", "cold-water", new BigDecimal("189.5"))),
             "scuffed", List.of(), "s3://moveout.pdf", LocalDate.of(2027, 8, 2)));  // -> MoveOut
-        tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 7, 31),
+        tenancies.end(workspaceId, tenancyId, new EndTenancy(LocalDate.of(2027, 7, 31),
             LocalDate.of(2027, 8, 2), EndReason.TENANT_NOTICE, "", true));   // -> Ended
 
         assertThat(publishedFor(tenancyId))
@@ -183,8 +186,8 @@ class OutboundEventsTest {
             String.class, "%" + subjectId + "%");
     }
 
-    private static UUID reserve(UUID unitId, LocalDate start, LocalDate end) {
-        return tenancies.reserve(new ReserveTenancy(null, null, unitId,
+    private static UUID reserve(UUID workspaceId, UUID unitId, LocalDate start, LocalDate end) {
+        return tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitId,
             List.of(UUID.randomUUID()), List.of(), start, new Term.FixedTerm(end),
             LegalForm.ZWYKLY, new MonthlyAmount(new BigDecimal("2500"), null), 10, null,
             "NAJEM/" + UUID.randomUUID())).tenancyId();

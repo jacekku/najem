@@ -1,5 +1,8 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -39,6 +42,9 @@ class TenancyServiceTest {
     static PortfolioService portfolio;
     static TenancyService service;
 
+    /** The acting agency for the tests that do not care about the boundary. */
+    static final UUID workspaceId = UUID.randomUUID();
+
     @BeforeAll
     static void setUp() {
         var dataSource = new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword());
@@ -50,15 +56,15 @@ class TenancyServiceTest {
         registry.register(TenancyActivatedEvent.class);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        service = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        service = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
     }
 
     @Test
     void activationWritesIntegrationEventToOutbox() {
-        var unitId = unitIn(UUID.randomUUID());
-        var tenancyId = service.reserve(command(unitId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31), "2500", "NAJEM/M1/2026")).tenancyId();
+        var unitId = unitIn(workspaceId);
+        var tenancyId = service.reserve(workspaceId, command(unitId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31), "2500", "NAJEM/M1/2026")).tenancyId();
 
-        service.activate(tenancyId, LocalDate.of(2026, 9, 1));
+        service.activate(workspaceId, tenancyId, LocalDate.of(2026, 9, 1));
 
         // scoped to this tenancy: the outbox is shared across test methods in one container
         var outboxTypes = jdbc.queryForList(
@@ -71,9 +77,9 @@ class TenancyServiceTest {
     @Test
     void activationCarriesTheWorkspaceOfTheUnitNotAConstant() {
         var workspaceId = UUID.randomUUID();
-        var tenancyId = service.reserve(command(unitIn(workspaceId), LocalDate.of(2026, 10, 1), LocalDate.of(2027, 9, 30), "3000", "NAJEM/M2/2026")).tenancyId();
+        var tenancyId = service.reserve(workspaceId, command(unitIn(workspaceId), LocalDate.of(2026, 10, 1), LocalDate.of(2027, 9, 30), "3000", "NAJEM/M2/2026")).tenancyId();
 
-        service.activate(tenancyId, LocalDate.of(2026, 10, 1));
+        service.activate(workspaceId, tenancyId, LocalDate.of(2026, 10, 1));
 
         assertThat(payloadFor(tenancyId).get("workspaceId").asText()).isEqualTo(workspaceId.toString());
     }
@@ -86,8 +92,8 @@ class TenancyServiceTest {
      */
     @Test
     void activationPublishesTheRealContractFactsNotDefaults() {
-        var unitId = unitIn(UUID.randomUUID());
-        var tenancyId = service.reserve(new ReserveTenancy(null, null, unitId,
+        var unitId = unitIn(workspaceId);
+        var tenancyId = service.reserve(workspaceId, new ReserveTenancy(null, null, unitId,
             List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 9, 1),
             new Term.FixedTerm(LocalDate.of(2027, 8, 31)), LegalForm.INSTYTUCJONALNY,
             new MonthlyAmount(new BigDecimal("3000"),
@@ -95,7 +101,7 @@ class TenancyServiceTest {
                     new BigDecimal("200"))),
             10, new BigDecimal("6000"), "NAJEM/M9/2026")).tenancyId();
 
-        service.activate(tenancyId, LocalDate.of(2026, 9, 1));
+        service.activate(workspaceId, tenancyId, LocalDate.of(2026, 9, 1));
 
         var payload = payloadFor(tenancyId);
         assertThat(payload.get("legalForm").asText()).isEqualTo("instytucjonalny");
@@ -109,10 +115,10 @@ class TenancyServiceTest {
 
     @Test
     void anUnsplitContractPublishesNoComponentsAndSaysSoExplicitly() {
-        var tenancyId = service.reserve(command(unitIn(UUID.randomUUID()), LocalDate.of(2026, 9, 1),
+        var tenancyId = service.reserve(workspaceId, command(unitIn(workspaceId), LocalDate.of(2026, 9, 1),
             LocalDate.of(2027, 8, 31), "2500", "NAJEM/M8/2026")).tenancyId();
 
-        service.activate(tenancyId, LocalDate.of(2026, 9, 1));
+        service.activate(workspaceId, tenancyId, LocalDate.of(2026, 9, 1));
 
         var payload = payloadFor(tenancyId);
         assertThat(payload.get("componentSplitInContract").asBoolean()).isFalse();
@@ -146,10 +152,10 @@ class TenancyServiceTest {
     }
 
     private static UUID activeTenancy() {
-        var tenancyId = service.reserve(command(unitIn(UUID.randomUUID()),
+        var tenancyId = service.reserve(workspaceId, command(unitIn(workspaceId),
             LocalDate.of(2026, 1, 1), LocalDate.of(2028, 12, 31), "2500",
             "NAJEM/" + UUID.randomUUID())).tenancyId();
-        service.activate(tenancyId, LocalDate.of(2026, 1, 1));
+        service.activate(workspaceId, tenancyId, LocalDate.of(2026, 1, 1));
         return tenancyId;
     }
 
@@ -161,7 +167,7 @@ class TenancyServiceTest {
     void schedulingAnUnlawfulUnilateralIncreaseReturnsTheStatutoryWarning() {
         var tenancyId = activeTenancy();
 
-        var warnings = service.scheduleRentChange(tenancyId, LocalDate.of(2026, 5, 1),
+        var warnings = service.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 5, 1),
             LocalDate.of(2026, 6, 1), new MonthlyAmount(new BigDecimal("2600"), null),
             pl.najem.pm.domain.ChangeType.UNILATERAL_INCREASE);
 
@@ -172,7 +178,7 @@ class TenancyServiceTest {
     void anagreedChangeAtShortNoticeReturnsNoNoticeWarning() {
         var tenancyId = activeTenancy();
 
-        var warnings = service.scheduleRentChange(tenancyId, LocalDate.of(2026, 5, 25),
+        var warnings = service.scheduleRentChange(workspaceId, tenancyId, LocalDate.of(2026, 5, 25),
             LocalDate.of(2026, 7, 1), new MonthlyAmount(new BigDecimal("2600"), null),
             pl.najem.pm.domain.ChangeType.AGREED_CHANGE);
 

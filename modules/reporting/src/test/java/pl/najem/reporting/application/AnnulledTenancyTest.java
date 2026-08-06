@@ -1,5 +1,8 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -19,7 +22,7 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.application.PortfolioService;
-import pl.najem.pm.application.ProcessDueStore;
+import pl.najem.pm.application.ProcessDueRepository;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.EndReason;
 import pl.najem.pm.domain.EndTenancy;
@@ -78,7 +81,7 @@ class AnnulledTenancyTest {
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
         var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
 
         workspace = UUID.randomUUID();
         propertyId = portfolio.createProperty(workspace, "ul. Omyłkowa 2, Gdynia",
@@ -86,16 +89,16 @@ class AnnulledTenancyTest {
 
         annulledUnit = portfolio.addUnit(workspace, propertyId, "m. 1", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, annulledUnit, "ready");
-        annulledTenancy = tenancies.reserve(reserve(annulledUnit)).tenancyId();
-        tenancies.activate(annulledTenancy, LocalDate.of(2026, 1, 1));
-        tenancies.end(annulledTenancy, new EndTenancy(LocalDate.of(2026, 1, 5), null,
+        annulledTenancy = tenancies.reserve(workspace, reserve(annulledUnit)).tenancyId();
+        tenancies.activate(workspace, annulledTenancy, LocalDate.of(2026, 1, 1));
+        tenancies.end(workspace, annulledTenancy, new EndTenancy(LocalDate.of(2026, 1, 5), null,
             EndReason.ERROR_ANNULLED, "activated the wrong flat", true));
 
         endedUnit = portfolio.addUnit(workspace, propertyId, "m. 2", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, endedUnit, "ready");
-        endedTenancy = tenancies.reserve(reserve(endedUnit)).tenancyId();
-        tenancies.activate(endedTenancy, LocalDate.of(2026, 1, 1));
-        tenancies.end(endedTenancy, new EndTenancy(LocalDate.of(2026, 6, 30), LocalDate.of(2026, 6, 30),
+        endedTenancy = tenancies.reserve(workspace, reserve(endedUnit)).tenancyId();
+        tenancies.activate(workspace, endedTenancy, LocalDate.of(2026, 1, 1));
+        tenancies.end(workspace, endedTenancy, new EndTenancy(LocalDate.of(2026, 6, 30), LocalDate.of(2026, 6, 30),
             EndReason.TENANT_NOTICE, "moved out", true));
 
         occupancy = new UnitOccupancy(jdbc);

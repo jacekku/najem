@@ -5,12 +5,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import pl.najem.pm.application.AttentionListsQuery;
+import pl.najem.pm.application.AttentionListsService;
+import pl.najem.pm.application.TenancyAttentionRow;
 import pl.najem.pm.application.ComplianceService;
 import pl.najem.pm.application.OpenRepair;
 import pl.najem.pm.application.OverdueInspection;
 import pl.najem.pm.application.TenancyService;
-import pl.najem.pm.application.WorkspaceGuard;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -30,37 +30,35 @@ import pl.najem.contracts.web.ActingWorkspace;
 @RequestMapping("/api/pm/attention")
 public class AttentionController {
 
-    private final AttentionListsQuery attention;
+    private final AttentionListsService attention;
     private final ComplianceService compliance;
     private final TenancyService tenancies;
-    private final WorkspaceGuard guard;
     private final Clock clock;
 
-    public AttentionController(AttentionListsQuery attention, ComplianceService compliance,
-                               TenancyService tenancies, WorkspaceGuard guard, Clock clock) {
+    public AttentionController(AttentionListsService attention, ComplianceService compliance,
+                               TenancyService tenancies, Clock clock) {
         this.attention = attention;
         this.compliance = compliance;
         this.tenancies = tenancies;
-        this.guard = guard;
         this.clock = clock;
     }
 
     @GetMapping("/starting-soon")
-    public List<AttentionListsQuery.TenancyAttentionRow> startingSoon(
+    public List<TenancyAttentionRow> startingSoon(
             @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return attention.startingSoon(workspaceId, orToday(on));
     }
 
     @GetMapping("/ending-soon")
-    public List<AttentionListsQuery.TenancyAttentionRow> endingSoon(
+    public List<TenancyAttentionRow> endingSoon(
             @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return attention.endingSoon(workspaceId, orToday(on));
     }
 
     @GetMapping("/insurance-expiring")
-    public List<AttentionListsQuery.TenancyAttentionRow> insuranceExpiring(
+    public List<TenancyAttentionRow> insuranceExpiring(
             @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return attention.insuranceExpiring(workspaceId, orToday(on));
@@ -92,8 +90,7 @@ public class AttentionController {
     public Map<String, List<String>> warnings(
             @ActingWorkspace UUID workspaceId,
             @PathVariable UUID tenancyId) {
-        guard.requireTenancy(workspaceId, tenancyId);
-        return Map.of("warnings", tenancies.warnings(tenancyId));
+        return Map.of("warnings", tenancies.warnings(workspaceId, tenancyId));
     }
 
     private LocalDate orToday(LocalDate on) {

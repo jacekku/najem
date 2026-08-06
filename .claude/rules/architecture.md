@@ -110,12 +110,20 @@ acc_tenancy_status and is what services hold; `ArrearsBoardProjection` reads it 
 holds. One port carrying both would put a read of the colour within reach of every service that
 refreshes it, which is the failure A7 exists to prevent.
 
-## The migration front is closed
+## Both migration fronts are closed
 
 As of 2026-08-06, `org.springframework.jdbc.core.JdbcTemplate` is imported **0 times** in
-`pl.najem.acc.application`, down from 11. Every service reaches its store through a port with a
-Postgres adapter and an in-memory double, and the mechanical check — grepping the application
-package for adapter imports — returns nothing.
+`pl.najem.acc.application`, down from 11, and **0 times** in `pl.najem.pm.application`, down from 7.
+Every service in both modules reaches its store through a port with a Postgres adapter and an
+in-memory double, and the mechanical check — grepping the application package for adapter imports —
+returns nothing in either.
+
+PM's front closed differently from accounting's, because PM really is event-sourced (rule 1: check
+the premise). Its aggregates rebuild from `store.load(id, type).events()` and its tables are written
+after the append, so almost every port there is a `Projection` and the record is the stream. That is
+also what retired `WorkspaceGuard`: it asked a projection who owned a subject while the service was
+rebuilding the aggregate holding the same fact one line later. One question had two answers, and the
+one it trusted was the derived one.
 
 *This section replaces the tracked front and should stay until it stops being news.* What it was for
 is worth remembering: a violation blocks a merge, a migration front is tracked and worked down, and

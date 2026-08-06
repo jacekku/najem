@@ -19,11 +19,11 @@ public class RentChangeProcess {
 
     public static final String KIND = "rent-change";
 
-    private final ProcessDueStore due;
+    private final ProcessDueRepository due;
     private final TenancyService tenancies;
     private final Clock clock;
 
-    public RentChangeProcess(ProcessDueStore due, TenancyService tenancies, Clock clock) {
+    public RentChangeProcess(ProcessDueRepository due, TenancyService tenancies, Clock clock) {
         this.due = due;
         this.tenancies = tenancies;
         this.clock = clock;

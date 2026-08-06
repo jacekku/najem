@@ -1,5 +1,8 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -43,6 +46,9 @@ class TenancyReservationTest {
     static PortfolioService portfolio;
     static TenancyService tenancies;
 
+    /** One agency for the whole class: these are calendar rules, not boundary rules. */
+    static final UUID workspaceId = UUID.randomUUID();
+
     @BeforeAll
     static void setUp() {
         var dataSource = new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword());
@@ -54,15 +60,15 @@ class TenancyReservationTest {
         registry.register(TenancyActivatedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
     }
 
     @Test
     void secondOverlappingReservationOnTheSameUnitIsRejected() {
         var unitId = unit();
-        tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
+        tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
 
-        assertThatThrownBy(() -> tenancies.reserve(command(unitId, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 9, 30), "2600", "NAJEM/M1/B")))
+        assertThatThrownBy(() -> tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 9, 30), "2600", "NAJEM/M1/B")))
             .isInstanceOf(OverlappingTenancyException.class);
     }
 
@@ -70,8 +76,8 @@ class TenancyReservationTest {
     void backToBackReservationsOnOneUnitBothSucceed() {
         var unitId = unit();
 
-        var first = tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
-        var second = tenancies.reserve(command(unitId, LocalDate.of(2026, 6, 30), LocalDate.of(2026, 12, 31), "2600", "NAJEM/M1/B")).tenancyId();
+        var first = tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
+        var second = tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 6, 30), LocalDate.of(2026, 12, 31), "2600", "NAJEM/M1/B")).tenancyId();
 
         assertThat(Unit.from(store.load(unitId, "Unit").events()).periods())
             .extracting(p -> p.tenancyId()).containsExactly(first, second);
@@ -81,9 +87,9 @@ class TenancyReservationTest {
     void theSameDatesOnADifferentUnitAreFine() {
         var unitA = unit();
         var unitB = unit();
-        tenancies.reserve(command(unitA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/A")).tenancyId();
+        tenancies.reserve(workspaceId, command(unitA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/A")).tenancyId();
 
-        var onB = tenancies.reserve(command(unitB, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/B")).tenancyId();
+        var onB = tenancies.reserve(workspaceId, command(unitB, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/B")).tenancyId();
 
         assertThat(onB).isNotNull();
     }
@@ -91,10 +97,10 @@ class TenancyReservationTest {
     @Test
     void aRejectedReservationLeavesNoTraceOnEitherStream() {
         var unitId = unit();
-        tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
+        tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
         long versionBefore = store.load(unitId, "Unit").version();
 
-        assertThatThrownBy(() -> tenancies.reserve(command(unitId, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 9, 30), "2600", "NAJEM/M1/B")))
+        assertThatThrownBy(() -> tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 9, 30), "2600", "NAJEM/M1/B")))
             .isInstanceOf(OverlappingTenancyException.class);
 
         assertThat(store.load(unitId, "Unit").version()).isEqualTo(versionBefore);
@@ -104,11 +110,11 @@ class TenancyReservationTest {
     @Test
     void cancellingAReservationFreesTheSlotForSomeoneElse() {
         var unitId = unit();
-        var cancelled = tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
+        var cancelled = tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2500", "NAJEM/M1/A")).tenancyId();
 
-        tenancies.cancelReservation(cancelled, "never signed");
+        tenancies.cancelReservation(workspaceId, cancelled, "never signed");
 
-        var replacement = tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2400", "NAJEM/M1/B")).tenancyId();
+        var replacement = tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), "2400", "NAJEM/M1/B")).tenancyId();
         assertThat(Unit.from(store.load(unitId, "Unit").events()).periods())
             .extracting(p -> p.tenancyId()).containsExactly(replacement);
     }
@@ -116,9 +122,9 @@ class TenancyReservationTest {
     @Test
     void anIndefiniteTenancyBlocksLaterReservationsOnThatUnit() {
         var unitId = unit();
-        tenancies.reserve(command(unitId, LocalDate.of(2026, 1, 1), null, "2500", "NAJEM/M1/A")).tenancyId();
+        tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2026, 1, 1), null, "2500", "NAJEM/M1/A")).tenancyId();
 
-        assertThatThrownBy(() -> tenancies.reserve(command(unitId, LocalDate.of(2031, 1, 1), LocalDate.of(2031, 12, 31), "2600", "NAJEM/M1/B")))
+        assertThatThrownBy(() -> tenancies.reserve(workspaceId, command(unitId, LocalDate.of(2031, 1, 1), LocalDate.of(2031, 12, 31), "2600", "NAJEM/M1/B")))
             .isInstanceOf(OverlappingTenancyException.class);
     }
 
@@ -131,7 +137,6 @@ class TenancyReservationTest {
     }
 
     private static UUID unit() {
-        var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
         return portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));

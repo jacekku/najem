@@ -1,5 +1,8 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -19,7 +22,7 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.application.PortfolioService;
-import pl.najem.pm.application.ProcessDueStore;
+import pl.najem.pm.application.ProcessDueRepository;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.LegalForm;
 import pl.najem.pm.domain.MonthlyAmount;
@@ -75,7 +78,7 @@ class PropertyOccupancyTest {
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
         var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
 
         workspace = UUID.randomUUID();
         propertyId = portfolio.createProperty(workspace, "ul. Rynek 1, Poznań",
@@ -83,12 +86,12 @@ class PropertyOccupancyTest {
 
         occupiedUnit = portfolio.addUnit(workspace, propertyId, "m. 1", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, occupiedUnit, "ready");
-        tenancies.reserve(reserve(occupiedUnit, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1)));
+        tenancies.reserve(workspace, reserve(occupiedUnit, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1)));
 
         // A tenant in residence while the flat is closed to new lettings. Occupied, not unavailable.
         occupiedButClosedUnit = portfolio.addUnit(workspace, propertyId, "m. 2", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, occupiedButClosedUnit, "ready");
-        tenancies.reserve(reserve(occupiedButClosedUnit, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1)));
+        tenancies.reserve(workspace, reserve(occupiedButClosedUnit, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1)));
         portfolio.closeUnitToRent(workspace, occupiedButClosedUnit, "sale planned");
 
         availableUnit = portfolio.addUnit(workspace, propertyId, "m. 3", new BigDecimal("2000"));

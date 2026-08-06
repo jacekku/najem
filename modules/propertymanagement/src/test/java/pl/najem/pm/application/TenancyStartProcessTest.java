@@ -1,5 +1,8 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -43,6 +46,9 @@ class TenancyStartProcessTest {
     static JdbcEventStore store;
     static PortfolioService portfolio;
     static TenancyService tenancies;
+
+    /** One agency for the whole class: what is under test here is not the boundary. */
+    static final UUID workspaceId = UUID.randomUUID();
     static ChecklistService checklists;
     static TenancyStartProcess process;
 
@@ -56,9 +62,9 @@ class TenancyStartProcessTest {
         PmEventTypes.register(registry);
         registry.register(TenancyActivatedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        var due = new ProcessDueStore(jdbc);
+        var due = new PostgresProcessDueRepository(jdbc);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        tenancies = new TenancyService(store, jdbc, due);
+        tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), due);
         checklists = new ChecklistService(store);
         process = new TenancyStartProcess(due, tenancies, Clock.systemDefaultZone());
     }
@@ -86,12 +92,12 @@ class TenancyStartProcessTest {
     void waitsForAnIncompleteChecklistThenActivatesLateWithoutProrating() {
         var startDate = LocalDate.of(2027, 5, 1);
         var tenancyId = reserveStarting(startDate);
-        checklists.addItem(tenancyId, "keys", ChecklistPhase.PRE_ACTIVATION);
+        checklists.addItem(workspaceId, tenancyId, "keys", ChecklistPhase.PRE_ACTIVATION);
 
         process.runDue(startDate);
         assertThat(stateOf(tenancyId)).isEqualTo(Tenancy.State.RESERVED);
 
-        checklists.completeItem(tenancyId, "keys");
+        checklists.completeItem(workspaceId, tenancyId, "keys");
         process.runDue(startDate.plusDays(4));
 
         assertThat(stateOf(tenancyId)).isEqualTo(Tenancy.State.ACTIVE);
@@ -102,7 +108,7 @@ class TenancyStartProcessTest {
     @Test
     void cancelledReservationDisarmsTheProcess() {
         var tenancyId = reserveStarting(LocalDate.of(2027, 7, 1));
-        tenancies.cancelReservation(tenancyId, "never signed");
+        tenancies.cancelReservation(workspaceId, tenancyId, "never signed");
 
         process.runDue(LocalDate.of(2027, 7, 1));
 
@@ -144,7 +150,7 @@ class TenancyStartProcessTest {
         process.runDue(LocalDate.of(2027, 12, 1));
         assertThat(stateOf(tenancyId)).isEqualTo(Tenancy.State.RESERVED);
 
-        tenancies.attachDocument(tenancyId, DocType.NOTARIAL_DECLARATION, "s3://docs/akt.pdf",
+        tenancies.attachDocument(workspaceId, tenancyId, DocType.NOTARIAL_DECLARATION, "s3://docs/akt.pdf",
             null, null, LocalDate.of(2027, 11, 20));
 
         process.runDue(LocalDate.of(2027, 12, 2));
@@ -158,11 +164,10 @@ class TenancyStartProcessTest {
     }
 
     private static UUID reserveStarting(LocalDate startDate, LegalForm legalForm) {
-        var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
         var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
-        return tenancies.reserve(new ReserveTenancy(null, null, unitId,
+        return tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitId,
             List.of(UUID.randomUUID()), List.of(), startDate,
             new Term.FixedTerm(startDate.plusYears(1)), legalForm,
             new MonthlyAmount(new BigDecimal("2500"), null), 10, null,

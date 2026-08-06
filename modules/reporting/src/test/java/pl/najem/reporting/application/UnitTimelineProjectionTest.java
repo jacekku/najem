@@ -1,5 +1,8 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresTenancyProjection;
+import pl.najem.pm.adapter.persistence.PostgresProcessDueRepository;
+
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -20,7 +23,7 @@ import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
 import pl.najem.pm.application.PortfolioService;
-import pl.najem.pm.application.ProcessDueStore;
+import pl.najem.pm.application.ProcessDueRepository;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.domain.LegalForm;
 import pl.najem.pm.domain.MonthlyAmount;
@@ -75,7 +78,7 @@ class UnitTimelineProjectionTest {
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
         var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
+        var tenancies = new TenancyService(store, new PostgresTenancyProjection(jdbc), new PostgresProcessDueRepository(jdbc));
 
         workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Długa 7, Wrocław",
@@ -85,13 +88,13 @@ class UnitTimelineProjectionTest {
         portfolio.setUnitBaseRent(workspace, unitId, new BigDecimal("2200"));
 
         // Two tenancies with a deliberate three-month gap between them, and a cancelled one.
-        firstTenancy = tenancies.reserve(reserve(unitId,
+        firstTenancy = tenancies.reserve(workspace, reserve(unitId,
             LocalDate.of(2026, 1, 1), LocalDate.of(2026, 7, 1))).tenancyId();
-        secondTenancy = tenancies.reserve(reserve(unitId,
+        secondTenancy = tenancies.reserve(workspace, reserve(unitId,
             LocalDate.of(2026, 10, 1), LocalDate.of(2027, 10, 1))).tenancyId();
-        cancelledTenancy = tenancies.reserve(reserve(unitId,
+        cancelledTenancy = tenancies.reserve(workspace, reserve(unitId,
             LocalDate.of(2028, 1, 1), LocalDate.of(2029, 1, 1))).tenancyId();
-        tenancies.cancelReservation(cancelledTenancy, "tenant withdrew");
+        tenancies.cancelReservation(workspace, cancelledTenancy, "tenant withdrew");
 
         // A unit nobody has ever put on the market, to prove 'inventory' is a real third state.
         neverOpenedUnitId = portfolio.addUnit(workspace, propertyId, "m. 13", new BigDecimal("1900"));

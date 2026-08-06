@@ -130,13 +130,13 @@ class WorkspaceBoundaryTest {
      * but it means the SQL scan passes for a reason unrelated to safety. Drop the check and every
      * other test in this class stays green while the endpoint stands wide open.
      *
-     * <p><b>Two forms count, and the second is the one being migrated to.</b> The original is
-     * {@code guard.requireX(workspaceId, id)} in the controller, which asks whether a row with this
-     * id exists in the caller's workspace — a question put to the projection tables. The second is
-     * handing the acting workspace to the service as the first argument, which then asks the
-     * aggregate rebuilt from its own stream. Both refuse; the second refuses closer to the decision
-     * and against the record rather than a copy of it, and it also covers callers that never pass
-     * through a controller at all.
+     * <p><b>There is one form now, and it is the migrated one.</b> The original was
+     * {@code guard.requireX(workspaceId, id)} in the controller, which asked whether a row with this
+     * id existed in the caller's workspace — a question put to the projection tables. It is gone.
+     * What every endpoint does instead is hand the acting workspace to the service as the first
+     * argument, and the service asks the aggregate rebuilt from its own stream. That refuses closer
+     * to the decision and against the record rather than a copy of it, and it covers callers that
+     * never pass through a controller at all.
      *
      * <p>What must not pass is an endpoint that accepts a workspace and does neither — takes the
      * header, and hands the subject id onward without the workspace ever being compared to
@@ -155,22 +155,33 @@ class WorkspaceBoundaryTest {
     }
 
     /**
-     * Both forms are actually present, so neither branch above is dead.
+     * The guard is gone and may not come back.
      *
-     * <p>A two-branch check silently degrades to a one-branch check the moment one branch stops
-     * matching anything — and a predicate that never matches is indistinguishable from a predicate
-     * that is wrong. When the migration finishes and no controller calls {@code guard.} any more,
-     * this fails, and the right response is to delete the guard branch rather than to widen this.
+     * <p>This was {@code bothFormsOfTheCheckAreInUse}, and its job was to fail on exactly this
+     * merge: a two-branch check silently degrades to a one-branch check the moment one branch stops
+     * matching anything, and a predicate that never matches is indistinguishable from a predicate
+     * that is wrong. It went red when the last {@code guard.} call left {@code TenancyController},
+     * and the instruction it carried was to delete that branch rather than widen anything — so the
+     * branch is deleted, and what is left asserts the state the deletion reached.
+     *
+     * <p>Not merely "no class named WorkspaceGuard exists". The defect this whole class exists for
+     * is a check made against a projection instead of the record, and it does not need that class to
+     * come back — any controller reaching a store to ask who owns a subject would do. So what is
+     * checked is that no controller does any asking of its own.
      */
     @Test
-    void bothFormsOfTheCheckAreInUse() throws IOException {
-        var mappings = writeMappings().toList();
+    void nocontrollerChecksOwnershipForItself() throws IOException {
+        var offenders = javaSources(MAIN.resolve("adapter/rest"))
+            .filter(path -> read(path).contains("guard."))
+            .map(path -> path.getFileName().toString())
+            .toList();
 
-        assertThat(mappings).filteredOn(Mapping::reachesGuard)
-            .as("no controller guards any more — delete that branch of the check")
-            .isNotEmpty();
-        assertThat(mappings).filteredOn(Mapping::handsTheWorkspaceToTheService)
-            .as("nothing hands the workspace on — the migrated form has gone")
+        assertThat(offenders)
+            .as("a controller answering 'whose is this?' is the second answer that started this")
+            .isEmpty();
+        assertThat(writeMappings().toList())
+            .filteredOn(Mapping::handsTheWorkspaceToTheService)
+            .as("nothing hands the workspace on — the only remaining form has gone")
             .isNotEmpty();
     }
 
@@ -224,26 +235,15 @@ class WorkspaceBoundaryTest {
 
     private static final Pattern METHOD_NAME = Pattern.compile("(\\w+)\\s*\\(");
 
-    private static final Pattern PRIVATE_METHOD =
-        Pattern.compile("private\\s+(?:static\\s+)?[\\w.<>,\\[\\]\\s]+?\\s(\\w+)\\s*\\(");
-
-    /**
-     * One write endpoint: the method as written, plus the names of every guard-calling helper in
-     * its file, so a check made through {@code RepairController.requireAsset} counts as made.
-     */
-    private record Mapping(String file, String method, String source, Set<String> guardHelpers) {
+    /** One write endpoint: the method as written. */
+    private record Mapping(String file, String method, String source) {
 
         String name() {
             return file + "." + method;
         }
 
         boolean checksTheWorkspace() {
-            return reachesGuard() || handsTheWorkspaceToTheService();
-        }
-
-        boolean reachesGuard() {
-            return source.contains("guard.")
-                || guardHelpers.stream().anyMatch(helper -> source.contains(helper + "("));
+            return handsTheWorkspaceToTheService();
         }
 
         /**
@@ -279,17 +279,9 @@ class WorkspaceBoundaryTest {
     private static Stream<Mapping> mappingsIn(Path path, Pattern kind) {
         String source = read(path);
         String file = path.getFileName().toString().replace(".java", "");
-        Set<String> helpers = guardCallingHelpers(source);
         return kind.matcher(source).results()
             .map(hit -> methodAt(source, hit.start()))
-            .map(method -> new Mapping(file, nameOf(method), method, helpers));
-    }
-
-    private static Set<String> guardCallingHelpers(String source) {
-        return PRIVATE_METHOD.matcher(source).results()
-            .filter(hit -> methodAt(source, hit.start()).contains("guard."))
-            .map(hit -> hit.group(1))
-            .collect(java.util.stream.Collectors.toSet());
+            .map(method -> new Mapping(file, nameOf(method), method));
     }
 
     /**
