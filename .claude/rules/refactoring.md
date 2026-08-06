@@ -96,8 +96,11 @@ Two things the diagram hides, both true today:
 - `application` imports `org.springframework.jdbc.core.JdbcTemplate` **0 times** as of 2026-08-06,
   down from 11. When this was written the ports covered one method rather than the layer; they now
   cover the layer.
-- `application` imports `pl.najem.eventstore` 6 times. That is the same inversion owned one level
-  up: `EventStore` is a platform interface and `JdbcEventStore` its adapter.
+- `application` imports `pl.najem.eventstore` 6 times, and that is allowed, not tolerated.
+  `EventStore` is an interface and `JdbcEventStore` its adapter one module up, so this is
+  `service → driven port` (A2) with the port living in a shared platform module rather than being
+  redeclared here. Checked 2026-08-06; see architecture.md, which used to call it the next front
+  and no longer does.
 
 Test-side: the in-memory fakes live in test sources under the *same package name*
 `pl.najem.acc.application`. A separate source set, so no production edge — but they can reach

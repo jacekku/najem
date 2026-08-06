@@ -129,6 +129,28 @@ one it trusted was the derived one.
 is worth remembering: a violation blocks a merge, a migration front is tracked and worked down, and
 treating them alike is how a rule stops being believed.
 
-`application` still imports `pl.najem.eventstore` directly. That is the same inversion owned one
-level up — `EventStore` is a platform interface and `JdbcEventStore` its adapter — so it is not this
-module's front, and it is the next one worth naming.
+## `application` importing `pl.najem.eventstore` is not a front
+
+This file used to end by naming that import as "the next front worth naming". It was checked on
+2026-08-06 and it is not one, so the sentence is gone rather than left to be worked down by somebody
+who trusted it.
+
+What is actually there: `EventStore` is an **interface**, `JdbcEventStore` is its adapter in
+`platform:eventstore`, and all 18 application-layer imports across the modules are of the interface.
+No application class imports `JdbcEventStore` or `OutboxDispatcher`. `platform:eventstore` depends
+on nothing but `contracts`, so the arrow points the way A2 requires — `service → driven port` — and
+the port simply lives in a shared platform module instead of being redeclared in each application
+package. A5's in-memory double exists on both sides: `RecordingEventStore` and `InMemoryEventStore`.
+
+The two things that could still be argued, neither a violation:
+
+- The four `…EventTypes` classes at each module's root hold Jackson registration, which is closer to
+  an adapter concern than to a module's public surface. A naming judgement.
+- Each module could declare its own `EventStore` port in its own terms, with the platform adapter
+  implementing all of them. That is the purist reading of A5 and it buys four identical interfaces
+  for one genuinely shared capability. Not worth it unless two modules ever need different terms.
+
+*This is here because the alternative is worse.* A rules file that names a front which does not
+exist costs somebody a day proving it, and spends the credibility that makes the real rules bite —
+which is the failure the section above already warns about. Rule 1 applies to this file too: check
+the premise before acting on it, including a premise this file wrote down itself.
