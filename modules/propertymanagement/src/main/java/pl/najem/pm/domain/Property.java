@@ -45,13 +45,13 @@ public class Property {
      * carried on the event, so the property can answer "what is overdue" without knowing the
      * statute at read time.
      */
-    public List<Object> recordInspection(InspectionType type, LocalDate performedOn,
-                                         String reportDoc, String findings) {
+    public List<Object> recordInspection(UUID inspectionId, InspectionType type,
+                                         LocalDate performedOn, String reportDoc, String findings) {
         if (type == null) {
             throw new IllegalArgumentException("An inspection needs an explicit type");
         }
-        return List.of(new PropertyEvents.InspectionCompleted(workspaceId, id, type, performedOn,
-            type.nextDue(performedOn), reportDoc, findings));
+        return List.of(new PropertyEvents.InspectionCompleted(workspaceId, id, inspectionId, type,
+            performedOn, type.nextDue(performedOn), reportDoc, findings));
     }
 
     /** Empty when this type has never been inspected — absence is not an overdue deadline. */

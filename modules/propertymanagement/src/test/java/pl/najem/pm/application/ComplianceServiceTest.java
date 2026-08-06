@@ -1,5 +1,7 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresInspectionProjection;
+import pl.najem.pm.adapter.persistence.PostgresOverdueInspectionQuery;
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -13,7 +15,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
-import pl.najem.pm.application.ComplianceService.OverdueInspection;
+
 import pl.najem.pm.domain.InspectionType;
 import pl.najem.pm.domain.Owner;
 
@@ -45,14 +47,15 @@ class ComplianceServiceTest {
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        compliance = new ComplianceService(store, jdbc);
+        compliance = new ComplianceService(store, new PostgresInspectionProjection(jdbc),
+            new PostgresOverdueInspectionQuery(jdbc));
     }
 
     @Test
     void overdueInspectionsAreReportedPerWorkspace() {
         var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners());
-        compliance.recordInspection(propertyId, InspectionType.GAS, LocalDate.of(2026, 5, 10),
+        compliance.recordInspection(workspaceId, propertyId, InspectionType.GAS, LocalDate.of(2026, 5, 10),
             "s3://docs/gas.pdf", "ok");
 
         assertThat(compliance.overdue(workspaceId, LocalDate.of(2027, 5, 9))).isEmpty();
@@ -71,9 +74,9 @@ class ComplianceServiceTest {
     void areinspectionSupersedesTheEarlierOneRatherThanAddingASecondOverdueRow() {
         var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Odnowiona 2", owners());
-        compliance.recordInspection(propertyId, InspectionType.GAS, LocalDate.of(2026, 5, 10),
+        compliance.recordInspection(workspaceId, propertyId, InspectionType.GAS, LocalDate.of(2026, 5, 10),
             null, "ok");
-        compliance.recordInspection(propertyId, InspectionType.GAS, LocalDate.of(2027, 4, 1),
+        compliance.recordInspection(workspaceId, propertyId, InspectionType.GAS, LocalDate.of(2027, 4, 1),
             null, "ok");
 
         assertThat(compliance.overdue(workspaceId, LocalDate.of(2027, 6, 1))).isEmpty();
@@ -86,9 +89,9 @@ class ComplianceServiceTest {
     void onetypeBeingCurrentDoesNotCoverAnother() {
         var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Kominowa 3", owners());
-        compliance.recordInspection(propertyId, InspectionType.GAS, LocalDate.of(2027, 1, 1),
+        compliance.recordInspection(workspaceId, propertyId, InspectionType.GAS, LocalDate.of(2027, 1, 1),
             null, "ok");
-        compliance.recordInspection(propertyId, InspectionType.CHIMNEY, LocalDate.of(2026, 1, 1),
+        compliance.recordInspection(workspaceId, propertyId, InspectionType.CHIMNEY, LocalDate.of(2026, 1, 1),
             null, "ok");
 
         assertThat(compliance.overdue(workspaceId, LocalDate.of(2027, 6, 1)))
@@ -100,7 +103,7 @@ class ComplianceServiceTest {
     void thefiveYearElectricalCheckIsNotOverdueAfterOneYear() {
         var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Prądowa 4", owners());
-        compliance.recordInspection(propertyId, InspectionType.ELECTRICAL_5YR,
+        compliance.recordInspection(workspaceId, propertyId, InspectionType.ELECTRICAL_5YR,
             LocalDate.of(2026, 5, 10), null, "ok");
 
         assertThat(compliance.overdue(workspaceId, LocalDate.of(2027, 5, 11))).isEmpty();
@@ -112,7 +115,7 @@ class ComplianceServiceTest {
     void theoverdueRowCarriesEnoughToNameThePropertyOnTheAttentionList() {
         var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Adresowa 5, Kraków", owners());
-        compliance.recordInspection(propertyId, InspectionType.SMOKE_CO, LocalDate.of(2026, 3, 1),
+        compliance.recordInspection(workspaceId, propertyId, InspectionType.SMOKE_CO, LocalDate.of(2026, 3, 1),
             null, "ok");
 
         var overdue = compliance.overdue(workspaceId, LocalDate.of(2027, 3, 2)).getFirst();

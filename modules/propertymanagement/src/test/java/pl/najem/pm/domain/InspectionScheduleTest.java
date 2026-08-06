@@ -26,11 +26,13 @@ class InspectionScheduleTest {
     void recordingAnInspectionEmitsItWithItsNextDueDate() {
         var property = property();
 
-        var events = property.recordInspection(InspectionType.CHIMNEY, LocalDate.of(2026, 5, 10),
-            "s3://docs/chimney.pdf", "no findings");
+        var inspectionId = UUID.randomUUID();
+
+        var events = property.recordInspection(inspectionId, InspectionType.CHIMNEY,
+            LocalDate.of(2026, 5, 10), "s3://docs/chimney.pdf", "no findings");
 
         assertThat(events).containsExactly(new PropertyEvents.InspectionCompleted(workspaceId,
-            propertyId, InspectionType.CHIMNEY, LocalDate.of(2026, 5, 10),
+            propertyId, inspectionId, InspectionType.CHIMNEY, LocalDate.of(2026, 5, 10),
             LocalDate.of(2027, 5, 10), "s3://docs/chimney.pdf", "no findings"));
     }
 
@@ -39,10 +41,10 @@ class InspectionScheduleTest {
     void thelatestInspectionOfATypeIsTheOneThatSetsTheDeadline() {
         var history = new java.util.ArrayList<>(Property.create(propertyId, workspaceId,
             "Testowa 1", List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))));
-        history.addAll(Property.from(history).recordInspection(InspectionType.GAS,
-            LocalDate.of(2026, 5, 10), null, "ok"));
-        history.addAll(Property.from(history).recordInspection(InspectionType.GAS,
-            LocalDate.of(2027, 4, 1), null, "ok"));
+        history.addAll(Property.from(history).recordInspection(UUID.randomUUID(),
+            InspectionType.GAS, LocalDate.of(2026, 5, 10), null, "ok"));
+        history.addAll(Property.from(history).recordInspection(UUID.randomUUID(),
+            InspectionType.GAS, LocalDate.of(2027, 4, 1), null, "ok"));
 
         assertThat(Property.from(history).nextDue(InspectionType.GAS))
             .contains(LocalDate.of(2028, 4, 1));
@@ -58,7 +60,7 @@ class InspectionScheduleTest {
     @Test
     void amissingInspectionTypeIsRejected() {
         org.assertj.core.api.Assertions.assertThatThrownBy(
-                () -> property().recordInspection(null, LocalDate.of(2026, 5, 10), null, "ok"))
+                () -> property().recordInspection(UUID.randomUUID(), null, LocalDate.of(2026, 5, 10), null, "ok"))
             .isInstanceOf(IllegalArgumentException.class);
     }
 

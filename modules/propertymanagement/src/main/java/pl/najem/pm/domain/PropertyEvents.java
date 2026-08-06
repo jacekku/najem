@@ -28,9 +28,19 @@ public final class PropertyEvents {
     /**
      * nextDueOn is stored rather than derived so the deadline survives a change to the statutory
      * interval: an inspection recorded under the old cadence keeps the deadline it was given.
+     *
+     * <p>inspectionId is on the event because the row it identifies has to be reproducible. It used
+     * to be minted beside the insert and carried on nothing, so {@code pm_inspection} was derived
+     * from this stream in every column but its primary key — a replay rebuilt the table with
+     * different ids, and the id is what the API hands back to a client. A store that cannot be
+     * rebuilt identically is not a projection whatever it is called.
+     *
+     * <p>Payloads written before this component exists deserialize with a null inspectionId. There
+     * is no replay of this stream into pm_inspection today, so nothing reads it yet; the reader that
+     * one day does has to treat null as "recorded before ids were carried" rather than assume.
      */
-    public record InspectionCompleted(UUID workspaceId, UUID propertyId, InspectionType type,
-                                      LocalDate performedOn, LocalDate nextDueOn, String reportDoc,
-                                      String findings) {
+    public record InspectionCompleted(UUID workspaceId, UUID propertyId, UUID inspectionId,
+                                      InspectionType type, LocalDate performedOn,
+                                      LocalDate nextDueOn, String reportDoc, String findings) {
     }
 }

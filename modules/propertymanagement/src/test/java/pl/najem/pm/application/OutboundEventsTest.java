@@ -1,5 +1,7 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresInspectionProjection;
+import pl.najem.pm.adapter.persistence.PostgresOverdueInspectionQuery;
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -90,7 +92,8 @@ class OutboundEventsTest {
         tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         checklists = new ChecklistService(store);
         repairs = new RepairService(store, jdbc, portfolio);
-        compliance = new ComplianceService(store, jdbc);
+        compliance = new ComplianceService(store, new PostgresInspectionProjection(jdbc),
+            new PostgresOverdueInspectionQuery(jdbc));
     }
 
     /**
@@ -108,8 +111,8 @@ class OutboundEventsTest {
         portfolio.openUnitToRent(workspaceId, unitId, "listed");
         portfolio.setUnitBaseRent(workspaceId, unitId, new BigDecimal("2600"));
         portfolio.updateUnitDetails(workspaceId, unitId, java.util.Map.of("listingRef", "OLX-1"));
-        compliance.recordInspection(propertyId, pl.najem.pm.domain.InspectionType.GAS,
-            LocalDate.of(2026, 5, 10), null, "ok");
+        compliance.recordInspection(workspaceId, propertyId,
+            pl.najem.pm.domain.InspectionType.GAS, LocalDate.of(2026, 5, 10), null, "ok");
         var repairId = repairs.report(RepairScope.UNIT, unitId, "leaking tap", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 8, 1));
         repairs.complete(repairId, LocalDate.of(2026, 8, 3), "done");

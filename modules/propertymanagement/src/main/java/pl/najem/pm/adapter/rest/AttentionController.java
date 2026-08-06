@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.AttentionListsQuery;
 import pl.najem.pm.application.ComplianceService;
+import pl.najem.pm.application.OverdueInspection;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.application.WorkspaceGuard;
 
@@ -71,7 +72,7 @@ public class AttentionController {
     }
 
     @GetMapping("/inspections-overdue")
-    public List<ComplianceService.OverdueInspection> overdueInspections(
+    public List<OverdueInspection> overdueInspections(
             @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return compliance.overdue(workspaceId, orToday(on));
