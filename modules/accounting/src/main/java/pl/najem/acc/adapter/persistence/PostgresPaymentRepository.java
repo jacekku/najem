@@ -34,8 +34,10 @@ public class PostgresPaymentRepository implements PaymentRepository {
     @Override
     public Optional<Payment> getPayment(UUID workspaceId, UUID paymentId) {
         return Optional.ofNullable(DataAccessUtils.singleResult(jdbc.query("""
-            select unallocated_amount from acc_payment where workspace_id = ? and payment_id = ?
-            """, (rs, i) -> new Payment(paymentId, rs.getBigDecimal(1)), workspaceId, paymentId)));
+            select unallocated_amount, status from acc_payment
+            where workspace_id = ? and payment_id = ?
+            """, (rs, i) -> new Payment(paymentId, rs.getBigDecimal(1),
+                PaymentStatus.of(rs.getString(2))), workspaceId, paymentId)));
     }
 
     /**
@@ -70,14 +72,6 @@ public class PostgresPaymentRepository implements PaymentRepository {
             select counterparty_iban from acc_payment
             where workspace_id = ? and payment_id = ? and counterparty_iban is not null
             """, (rs, i) -> rs.getString(1), workspaceId, paymentId).stream().findFirst();
-    }
-
-    @Override
-    public Optional<PaymentStatus> statusOf(UUID workspaceId, UUID paymentId) {
-        return jdbc.query("""
-            select status from acc_payment where workspace_id = ? and payment_id = ?
-            """, (rs, i) -> PaymentStatus.of(rs.getString(1)), workspaceId, paymentId)
-            .stream().findFirst();
     }
 
     @Override

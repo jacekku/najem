@@ -3,9 +3,9 @@ package pl.najem.acc.application;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.najem.acc.domain.Payment;
 import pl.najem.acc.domain.PaymentAllocationAmended;
 import pl.najem.acc.domain.PaymentReversed;
-import pl.najem.acc.domain.PaymentStatus;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
@@ -64,9 +64,7 @@ public class CorrectionService {
      */
     public void reverse(UUID workspaceId, UUID paymentId, String reason) {
         requireReason(reason, "reversing payment " + paymentId);
-        if (statusOf(workspaceId, paymentId) == PaymentStatus.REVERSED) {
-            throw new IllegalStateException("payment " + paymentId + " is already reversed");
-        }
+        paymentIn(workspaceId, paymentId).requireReversible();
         unwind(workspaceId, paymentId);
         payments.reverse(workspaceId, paymentId, reason, LocalDate.now(clock));
         append(paymentId, new PaymentReversed(paymentId, reason));
@@ -78,10 +76,7 @@ public class CorrectionService {
      */
     public BigDecimal amendAllocation(UUID workspaceId, UUID paymentId, UUID tenancyId, String reason) {
         requireReason(reason, "amending payment " + paymentId);
-        if (statusOf(workspaceId, paymentId) == PaymentStatus.REVERSED) {
-            throw new IllegalStateException(
-                "payment " + paymentId + " was reversed; there is no money to move");
-        }
+        paymentIn(workspaceId, paymentId).requireAmendable();
         unwind(workspaceId, paymentId);
         append(paymentId, new PaymentAllocationAmended(paymentId, tenancyId, reason));
         return accounting.allocate(workspaceId, paymentId, tenancyId);
@@ -112,14 +107,13 @@ public class CorrectionService {
     /**
      * A payment outside the caller's workspace does not exist, rather than being forbidden.
      *
-     * <p>Still {@link IllegalArgumentException} rather than {@link PaymentNotFoundException}, which
-     * is what allocation raises for the same absence. Unifying them is worth doing and is not a
-     * refactoring: the type is visible to callers, and {@code ReversalTest} pins this one. It wants
-     * deciding on purpose rather than as a side effect of moving a query.
+     * <p>{@link PaymentNotFoundException}, which is what allocation has always raised for the same
+     * absence. This used to be an {@code IllegalArgumentException}, so one absence had two
+     * vocabularies and a caller catching either caught half the cases.
      */
-    private PaymentStatus statusOf(UUID workspaceId, UUID paymentId) {
-        return payments.statusOf(workspaceId, paymentId).orElseThrow(
-            () -> new IllegalArgumentException(
+    private Payment paymentIn(UUID workspaceId, UUID paymentId) {
+        return payments.getPayment(workspaceId, paymentId).orElseThrow(
+            () -> new PaymentNotFoundException(
                 "no payment " + paymentId + " in workspace " + workspaceId));
     }
 

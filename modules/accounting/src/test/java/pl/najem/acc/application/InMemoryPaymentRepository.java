@@ -59,7 +59,7 @@ public class InMemoryPaymentRepository implements PaymentRepository {
     @Override
     public Optional<Payment> getPayment(UUID workspaceId, UUID paymentId) {
         return Optional.ofNullable(payments.get(new Key(workspaceId, paymentId)))
-            .map(stored -> new Payment(paymentId, stored.unallocatedAmount()));
+            .map(stored -> new Payment(paymentId, stored.unallocatedAmount(), stored.status()));
     }
 
     @Override
@@ -109,11 +109,6 @@ public class InMemoryPaymentRepository implements PaymentRepository {
                 stored.title(), stored.counterpartyName(), stored.counterpartyIban(),
                 stored.direction(), stored.currency(), stored.bookingDate()));
         return true;
-    }
-
-    @Override
-    public Optional<PaymentStatus> statusOf(UUID workspaceId, UUID paymentId) {
-        return Optional.ofNullable(payments.get(new Key(workspaceId, paymentId))).map(Stored::status);
     }
 
     /** Nothing is left as credit: money that never arrived is nobody's. */

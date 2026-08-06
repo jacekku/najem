@@ -1,7 +1,6 @@
 package pl.najem.acc.application;
 
 import pl.najem.acc.domain.Payment;
-import pl.najem.acc.domain.PaymentStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -17,6 +16,10 @@ public interface PaymentRepository {
 
     /**
      * The payment, holding what is still the tenant's credit rather than settled.
+     *
+     * <p>Carries the recorded status as well as the remainder, so the payment itself can say which
+     * corrections it is still open to. A caller that had to fetch the status separately would be
+     * holding two halves of one answer and could act on a stale half.
      *
      * <p>Empty when no such payment exists in that workspace. Absence is the repository's answer,
      * not its problem: whether a missing payment is an error depends on what the caller was doing,
@@ -49,9 +52,6 @@ public interface PaymentRepository {
      * carries no counterparty — which is why nothing may be learned from its absence.
      */
     Optional<String> payerAccountOf(UUID workspaceId, UUID paymentId);
-
-    /** Where the payment stands. Empty when there is no such payment in that workspace. */
-    Optional<PaymentStatus> statusOf(UUID workspaceId, UUID paymentId);
 
     /**
      * Records that the money was never there: the bank took it back. Nothing is left as credit,

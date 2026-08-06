@@ -17,6 +17,8 @@ import pl.najem.acc.adapter.persistence.PostgresInvoiceRepository;
 import pl.najem.acc.adapter.persistence.PostgresPaymentRepository;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
+import pl.najem.acc.domain.PaymentAlreadyReversedException;
+import pl.najem.acc.domain.ReversedPaymentHasNothingToMoveException;
 import pl.najem.acc.domain.PaymentAllocationAmended;
 import pl.najem.acc.domain.PaymentReversed;
 import pl.najem.eventstore.EventTypeRegistry;
@@ -144,7 +146,31 @@ class ReversalTest {
         corrections.reverse(WS, paymentId, "NSF");
 
         assertThatThrownBy(() -> corrections.reverse(WS, paymentId, "NSF again"))
-            .isInstanceOf(IllegalStateException.class);
+            .isInstanceOf(PaymentAlreadyReversedException.class);
+    }
+
+    /**
+     * The other half of the same rule, and it had no test until the guards moved onto Payment:
+     * amending a reversal would credit the receiving tenancy with money the bank has taken back.
+     */
+    @Test
+    void aReversedPaymentCannotBeAmendedOntoAnotherTenancy() {
+        var wrong = UUID.randomUUID();
+        var right = UUID.randomUUID();
+        invoicing.postRent(WS, wrong, new BigDecimal("2000"), DUE, "NAJEM/R4B/2027");
+        invoicing.postRent(WS, right, new BigDecimal("2000"), DUE, "NAJEM/R4C/2027");
+        var paymentId = pay("tx-r4b", "2000", wrong);
+        corrections.reverse(WS, paymentId, "NSF");
+
+        assertThatThrownBy(() -> corrections.amendAllocation(WS, paymentId, right, "wrong tenancy"))
+            .isInstanceOf(ReversedPaymentHasNothingToMoveException.class);
+
+        assertThat(settled(rightCharge(right))).isEqualByComparingTo("0");
+    }
+
+    private static UUID rightCharge(UUID tenancyId) {
+        return jdbc.queryForObject(
+            "select charge_id from acc_charge where tenancy_id = ?", UUID.class, tenancyId);
     }
 
     /** The money is real. It simply belongs to the other tenant. */
@@ -208,7 +234,7 @@ class ReversalTest {
         var paymentId = pay("tx-r8", "2000", tenancyId);
 
         assertThatThrownBy(() -> corrections.reverse(OTHER_WS, paymentId, "not mine"))
-            .isInstanceOf(IllegalArgumentException.class);
+            .isInstanceOf(PaymentNotFoundException.class);
 
         assertThat(settled(chargeId)).isEqualByComparingTo("2000");
     }

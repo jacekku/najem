@@ -14,16 +14,35 @@ import java.util.UUID;
  * <p>An overpayment therefore cannot be pushed onto an obligation the tenant does not have. An
  * invoice may only ask for what it is owed, and what nobody asks for stays here as the tenant's
  * credit.
+ *
+ * <p>It also knows which corrections it is still open to. Whether a payment may be reversed or
+ * amended is a fact about the money — reversing twice owes the tenant a sum that never left anyone's
+ * account, and amending a reversal credits a tenancy with funds the bank has taken back. A service
+ * comparing a status string to a literal could get that right; a payment asked directly gets it
+ * right for every caller, including the next one.
  */
 public final class Payment {
 
     private final UUID paymentId;
+    /**
+     * What the record says has happened to this payment, which is not the same question as
+     * {@link #status()}. That one is derived from what has been settled during this allocation;
+     * this is what was written down — including the two outcomes settlement cannot produce,
+     * {@code reversed} and {@code non-tenant}.
+     */
+    private final PaymentStatus recorded;
     private BigDecimal remaining;
     private BigDecimal settled = BigDecimal.ZERO;
 
+    /** A payment nobody has judged yet, which is what allocation deals with. */
     public Payment(UUID paymentId, BigDecimal unallocatedAmount) {
+        this(paymentId, unallocatedAmount, PaymentStatus.UNMATCHED);
+    }
+
+    public Payment(UUID paymentId, BigDecimal unallocatedAmount, PaymentStatus recorded) {
         this.paymentId = paymentId;
         this.remaining = unallocatedAmount;
+        this.recorded = recorded;
     }
 
     public UUID paymentId() {
@@ -71,5 +90,31 @@ public final class Payment {
             return PaymentStatus.UNMATCHED;
         }
         return remaining.signum() == 0 ? PaymentStatus.ALLOCATED : PaymentStatus.PARTIALLY_ALLOCATED;
+    }
+
+    /** Whether the bank has already taken this money back. */
+    public boolean isReversed() {
+        return recorded == PaymentStatus.REVERSED;
+    }
+
+    /**
+     * The bank cannot take back twice what it has taken back once. Reversing again would reopen the
+     * charges this payment settled a second time and owe the tenant a sum that never left anyone's
+     * account.
+     */
+    public void requireReversible() {
+        if (isReversed()) {
+            throw new PaymentAlreadyReversedException(paymentId);
+        }
+    }
+
+    /**
+     * An amendment moves money that exists. A reversed payment has none to move, and pretending
+     * otherwise credits a tenancy with funds the bank has already recovered.
+     */
+    public void requireAmendable() {
+        if (isReversed()) {
+            throw new ReversedPaymentHasNothingToMoveException(paymentId);
+        }
     }
 }
