@@ -1,14 +1,7 @@
 package pl.najem.reporting.application;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.dao.DataRetrievalFailureException;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
-
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * Reporting's window onto the shared event store, ordered by {@code global_seq}.
@@ -22,16 +15,22 @@ import java.util.UUID;
  * projection — a rule every caller must remember is a rule that will eventually be forgotten,
  * and the thing being protected is other modules' private data.
  * <p>
- * <b>This class reads {@code events} rows directly and MUST NOT be refactored to go through
- * {@code EventStore.load}.</b> That is not a style choice: {@code load} keys on {@code stream_id}
- * alone and ignores {@code stream_type} (najem-build seq 103), so routing the feed through it would
- * hand back every type sharing a stream id and silently widen the allowlist past what was granted.
- * The one place {@code stream_type} is load-bearing for a security boundary is the one place that
- * does not use {@code load} — keep it that way even once that defect is fixed, because this
- * guarantee should not depend on someone else's signature staying filtered.
+ * <b>Why the allowlist is on the port and the SQL is in the adapter.</b> Which streams Reporting
+ * may read is policy, and rule 10 puts policy in the layer that owns the decision: it must not
+ * vary with the store, and a second implementation must be bound by it rather than free to choose.
+ * How that policy is enforced against a table is mechanism, and it belongs to the adapter. The
+ * split is also what makes {@link #ALLOWED_STREAMS} testable without a database, which is what
+ * lets the fast tier assert a forbidden stream never reaches a projection.
+ * <p>
+ * <b>An implementation MUST NOT read the store through {@code EventStore.load}.</b> That is not a
+ * style choice: {@code load} keys on {@code stream_id} alone and ignores {@code stream_type}
+ * (najem-build seq 103), so routing the feed through it would hand back every type sharing a
+ * stream id and silently widen the allowlist past what was granted. The one place
+ * {@code stream_type} is load-bearing for a security boundary is the one place that does not use
+ * {@code load} — keep it that way even once that defect is fixed, because this guarantee should
+ * not depend on someone else's signature staying filtered.
  */
-@Component
-public class EventFeed {
+public interface EventFeed {
 
     /**
      * Per-owner, as ruled:
@@ -41,55 +40,16 @@ public class EventFeed {
      * Adding a stream here is a cross-module decision, not a local one: it makes another
      * module's payloads a published interface. Post on najem-build first.
      */
-    public static final Set<String> ALLOWED_STREAMS =
+    Set<String> ALLOWED_STREAMS =
         Set.of("Property", "Unit", "Tenancy", "TenancyLedger", "Payment", "Contact", "Workspace", "User");
-
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-
-    public EventFeed(JdbcTemplate jdbc, ObjectMapper json) {
-        this.jdbc = jdbc;
-        this.json = json;
-    }
 
     /**
      * The next batch of allowlisted events after {@code afterGlobalSeq}, in order.
      * <p>
-     * Filtering happens in SQL so that a run of forbidden events cannot eat the batch window and
-     * stall the cursor — the caller advances past them without ever seeing them. Gaps in
-     * {@code global_seq} (rolled-back transactions) are normal and must never be waited for.
+     * Filtering must happen before the limit is applied, so that a run of forbidden events cannot
+     * eat the batch window and stall the cursor — the caller advances past them without ever
+     * seeing them. Gaps in {@code global_seq} (rolled-back transactions) are normal and must never
+     * be waited for.
      */
-    public List<FeedEntry> since(long afterGlobalSeq, int limit) {
-        var args = new Object[ALLOWED_STREAMS.size() + 2];
-        args[0] = afterGlobalSeq;
-        int i = 1;
-        for (var stream : ALLOWED_STREAMS) {
-            args[i++] = stream;
-        }
-        args[i] = limit;
-        return jdbc.query("""
-            select global_seq, stream_id, stream_type, event_type, occurred_at, payload::text as payload
-            from events
-            where global_seq > ? and stream_type in (%s)
-            order by global_seq
-            limit ?
-            """.formatted(String.join(",", java.util.Collections.nCopies(ALLOWED_STREAMS.size(), "?"))),
-            (rs, rowNum) -> new FeedEntry(
-                rs.getLong("global_seq"),
-                UUID.fromString(rs.getString("stream_id")),
-                rs.getString("stream_type"),
-                rs.getString("event_type"),
-                rs.getTimestamp("occurred_at").toInstant(),
-                tree(rs.getString("payload"))),
-            args);
-    }
-
-    private JsonNode tree(String payload) {
-        try {
-            return json.readTree(payload);
-        } catch (Exception e) {
-            // Unreadable jsonb means the event store itself is corrupt; skipping it would hide that.
-            throw new DataRetrievalFailureException("Unreadable event payload: " + payload, e);
-        }
-    }
+    List<FeedEntry> since(long afterGlobalSeq, int limit);
 }

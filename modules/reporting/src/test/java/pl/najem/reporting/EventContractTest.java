@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import pl.najem.reporting.adapter.persistence.PostgresEventFeed;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -205,7 +206,7 @@ class EventContractTest {
             LocalDate.of(2026, 11, 10), "NAJEM-TRIPWIRE-2");
         invoicing.withdraw(workspace, spare, "billed in error");
 
-        emitted = drainFeed(new EventFeed(jdbc, json));
+        emitted = drainFeed(new PostgresEventFeed(jdbc, json));
     }
 
     private static ReserveTenancy reservation(UUID unitId, LocalDate start) {

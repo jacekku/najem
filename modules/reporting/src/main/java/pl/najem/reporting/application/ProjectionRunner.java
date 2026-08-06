@@ -1,7 +1,6 @@
 package pl.najem.reporting.application;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -17,21 +16,26 @@ import java.util.List;
  * property that lets a read model change shape without a data migration. Ordering is
  * {@code global_seq}, the one monotonic sequence spanning every stream, which is exactly what a
  * multi-stream Timeline needs and what per-stream versions cannot give.
+ * <p>
+ * Reaches its two stores through ports: {@link EventFeed} for what happened and
+ * {@link CheckpointStore} for how far it has got. Neither is here for symmetry — this class holds
+ * the only branching logic in the module that is not SQL, and until they existed none of it could
+ * be exercised without a Postgres container.
  */
 @Component
 public class ProjectionRunner {
 
     private final EventFeed feed;
-    private final JdbcTemplate jdbc;
+    private final CheckpointStore checkpoints;
     private final TransactionTemplate tx;
     private final List<Projection> projections;
     private final int batchSize;
 
-    public ProjectionRunner(EventFeed feed, JdbcTemplate jdbc, TransactionTemplate tx,
+    public ProjectionRunner(EventFeed feed, CheckpointStore checkpoints, TransactionTemplate tx,
                             List<Projection> projections,
                             @Value("${najem.reporting.batch-size:500}") int batchSize) {
         this.feed = feed;
-        this.jdbc = jdbc;
+        this.checkpoints = checkpoints;
         this.tx = tx;
         this.projections = projections;
         this.batchSize = batchSize;
@@ -64,10 +68,7 @@ public class ProjectionRunner {
             .orElseThrow(() -> new IllegalArgumentException("No such projection: " + projectionName));
         tx.executeWithoutResult(status -> {
             projection.reset();
-            jdbc.update("""
-                insert into reporting_checkpoint(projection_name, last_global_seq) values (?, 0)
-                on conflict (projection_name) do update set last_global_seq = 0
-                """, projectionName);
+            checkpoints.reset(projectionName);
         });
         drain(projection);
     }
@@ -95,7 +96,7 @@ public class ProjectionRunner {
      */
     private Progress applyOneBatch(Projection projection) {
         return tx.execute(status -> {
-            long checkpoint = checkpointOf(projection.name());
+            long checkpoint = checkpoints.positionOf(projection.name());
             var entries = feed.since(checkpoint, batchSize);
             if (entries.isEmpty()) {
                 return new Progress(0, 0);
@@ -107,25 +108,11 @@ public class ProjectionRunner {
                     applied++;
                 }
             }
-            advanceTo(projection.name(), entries.get(entries.size() - 1).globalSeq());
+            checkpoints.advanceTo(projection.name(), entries.get(entries.size() - 1).globalSeq());
             // The loop must continue on what was FETCHED, not on what was applied: a batch of
             // entirely unhandled events is still progress, and stopping on it would leave the
             // projection permanently short of the end of the stream.
             return new Progress(entries.size(), applied);
         });
-    }
-
-    private long checkpointOf(String projectionName) {
-        var found = jdbc.queryForList(
-            "select last_global_seq from reporting_checkpoint where projection_name = ?",
-            Long.class, projectionName);
-        return found.isEmpty() ? 0L : found.get(0);
-    }
-
-    private void advanceTo(String projectionName, long globalSeq) {
-        jdbc.update("""
-            insert into reporting_checkpoint(projection_name, last_global_seq) values (?,?)
-            on conflict (projection_name) do update set last_global_seq = excluded.last_global_seq
-            """, projectionName, globalSeq);
     }
 }

@@ -13,6 +13,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
+import pl.najem.reporting.adapter.persistence.PostgresEventFeed;
+import pl.najem.reporting.adapter.persistence.PostgresReporting;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -74,7 +76,7 @@ class ProjectionStatusTest {
             .locations("classpath:db/eventstore", "classpath:db/reporting").load().migrate();
         jdbc = new JdbcTemplate(dataSource);
         tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
-        feed = new EventFeed(jdbc, productionMapper());
+        feed = new PostgresEventFeed(jdbc, productionMapper());
         status = new ProjectionStatus(jdbc);
     }
 
@@ -92,7 +94,7 @@ class ProjectionStatusTest {
     }
 
     private static ProjectionRunner runner() {
-        return new ProjectionRunner(feed, jdbc, tx, List.of(new NoopProjection()), 100);
+        return PostgresReporting.runner(jdbc, productionMapper(), tx, List.of(new NoopProjection()), 100);
     }
 
     @Test

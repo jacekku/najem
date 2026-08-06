@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import pl.najem.reporting.adapter.persistence.PostgresEventFeed;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -47,7 +48,7 @@ class EventFeedTest {
         Flyway.configure().dataSource(dataSource)
             .locations("classpath:db/eventstore", "classpath:db/reporting").load().migrate();
         jdbc = new JdbcTemplate(dataSource);
-        feed = new EventFeed(jdbc, productionMapper());
+        feed = new PostgresEventFeed(jdbc, productionMapper());
     }
 
     private static long append(String streamType, String eventType, String payload) {
@@ -126,11 +127,9 @@ class EventFeedTest {
         assertThat(feed.since(first - 1, 2)).hasSize(2);
     }
 
-    /** Every stream the ruling names, so a typo in the allowlist fails here rather than at read time. */
-    @Test
-    void allowsExactlyTheStreamsTheRulingNames() {
-        assertThat(EventFeed.ALLOWED_STREAMS)
-            .containsExactlyInAnyOrder("Property", "Unit", "Tenancy", "TenancyLedger", "Payment",
-                "Contact", "Workspace", "User");
-    }
+    // The assertion pinning ALLOWED_STREAMS to the names the ruling gives has MOVED to
+    // ProjectionRunnerRulesTest, in the fast tier. It reads no database and needs no container, and
+    // sitting here it was excluded from `./gradlew build` — so narrowing the allowlist, or emptying
+    // it, passed the whole inner loop. A cross-module boundary should not be checked only by the
+    // suite people run at a merge. Do not move it back.
 }

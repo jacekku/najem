@@ -122,6 +122,42 @@ acc_tenancy_status and is what services hold; `ArrearsBoardProjection` reads it 
 holds. One port carrying both would put a read of the colour within reach of every service that
 refreshes it, which is the failure A7 exists to prevent.
 
+## Reporting is a named exception to A5, not an open front
+
+`pl.najem.reporting.application` imports `JdbcTemplate` **10 times** and that is the intended end
+state. Do not put it on a list of things to work down.
+
+Rule 1 says check the premise, and the premise "every module should end with zero adapter imports
+in its application package" does not survive contact with this one. Reporting has **no `domain`
+package at all** — no aggregates, no commands, no events of its own. Every table it owns is derived
+from the shared event store, and the classes in its application package are already named the way
+A7 asks: `PropertyProjection`, `UnitBoardQuery`, `TenancyTimelineProjection`.
+
+**The reason A5 does not pay here is that the logic is the SQL.** In accounting, PM and
+usermanagement the ports moved *decisions* off `JdbcTemplate` so rules could be tested in
+milliseconds; the settlement order, the last-admin rule and the invitation lifecycle are all Java.
+`UnitBoardQuery` has no such decision. Its content is one predicate —
+`not p.annulled and (not p.released or p.ended_on is not null)` — and that predicate exists nowhere
+but the string. An in-memory double for it would restate the predicate in Java, look identical to
+the Postgres assertion, and be incapable of catching a regression in the real one. That is exactly
+the `InMemoryInvoiceRepository.fullySettled()` incident that earned refactoring rules 13 and 14, and
+extracting these ports would manufacture it twelve times over.
+
+So the seam was drawn where a decision actually lives:
+
+- **`ProjectionRunner`** holds the only branching in the module that is not SQL — the batch loop,
+  the fetched-versus-applied distinction, per-projection positions, rebuild-then-drain. It now
+  reaches `EventFeed` and `CheckpointStore` as ports and imports no `JdbcTemplate`.
+- **`EventFeed`** is a port because its allowlist is *policy* (rule 10) and its `where` clause is
+  mechanism. `ALLOWED_STREAMS` lives on the interface; the SQL lives in `PostgresEventFeed`.
+- **`CheckpointStore`** is the one `Repository` in the module. Every other table here can be dropped
+  and replayed; `reporting_checkpoint` holds the position that says what still needs replaying.
+- **Everything else stays on `JdbcTemplate`**, in `application`, by decision.
+
+*The check that replaces the grep.* `application` importing `JdbcTemplate` proves nothing here, so
+the mechanical check for this module is the other direction: `pl.najem.reporting.application` must
+import `pl.najem.reporting.adapter` **0 times**. Verified 2026-08-06, and it holds.
+
 ## Both migration fronts are closed
 
 As of 2026-08-06, `org.springframework.jdbc.core.JdbcTemplate` is imported **0 times** in

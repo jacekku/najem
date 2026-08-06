@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
+import pl.najem.reporting.adapter.persistence.PostgresReporting;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -143,7 +144,7 @@ class TenancyTimelineProjectionTest {
         otherWorkspaceTenancyId = tenancies.reserve(otherWorkspace, reserve(otherUnit, LocalDate.of(2026, 9, 1))).tenancyId();
 
         projection = new TenancyTimelineProjection(jdbc);
-        runner = new ProjectionRunner(new EventFeed(jdbc, json), jdbc,
+        runner = PostgresReporting.runner(jdbc, json,
             new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
             List.of(projection), 100);
         runner.runOnce();

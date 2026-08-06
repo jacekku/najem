@@ -13,6 +13,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
+import pl.najem.reporting.adapter.persistence.PostgresEventFeed;
+import pl.najem.reporting.adapter.persistence.PostgresReporting;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -88,7 +90,7 @@ class ProjectionRunnerTest {
         Flyway.configure().dataSource(dataSource)
             .locations("classpath:db/eventstore", "classpath:db/reporting").load().migrate();
         jdbc = new JdbcTemplate(dataSource);
-        feed = new EventFeed(jdbc, productionMapper());
+        feed = new PostgresEventFeed(jdbc, productionMapper());
         tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
     }
 
@@ -106,7 +108,7 @@ class ProjectionRunnerTest {
     }
 
     private static ProjectionRunner runnerFor(Projection... projections) {
-        return new ProjectionRunner(feed, jdbc, tx, List.of(projections), 100);
+        return PostgresReporting.runner(jdbc, productionMapper(), tx, List.of(projections), 100);
     }
 
     @Test
@@ -222,7 +224,7 @@ class ProjectionRunnerTest {
             append("Tenancy", "TenancyReserved");
         }
         var projection = new RecordingProjection("batched", Set.of("TenancyReserved"));
-        var runner = new ProjectionRunner(feed, jdbc, tx, List.of(projection), 2);
+        var runner = PostgresReporting.runner(jdbc, productionMapper(), tx, List.of(projection), 2);
 
         assertThat(runner.runOnce()).isEqualTo(5);
         assertThat(projection.applied).hasSize(5);
