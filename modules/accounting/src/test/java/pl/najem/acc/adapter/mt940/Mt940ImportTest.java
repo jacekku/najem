@@ -28,7 +28,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 
@@ -37,13 +36,13 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Objects;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @Testcontainers
 @Tag("integration")
@@ -315,13 +314,16 @@ class Mt940ImportTest {
      * "required" from "defaulted to something that happens to work" — and the default is how the old
      * behaviour would return with no visible change to the method body.
      *
-     * <p><strong>This test enforces the interim mechanism, and one day that will be wrong.</strong>
-     * The header is a stand-in until the workspace comes from the verified token and is checked
-     * against the caller's memberships. When these endpoints stop taking a header and receive a
-     * resolved workspace instead, this test goes red across the module — and the cheapest way to
-     * green it will be to put the headers back. <strong>Widen the assertion to accept a resolved
-     * workspace parameter; do not re-add headers.</strong> The invariant is that a write cannot
-     * obtain a workspace by omission, not that a write takes a header.
+     * <p><strong>That day came, and the instruction left here was followed.</strong> This test used
+     * to require {@code @RequestHeader("X-Workspace-Id")} with {@code required=true}, and it warned
+     * that when the workspace began arriving resolved instead, the whole module would go red and
+     * the cheapest way to green it would be to put the headers back. It now requires
+     * {@code @ActingWorkspace} — a workspace derived from the caller, which no request can name.
+     * The invariant never changed: <b>a write cannot obtain a workspace by omission.</b>
+     *
+     * <p>There is no longer a {@code required} flag to check, and nothing weaker took its place.
+     * The resolver either produces a workspace or refuses the request, so "defaulted to something
+     * that happens to work" is not a state a parameter can be in.
      */
     @Test
     void everyMutatingEndpointInThisModuleRequiresAWorkspace() throws Exception {
@@ -342,15 +344,11 @@ class Mt940ImportTest {
                     continue;
                 }
                 checked++;
-                var header = Arrays.stream(method.getParameters())
-                    .map(param -> param.getAnnotation(RequestHeader.class))
-                    .filter(Objects::nonNull)
-                    .filter(h -> "X-Workspace-Id".equals(h.value()) || "X-Workspace-Id".equals(h.name()))
-                    .findFirst();
-                if (header.isEmpty()) {
-                    offenders.add(controller.getSimpleName() + "." + method.getName() + " takes no workspace header");
-                } else if (!header.get().required()) {
-                    offenders.add(controller.getSimpleName() + "." + method.getName() + " defaults its workspace");
+                boolean resolved = Arrays.stream(method.getParameters())
+                    .anyMatch(param -> param.isAnnotationPresent(ActingWorkspace.class));
+                if (!resolved) {
+                    offenders.add(controller.getSimpleName() + "." + method.getName()
+                        + " is handed no workspace");
                 }
             }
         }

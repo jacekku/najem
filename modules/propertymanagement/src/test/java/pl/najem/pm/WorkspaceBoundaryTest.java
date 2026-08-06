@@ -101,16 +101,22 @@ class WorkspaceBoundaryTest {
      * instances this class grew while under assignment were both born inside controllers that
      * already took the header somewhere else in the file. The earlier version of this test would
      * not have caught the thing it was written for.
+     *
+     * <p>What the parameter <i>is</i> has changed and the rule has not. It used to be
+     * {@code @RequestHeader(WorkspaceHeader.NAME)} — a workspace the caller named, checked
+     * afterwards by an interceptor — and is now {@code @ActingWorkspace}, a workspace derived from
+     * the caller that nobody can name. The endpoint still has to accept one, because an endpoint
+     * that takes no workspace still cannot scope anything.
      */
     @Test
-    void everyMappingTakesTheWorkspaceHeader() throws IOException {
+    void everyMappingTakesTheWorkspaceItActsIn() throws IOException {
         var offenders = mappings(ANY_MAPPING)
-            .filter(mapping -> !mapping.source().contains("@RequestHeader(WorkspaceHeader.NAME)"))
+            .filter(mapping -> !mapping.source().contains("@ActingWorkspace"))
             .map(Mapping::name)
             .toList();
 
         assertThat(offenders)
-            .as("a mapping with no workspace header cannot check one")
+            .as("a mapping handed no workspace cannot check one")
             .isEmpty();
     }
 

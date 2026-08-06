@@ -5,7 +5,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +15,7 @@ import pl.najem.acc.domain.ReversedPaymentHasNothingToMoveException;
 
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 /**
  * The two corrections a payment can need. They are separate endpoints on purpose: a reversal and an
@@ -40,14 +40,14 @@ public class CorrectionController {
     @PostMapping("/payments/{paymentId}/reverse")
     public void reverse(@PathVariable UUID paymentId,
                         @RequestBody ReversalRequest request,
-                        @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+                        @ActingWorkspace UUID workspaceId) {
         corrections.reverse(workspaceId, paymentId, request.reason());
     }
 
     @PostMapping("/payments/{paymentId}/amend")
     public void amend(@PathVariable UUID paymentId,
                       @RequestBody AmendmentRequest request,
-                      @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+                      @ActingWorkspace UUID workspaceId) {
         corrections.amendAllocation(workspaceId, paymentId, request.tenancyId(),
             request.reason());
     }

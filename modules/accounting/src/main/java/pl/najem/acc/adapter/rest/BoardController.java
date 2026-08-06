@@ -1,7 +1,6 @@
 package pl.najem.acc.adapter.rest;
 
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.acc.application.ArrearsBoardProjection;
@@ -9,6 +8,7 @@ import pl.najem.acc.application.ArrearsBoardProjection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @RestController
 @RequestMapping("/api/acc")
@@ -26,7 +26,7 @@ public class BoardController {
      * arrears next to it.
      */
     @GetMapping("/board")
-    public List<Map<String, Object>> board(@RequestHeader("X-Workspace-Id") UUID workspaceId) {
+    public List<Map<String, Object>> board(@ActingWorkspace UUID workspaceId) {
         return board.forWorkspace(workspaceId).stream()
             .map(row -> Map.<String, Object>of(
                 "tenancyId", row.tenancyId(),

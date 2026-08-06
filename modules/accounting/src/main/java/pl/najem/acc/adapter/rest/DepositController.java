@@ -5,7 +5,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @RestController
 @RequestMapping("/api/acc")
@@ -36,7 +36,7 @@ public class DepositController {
 
     @PostMapping("/tenancies/{tenancyId}/deposit/settle")
     public Map<String, BigDecimal> settle(@PathVariable UUID tenancyId,
-                                          @RequestHeader("X-Workspace-Id") UUID workspaceId,
+                                          @ActingWorkspace UUID workspaceId,
                                           @RequestBody SettlementRequest request) {
         return Map.of("returned", deposits.settle(workspaceId, tenancyId, request.rentAtReturn(),
             request.returnedOn()));

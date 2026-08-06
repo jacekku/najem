@@ -12,6 +12,13 @@ dependencies {
     implementation("org.springframework:spring-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
+    // For `@ActingWorkspace` and nothing else. Reporting had avoided :contracts entirely, which was
+    // a deliberate absence rather than an oversight — it reads payloads as JsonNode and must not
+    // gain the ability to name another module's event types. The annotation carries no behaviour
+    // and no event class, so it does not open that door; it is the same declaration every other
+    // module's controllers make, and reporting's REST layer needs a workspace like all of them.
+    implementation(project(":contracts"))
+
     // Test scope only, on purpose. Tests need the `events` migration and, for the tripwires, the
     // event store itself to drive other modules' services. Reporting's PRODUCTION code must never
     // touch the event store's Java types: it reads payloads as JsonNode, never as a record class.

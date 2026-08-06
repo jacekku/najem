@@ -4,7 +4,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.acc.application.SuspenseEntry;
@@ -14,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 /** Money that has not come to rest, and the two ways a manager can settle what it is. */
 @RestController
@@ -34,7 +34,7 @@ public class SuspenseController {
 
     @GetMapping("/suspense")
     public List<Map<String, Object>> waiting(
-        @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        @ActingWorkspace UUID workspaceId) {
         return suspense.waiting(workspaceId).stream()
             .map(SuspenseController::asWire)
             .toList();
@@ -43,14 +43,14 @@ public class SuspenseController {
     @PostMapping("/payments/{paymentId}/non-tenant")
     public void markNonTenant(@PathVariable UUID paymentId,
                               @RequestBody NonTenantRequest request,
-                              @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+                              @ActingWorkspace UUID workspaceId) {
         suspense.markNonTenant(workspaceId, paymentId, request.reason());
     }
 
     @PostMapping("/payments/{paymentId}/allocate")
     public void allocate(@PathVariable UUID paymentId,
                          @RequestBody ManualAllocationRequest request,
-                         @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+                         @ActingWorkspace UUID workspaceId) {
         suspense.allocateTo(workspaceId, paymentId, request.tenancyId());
     }
 

@@ -5,7 +5,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -21,6 +20,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 /**
  * Reporting's read surface. Everything here is a query over a projection — there is no command,
@@ -73,7 +73,7 @@ public class ReportingController {
      */
     @GetMapping("/properties")
     public List<PropertyBoardQuery.Row> properties(
-        @RequestHeader("X-Workspace-Id") UUID workspaceId,
+        @ActingWorkspace UUID workspaceId,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
         return properties.forWorkspace(workspaceId, orToday(asOf));
     }
@@ -85,28 +85,28 @@ public class ReportingController {
      */
     @GetMapping("/search")
     public List<SearchQuery.Hit> search(
-        @RequestHeader("X-Workspace-Id") UUID workspaceId,
+        @ActingWorkspace UUID workspaceId,
         @RequestParam(required = false) String q) {
         return search.search(workspaceId, q);
     }
 
     @GetMapping("/tenancies/{tenancyId}/timeline")
     public List<TimelineQuery.Entry> tenancyTimeline(
-        @RequestHeader("X-Workspace-Id") UUID workspaceId,
+        @ActingWorkspace UUID workspaceId,
         @PathVariable UUID tenancyId) {
         return timelines.forSubject(workspaceId, "tenancy", tenancyId);
     }
 
     @GetMapping("/units/{unitId}/timeline")
     public List<TimelineQuery.Entry> unitTimeline(
-        @RequestHeader("X-Workspace-Id") UUID workspaceId,
+        @ActingWorkspace UUID workspaceId,
         @PathVariable UUID unitId) {
         return timelines.forSubject(workspaceId, "unit", unitId);
     }
 
     @GetMapping("/properties/{propertyId}/occupancy")
     public PropertyOccupancy.Counts propertyOccupancy(
-        @RequestHeader("X-Workspace-Id") UUID workspaceId,
+        @ActingWorkspace UUID workspaceId,
         @PathVariable UUID propertyId,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
         return occupancy.countsFor(workspaceId, propertyId, orToday(asOf));
@@ -122,7 +122,7 @@ public class ReportingController {
      */
     @GetMapping("/units")
     public List<UnitBoardQuery.Row> unitsInProperty(
-        @RequestHeader("X-Workspace-Id") UUID workspaceId,
+        @ActingWorkspace UUID workspaceId,
         @RequestParam UUID propertyId,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
         return board.forProperty(workspaceId, propertyId, orToday(asOf));

@@ -4,7 +4,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +16,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @RestController
 @RequestMapping("/api/pm")
@@ -36,7 +36,7 @@ public class ComplianceController {
     }
 
     @PostMapping("/properties/{propertyId}/inspections")
-    public Map<String, UUID> record(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public Map<String, UUID> record(@ActingWorkspace UUID workspaceId,
                                     @PathVariable UUID propertyId,
                                     @RequestBody InspectionRequest request) {
         guard.requireProperty(workspaceId, propertyId);
@@ -48,7 +48,7 @@ public class ComplianceController {
     /** A read, but it still names its workspace — there is no fallback left in this module. */
     @GetMapping("/inspections/overdue")
     public List<ComplianceService.OverdueInspection> overdue(
-            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+            @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return compliance.overdue(workspaceId, on == null ? LocalDate.now(clock) : on);
     }

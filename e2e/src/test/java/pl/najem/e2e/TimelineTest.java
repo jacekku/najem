@@ -64,6 +64,11 @@ class TimelineTest {
             "--najem.bank.iban=PL61109010140000071219812874",
             // Explicit: rule 7 forbids acquiring permit-all by omission.
             "--najem.security.permit-all=true",
+            // The one place X-Workspace-Id still works. This suite drives a real application
+            // over HTTP with no identity provider in front of it, so there is no token, no
+            // subject and no membership to resolve a workspace from. Explicit, because a
+            // deployment must never acquire the header path by omission.
+            "--najem.test.workspace-header=true",
             "--spring.datasource.url=" + pg.getJdbcUrl(),
             "--spring.datasource.username=" + pg.getUsername(),
             "--spring.datasource.password=" + pg.getPassword(),

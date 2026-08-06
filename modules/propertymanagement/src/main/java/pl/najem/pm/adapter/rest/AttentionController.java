@@ -2,7 +2,6 @@ package pl.najem.pm.adapter.rest;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +15,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 /**
  * What PM puts in front of a manager. This is the half of the Unit Board that PM owns: the
@@ -45,34 +45,34 @@ public class AttentionController {
 
     @GetMapping("/starting-soon")
     public List<AttentionListsQuery.TenancyAttentionRow> startingSoon(
-            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+            @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return attention.startingSoon(workspaceId, orToday(on));
     }
 
     @GetMapping("/ending-soon")
     public List<AttentionListsQuery.TenancyAttentionRow> endingSoon(
-            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+            @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return attention.endingSoon(workspaceId, orToday(on));
     }
 
     @GetMapping("/insurance-expiring")
     public List<AttentionListsQuery.TenancyAttentionRow> insuranceExpiring(
-            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+            @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return attention.insuranceExpiring(workspaceId, orToday(on));
     }
 
     @GetMapping("/repairs-open")
     public List<AttentionListsQuery.OpenRepairRow> openRepairs(
-            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId) {
+            @ActingWorkspace UUID workspaceId) {
         return attention.openRepairs(workspaceId);
     }
 
     @GetMapping("/inspections-overdue")
     public List<ComplianceService.OverdueInspection> overdueInspections(
-            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+            @ActingWorkspace UUID workspaceId,
             @RequestParam(required = false) LocalDate on) {
         return compliance.overdue(workspaceId, orToday(on));
     }
@@ -88,7 +88,7 @@ public class AttentionController {
      */
     @GetMapping("/tenancies/{tenancyId}/warnings")
     public Map<String, List<String>> warnings(
-            @RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+            @ActingWorkspace UUID workspaceId,
             @PathVariable UUID tenancyId) {
         guard.requireTenancy(workspaceId, tenancyId);
         return Map.of("warnings", tenancies.warnings(tenancyId));

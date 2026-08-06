@@ -126,7 +126,11 @@ With `permit-all` instead, drop `KC_USER` and pass
 the script does goes through the public API, so with sign-in enabled it needs a
 token like any other client.
 
-It prints the agency id. **Put that in `X-Workspace-Id` for every call below.**
+It prints the agency id, which is worth keeping for reading the database — but
+you do not send it anywhere. **The API takes no workspace.** It derives one from
+whoever you are, so the script must be run once against a fresh database: a
+second agency under the same operator makes every call ambiguous and the
+application refuses to guess.
 
 To start over, **drop and recreate the database** (below) rather than emptying
 `events` — the projections outlive a truncated event table, and the stale rows
@@ -140,25 +144,35 @@ but belongs to no agency gets a screen explaining that instead.
 
 ### A round trip through the API
 
-Every call needs `X-Workspace-Id`, reads as well as writes, and the workspace you
-name must be one you belong to — naming somebody else's answers **404**, not 403,
-so the header cannot be used to discover which agency ids exist.
+No call names a workspace. Every endpoint acts in the agency the caller belongs
+to, read and write alike, and there is no field or header for saying otherwise —
+so acting in somebody else's agency is not refused, it is unsayable.
+
+`X-Workspace-Id` used to carry it. It is gone: the check that made it safe lived
+in one interceptor, and every endpoint added afterwards had to remember to be
+covered by it. What remains is a resolver the tests switch on with
+`najem.test.workspace-header=true`, which nothing packaged sets.
+
+Belong to two agencies and a bearer-token call answers **409 `choose-agency`**
+rather than picking one — the browser has a chooser for this, an API client does
+not, and guessing would decide whose books a write lands in. Belong to none and
+it answers **403 `no-agency`**.
 
 ```sh
-W=<the agency id seed-demo.sh printed>
-
 P=$(curl -s -X POST http://localhost:8080/api/pm/properties \
-  -H "Content-Type: application/json" -H "X-Workspace-Id: $W" \
+  -H "Content-Type: application/json" $AUTH \
   -d '{"address":"ul. Marszalkowska 12, Warszawa"}' | jq -r .propertyId)
 
 U=$(curl -s -X POST http://localhost:8080/api/pm/properties/$P/units \
-  -H "Content-Type: application/json" -H "X-Workspace-Id: $W" \
+  -H "Content-Type: application/json" $AUTH \
   -d '{"name":"m. 3","baseRent":3200}' | jq -r .unitId)
 
 # The board is a projection fed asynchronously — allow a moment after a write.
-curl -s -H "X-Workspace-Id: $W" \
-  "http://localhost:8080/api/reporting/units?propertyId=$P" | jq
+curl -s $AUTH "http://localhost:8080/api/reporting/units?propertyId=$P" | jq
 ```
+
+`$AUTH` is `-H "Authorization: Bearer <token>"` with sign-in on, and empty under
+`permit-all`, where every call acts as the configured operator.
 
 ```json
 [{ "unitId": "…", "name": "m. 3", "baseRent": 3200,

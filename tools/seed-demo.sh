@@ -9,7 +9,9 @@
 #   ./tools/seed-demo.sh                    # against localhost:8080
 #   BASE=http://localhost:9000 ./tools/seed-demo.sh
 #
-# Re-running adds another agency rather than editing the last one. To start over,
+# Re-running does NOT work any more, and fails cleanly rather than seeding a mess. The API takes
+# no workspace: it derives one from the caller's memberships, so a second agency under the same
+# operator makes every call ambiguous and the application refuses to guess (409). To start over,
 # drop and recreate the database (see RUNNING.md) and restart the app.
 
 set -euo pipefail
@@ -51,9 +53,9 @@ api() {
   local method=$1 path=$2 body=${3:-}
   if [ -n "$body" ]; then
     curl -sS -X "$method" "$BASE$path" "${AUTH[@]}" \
-      -H "Content-Type: application/json" -H "X-Workspace-Id: $WORKSPACE" -d "$body"
+      -H "Content-Type: application/json" -d "$body"
   else
-    curl -sS -X "$method" "$BASE$path" "${AUTH[@]}" -H "X-Workspace-Id: $WORKSPACE"
+    curl -sS -X "$method" "$BASE$path" "${AUTH[@]}"
   fi
 }
 
@@ -70,6 +72,18 @@ if [ -z "$WORKSPACE" ]; then
   }
 fi
 echo "agency $WORKSPACE"
+
+# Everything below acts as the operator, and the operator must belong to exactly one agency for
+# that to be unambiguous. Checked here rather than left to the first write: a 409 eleven calls in
+# reads as a broken endpoint, and the actual cause -- a database seeded twice -- is nowhere in it.
+AMBIGUOUS=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/acc/board" "${AUTH[@]}")
+if [ "$AMBIGUOUS" = "409" ]; then
+  echo
+  echo "This operator now belongs to more than one agency, so no call can tell which one it means."
+  echo "The header that used to answer that question is gone -- the workspace comes from who you are."
+  echo "Drop and recreate the database (RUNNING.md), restart the app, and run this once."
+  exit 1
+fi
 
 # lawfulBasis is required and is a RODO term, not a formality: "contract" is the
 # basis for holding a tenant's details, and the retention rules downstream key on it.
@@ -194,5 +208,5 @@ reference and one with none at all. So the bank screen has a case at each tier
 of the ladder, including the two that no rule can settle and a person has to.
 
   open $BASE/
-  curl -s -H "X-Workspace-Id: $WORKSPACE" "$BASE/api/reporting/units?propertyId=$P1" | jq
+  curl -s "$BASE/api/reporting/units?propertyId=$P1" | jq
 SUMMARY

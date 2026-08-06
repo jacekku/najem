@@ -5,7 +5,6 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -13,6 +12,7 @@ import pl.najem.mt940.Mt940FormatException;
 
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 /** Uploading a bank statement the manager downloaded from their bank. */
 @RestController
@@ -42,7 +42,7 @@ public class StatementUploadController {
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, Object> upload(
         @RequestBody String statement,
-        @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        @ActingWorkspace UUID workspaceId) {
         return Map.of("linesRead", imports.importStatement(workspaceId, statement));
     }
 

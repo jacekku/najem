@@ -2,13 +2,13 @@ package pl.najem.acc.adapter.rest;
 
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.acc.application.WorkspaceAccountService;
 
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @RestController
 @RequestMapping("/api/acc")
@@ -28,7 +28,7 @@ public class WorkspaceAccountController {
      * be pointing an agency's statement at books nobody identified.
      */
     @PutMapping("/workspace-account")
-    public void register(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public void register(@ActingWorkspace UUID workspaceId,
                          @RequestBody Map<String, String> body) {
         accounts.register(workspaceId, body.get("iban"));
     }

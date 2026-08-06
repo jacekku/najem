@@ -3,7 +3,6 @@ package pl.najem.pm.adapter.rest;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.TenancyService;
@@ -22,6 +21,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @RestController
 @RequestMapping("/api/pm/tenancies")
@@ -67,7 +67,7 @@ public class TenancyController {
     }
 
     @PostMapping
-    public Map<String, Object> reserve(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public Map<String, Object> reserve(@ActingWorkspace UUID workspaceId,
                                        @RequestBody ReserveRequest request) {
         guard.requireUnit(workspaceId, request.unitId());
         var reservation = tenancies.reserve(toCommand(request));
@@ -75,7 +75,7 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/activate")
-    public Map<String, Object> activate(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public Map<String, Object> activate(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                         @RequestBody ActivateRequest request) {
         guard.requireTenancy(workspaceId, tenancyId);
@@ -83,28 +83,28 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/cancel")
-    public void cancel(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public void cancel(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody(required = false) CancelRequest request) {
         guard.requireTenancy(workspaceId, tenancyId);
         tenancies.cancelReservation(tenancyId, request == null ? "" : request.reason());
     }
 
     @PostMapping("/{tenancyId}/tenants")
-    public void addTenant(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public void addTenant(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody ContactRequest request) {
         guard.requireTenancy(workspaceId, tenancyId);
         tenancies.addTenant(tenancyId, request.contactId());
     }
 
     @PostMapping("/{tenancyId}/tenants/{contactId}/remove")
-    public void removeTenant(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public void removeTenant(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @PathVariable UUID contactId) {
         guard.requireTenancy(workspaceId, tenancyId);
         tenancies.removeTenant(tenancyId, contactId);
     }
 
     @PostMapping("/{tenancyId}/rent-changes")
-    public Map<String, Object> scheduleRentChange(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public Map<String, Object> scheduleRentChange(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                                   @RequestBody RentChangeRequest request) {
         MonthlyAmount.Breakdown breakdown = null;
@@ -119,7 +119,7 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/rent-changes/{effectiveFrom}/cancel")
-    public void cancelRentChange(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public void cancelRentChange(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                  @PathVariable LocalDate effectiveFrom) {
         guard.requireTenancy(workspaceId, tenancyId);
@@ -127,7 +127,7 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/termination-notice")
-    public void giveTerminationNotice(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public void giveTerminationNotice(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                       @RequestBody NoticeRequest request) {
         guard.requireTenancy(workspaceId, tenancyId);
@@ -136,7 +136,7 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/end")
-    public void end(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public void end(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody EndRequest request) {
         guard.requireTenancy(workspaceId, tenancyId);
         tenancies.end(tenancyId, new EndTenancy(request.endDate(), request.vacateDate(),
@@ -147,14 +147,14 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/comments")
-    public void addComment(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public void addComment(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody CommentRequest request) {
         guard.requireTenancy(workspaceId, tenancyId);
         tenancies.addComment(tenancyId, request.text());
     }
 
     @PostMapping("/{tenancyId}/corrections")
-    public Map<String, Object> correctDetails(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public Map<String, Object> correctDetails(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId,
                                               @RequestBody Map<String, String> corrections) {
         guard.requireTenancy(workspaceId, tenancyId);
@@ -162,7 +162,7 @@ public class TenancyController {
     }
 
     @PostMapping("/{tenancyId}/documents")
-    public void attachDocument(@RequestHeader(WorkspaceHeader.NAME) UUID workspaceId,
+    public void attachDocument(@ActingWorkspace UUID workspaceId,
                            @PathVariable UUID tenancyId, @RequestBody DocumentRequest request) {
         guard.requireTenancy(workspaceId, tenancyId);
         tenancies.attachDocument(tenancyId, docTypeOf(request.docType()), request.s3Ref(),

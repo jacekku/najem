@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -21,6 +20,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @RestController
 @RequestMapping("/api/contacts")
@@ -39,7 +39,7 @@ public class InterestsController {
 
     @PostMapping("/{contactId}/interests")
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, UUID> register(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public Map<String, UUID> register(@ActingWorkspace UUID workspaceId,
                                       @PathVariable UUID contactId,
                                       @RequestBody RegisterInterestRequest request) {
         return Map.of("interestId", interests.register(workspaceId, contactId,
@@ -48,7 +48,7 @@ public class InterestsController {
 
     @DeleteMapping("/interests/{interestId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void withdraw(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public void withdraw(@ActingWorkspace UUID workspaceId,
                          @PathVariable UUID interestId,
                          @RequestParam(required = false)
                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate on) {
@@ -56,7 +56,7 @@ public class InterestsController {
     }
 
     @GetMapping("/units/{unitId}/interests")
-    public List<Interest> forUnit(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public List<Interest> forUnit(@ActingWorkspace UUID workspaceId,
                                   @PathVariable UUID unitId) {
         return interests.forUnit(workspaceId, unitId);
     }

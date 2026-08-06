@@ -2,13 +2,24 @@ package pl.najem.app.web;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
-import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import pl.najem.app.web.api.ApiWorkspaceResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
 
 /**
- * Wires the UI's own argument resolvers.
+ * Wires the argument resolvers that hand a request its workspace.
+ *
+ * <p>Two of them, and between them they are the only ways a workspace is decided anywhere in this
+ * application: {@link WebWorkspaceArgumentResolver} for the screens, and whichever one
+ * {@code ApiWorkspaceConfig} selected for the modules' APIs. No controller reads a workspace from
+ * a request, so none can be handed one its caller chose.
+ *
+ * <p><b>The {@code X-Workspace-Id} interceptor used to be registered here and is gone.</b> It
+ * checked that a caller belonged to the workspace they named — correctly, and it caught a real
+ * hole. It became unnecessary rather than wrong: nobody names a workspace now, so there is no claim
+ * left to check. Keeping it would have meant maintaining a guard whose failure branch is
+ * unreachable, which is the kind of code that later reads as protection somebody is relying on.
  *
  * <p>Deliberately does NOT touch {@code SecurityConfig}. That class is unconditional on purpose:
  * spring-security on the classpath with no chain registered is not "no security", it is Boot's
@@ -21,25 +32,17 @@ import java.util.List;
 public class WebConfig implements WebMvcConfigurer {
 
     private final WebWorkspaceArgumentResolver workspaces;
-    private final WorkspaceHeaderInterceptor headerCheck;
+    private final ApiWorkspaceResolver apiWorkspaces;
 
-    public WebConfig(WebWorkspaceArgumentResolver workspaces, WorkspaceHeaderInterceptor headerCheck) {
+    public WebConfig(WebWorkspaceArgumentResolver workspaces,
+                     ApiWorkspaceResolver apiWorkspaces) {
         this.workspaces = workspaces;
-        this.headerCheck = headerCheck;
+        this.apiWorkspaces = apiWorkspaces;
     }
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(workspaces);
-    }
-
-    /**
-     * Scoped to {@code /api/**} deliberately. The screens resolve their workspace through
-     * {@link WebWorkspaceResolver} and never send the header — applying this to them would demand
-     * of a screen the very thing the seam exists to stop it sending.
-     */
-    @Override
-    public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(headerCheck).addPathPatterns("/api/**");
+        resolvers.add(apiWorkspaces);
     }
 }

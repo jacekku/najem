@@ -3,7 +3,6 @@ package pl.najem.acc.adapter.rest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.acc.application.IngestionService;
@@ -14,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @RestController
 @RequestMapping("/api/acc")
@@ -45,7 +45,7 @@ public class ReconciliationController {
      * and this annotation must not be read as though it did.
      */
     @PostMapping("/ingest/fetch")
-    public void fetch(@RequestHeader("X-Workspace-Id") UUID workspaceId) {
+    public void fetch(@ActingWorkspace UUID workspaceId) {
         ingestion.fetchAndIngest(workspaceId);
     }
 
@@ -63,7 +63,7 @@ public class ReconciliationController {
      */
     @GetMapping("/suggestions")
     public List<Map<String, Object>> suggestions(
-        @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+        @ActingWorkspace UUID workspaceId) {
         return suggestions.forWorkspace(workspaceId).stream().map(row -> {
             // LinkedHashMap rather than Map.of: fourteen entries exceeds its overloads, and the
             // field order is what a human reads when they curl this.
@@ -89,7 +89,7 @@ public class ReconciliationController {
 
     @PostMapping("/payments/{paymentId}/confirm")
     public void confirm(@PathVariable UUID paymentId,
-                        @RequestHeader("X-Workspace-Id") UUID workspaceId) {
+                        @ActingWorkspace UUID workspaceId) {
         reconciliation.confirm(workspaceId, paymentId);
     }
 }

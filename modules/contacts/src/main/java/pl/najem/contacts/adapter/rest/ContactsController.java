@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -27,6 +26,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import pl.najem.contracts.web.ActingWorkspace;
 
 @RestController
 @RequestMapping("/api/contacts")
@@ -62,7 +62,7 @@ public class ContactsController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, UUID> register(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public Map<String, UUID> register(@ActingWorkspace UUID workspaceId,
                                       @RequestBody RegisterContactRequest request) {
         var contactId = contacts.register(new NewContact(workspaceId,
             new ContactDetails(request.givenName(), request.surname(), request.email(), request.phone()),
@@ -71,7 +71,7 @@ public class ContactsController {
     }
 
     @GetMapping("/{contactId}")
-    public ContactDetails find(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public ContactDetails find(@ActingWorkspace UUID workspaceId,
                                @PathVariable UUID contactId) {
         return directory.find(workspaceId, contactId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -83,20 +83,20 @@ public class ContactsController {
      * {@link ContactDirectory#search}.
      */
     @GetMapping("/search")
-    public List<ContactDirectory.Match> search(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public List<ContactDirectory.Match> search(@ActingWorkspace UUID workspaceId,
                                                @RequestParam(required = false) String q) {
         return directory.search(workspaceId, q);
     }
 
     @GetMapping(params = "email")
-    public List<UUID> findByEmail(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public List<UUID> findByEmail(@ActingWorkspace UUID workspaceId,
                                   @RequestParam String email) {
         return directory.findByEmail(workspaceId, email);
     }
 
     @PutMapping("/{contactId}/details")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void correct(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public void correct(@ActingWorkspace UUID workspaceId,
                         @PathVariable UUID contactId, @RequestBody ContactDetailsRequest request) {
         contacts.correctDetails(workspaceId, contactId,
             new ContactDetails(request.givenName(), request.surname(), request.email(), request.phone()),
@@ -105,7 +105,7 @@ public class ContactsController {
 
     @DeleteMapping("/{contactId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void erase(@RequestHeader("X-Workspace-Id") UUID workspaceId,
+    public void erase(@ActingWorkspace UUID workspaceId,
                       @PathVariable UUID contactId,
                       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate on) {
         contacts.erase(workspaceId, contactId, on == null ? today() : on);
