@@ -155,7 +155,7 @@ class EventContractTest {
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
         var invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
-        var ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
+        var ingestion = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc);
         var reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
 
         var workspace = UUID.randomUUID();

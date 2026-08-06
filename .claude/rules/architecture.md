@@ -106,11 +106,13 @@ Rule A5 is the destination. As of 2026-08-05 the accounting module is partway th
   `AccountingRepository` — the arrears board, which reads through `InvoiceRepository` and writes
   through `ArrearsStandingProjection`, the posting path: `InvoiceService` (was `LedgerService`)
   asserts, withdraws and credits obligations through that same `InvoiceRepository`, and the warning
-  register behind `WarningRepository`, and deposits behind `DepositRepository` — which reuse
-  `InvoiceRepository` for the obligation the tenant actually pays.
-- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **7 times** in
+  register behind `WarningRepository`, deposits behind `DepositRepository` — which reuse
+  `InvoiceRepository` for the obligation the tenant actually pays — and the bank-account register
+  behind `WorkspaceAccountRepository`.
+- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **6 times** in
   `pl.najem.acc.application`. `CorrectionService`, `IngestionService`, `SuspenseService`,
-  `ReconciliationService` and others are each a service and their own repository at once.
+  `ReconciliationService`, `ArrearsBoardQuery` and `SuggestionQuery` are each a service and their
+  own repository at once.
 
 Each of those imports is a port that has not been named yet. `CorrectionService` holding a
 `JdbcTemplate` is not a violation of A5 — it is a class the extraction has not reached. The

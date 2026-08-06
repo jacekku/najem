@@ -4,6 +4,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import pl.najem.acc.application.AccountingService;
 import pl.najem.acc.application.AllocationService;
 import pl.najem.acc.application.ArrearsBoardService;
+import pl.najem.acc.application.BankStatementPort;
+import pl.najem.acc.application.IngestionService;
+import pl.najem.acc.application.MatchingPolicy;
+import pl.najem.acc.application.WorkspaceAccountService;
 import pl.najem.acc.application.DepositService;
 import pl.najem.acc.application.InvoiceService;
 import pl.najem.acc.application.ReconciliationService;
@@ -73,6 +77,25 @@ public final class PostgresAccounting {
     public static DepositService depositService(EventStore store, JdbcTemplate jdbc) {
         return new DepositService(store, new PostgresDepositRepository(jdbc),
             new PostgresInvoiceRepository(jdbc), warningService(jdbc));
+    }
+
+    public static WorkspaceAccountService workspaceAccountService(JdbcTemplate jdbc) {
+        return new WorkspaceAccountService(new PostgresWorkspaceAccountRepository(jdbc),
+            Clock.systemDefaultZone());
+    }
+
+    /**
+     * Ingestion needs the account register, because a workspace nobody registered an account for
+     * cannot ingest and there is deliberately no fallback.
+     */
+    public static IngestionService ingestionService(BankStatementPort bank, EventStore store,
+                                                    JdbcTemplate jdbc) {
+        return new IngestionService(bank, store, jdbc, workspaceAccountService(jdbc));
+    }
+
+    public static IngestionService ingestionService(BankStatementPort bank, EventStore store,
+                                                    JdbcTemplate jdbc, MatchingPolicy policy) {
+        return new IngestionService(bank, store, jdbc, workspaceAccountService(jdbc), policy);
     }
 
     public static SuspenseService suspenseService(EventStore store, JdbcTemplate jdbc) {

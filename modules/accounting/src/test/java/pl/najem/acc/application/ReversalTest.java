@@ -70,7 +70,7 @@ class ReversalTest {
         var board = PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(
             DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
         invoicing = new InvoiceService(store, new PostgresInvoiceRepository(jdbc), PostgresAccounting.warningService(jdbc), board);
-        ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
+        ingestion = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc);
         var accounting = new AccountingService(
             PostgresAccounting.allocationService(store, jdbc), board);
         suspense = PostgresAccounting.suspenseService(store, jdbc);

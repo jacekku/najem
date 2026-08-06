@@ -57,7 +57,7 @@ class SuggestionQueryTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
-        laddered = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
+        laddered = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
         suggestions = new SuggestionQuery(jdbc);
     }
 

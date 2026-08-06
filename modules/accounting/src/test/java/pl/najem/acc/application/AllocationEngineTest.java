@@ -66,7 +66,7 @@ class AllocationEngineTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
-        ingestion = new IngestionService((since, iban) -> List.of(), store, jdbc);
+        ingestion = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc);
         allocation = PostgresAccounting.accountingService(store, jdbc);
     }
 

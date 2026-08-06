@@ -12,6 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.AccEventTypes;
+import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -86,7 +87,7 @@ class WorkspaceBankAccountTest {
         register(AGENCY_A, IBAN_A);
         register(AGENCY_B, IBAN_B);
         var bank = new AccountAwareBank();
-        var ingestion = new IngestionService(bank, store, jdbc);
+        var ingestion = PostgresAccounting.ingestionService(bank, store, jdbc);
 
         ingestion.fetchAndIngest(AGENCY_A);
         ingestion.fetchAndIngest(AGENCY_B);
@@ -104,7 +105,7 @@ class WorkspaceBankAccountTest {
     void aWorkspaceWithNoRegisteredAccountRefusesToIngestAnything() {
         var unconfigured = UUID.randomUUID();
         var bank = new AccountAwareBank();
-        var ingestion = new IngestionService(bank, store, jdbc);
+        var ingestion = PostgresAccounting.ingestionService(bank, store, jdbc);
 
         assertThatThrownBy(() -> ingestion.fetchAndIngest(unconfigured))
             .isInstanceOf(NoBankAccountRegisteredException.class)

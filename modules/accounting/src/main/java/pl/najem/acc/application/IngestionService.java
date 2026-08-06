@@ -22,33 +22,37 @@ public class IngestionService {
     private final BankStatementPort bank;
     private final EventStore store;
     private final JdbcTemplate jdbc;
+    private final WorkspaceAccountService accounts;
     private final MatchingPolicy policy;
     private final Clock clock;
 
     @Autowired
     public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
+                            WorkspaceAccountService accounts,
                             @Value("${acc.matching.tiers-enabled:false}") boolean tiersEnabled,
                             @Value("${acc.matching.auto-confirm:false}") boolean autoConfirm) {
-        this(bank, store, jdbc, new MatchingPolicy(tiersEnabled, autoConfirm));
+        this(bank, store, jdbc, accounts, new MatchingPolicy(tiersEnabled, autoConfirm));
     }
 
     public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
-                            MatchingPolicy policy) {
-        this(bank, store, jdbc, policy, Clock.systemDefaultZone());
+                            WorkspaceAccountService accounts, MatchingPolicy policy) {
+        this(bank, store, jdbc, accounts, policy, Clock.systemDefaultZone());
     }
 
     public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
-                            MatchingPolicy policy, Clock clock) {
+                            WorkspaceAccountService accounts, MatchingPolicy policy, Clock clock) {
         this.bank = bank;
         this.store = store;
         this.jdbc = jdbc;
+        this.accounts = accounts;
         this.policy = policy;
         this.clock = clock;
     }
 
     /** Ingestion with the launch policy: tier 1 only, no automatic allocation. */
-    public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc) {
-        this(bank, store, jdbc, MatchingPolicy.tierOneOnly());
+    public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
+                            WorkspaceAccountService accounts) {
+        this(bank, store, jdbc, accounts, MatchingPolicy.tierOneOnly());
     }
 
     /**
@@ -60,18 +64,10 @@ public class IngestionService {
      * a charge in two different agencies and, if both accepted, read as paid in both.
      */
     public void fetchAndIngest(UUID workspaceId) {
-        for (BankLine line : bank.fetchSince(LocalDate.now(clock).minusDays(30), accountOf(workspaceId))) {
+        var iban = accounts.accountOf(workspaceId);
+        for (BankLine line : bank.fetchSince(LocalDate.now(clock).minusDays(30), iban)) {
             ingest(workspaceId, line);
         }
-    }
-
-    private String accountOf(UUID workspaceId) {
-        var accounts = jdbc.queryForList(
-            "select iban from acc_workspace_account where workspace_id = ?", String.class, workspaceId);
-        if (accounts.isEmpty()) {
-            throw new NoBankAccountRegisteredException(workspaceId);
-        }
-        return accounts.getFirst();
     }
 
     public void ingest(UUID workspaceId, BankLine line) {

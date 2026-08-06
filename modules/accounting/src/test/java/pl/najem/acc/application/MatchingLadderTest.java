@@ -65,8 +65,8 @@ class MatchingLadderTest {
         warnings = PostgresAccounting.warningService(jdbc);
         invoicing = PostgresAccounting.invoiceService(store, jdbc, warnings);
         reconciliation = PostgresAccounting.reconciliationService(store, jdbc);
-        laddered = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
-        tierOneOnly = new IngestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tierOneOnly());
+        laddered = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
+        tierOneOnly = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tierOneOnly());
     }
 
     /**

@@ -1,6 +1,5 @@
 package pl.najem.acc.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,16 +13,19 @@ import java.util.UUID;
  * <p>Registering is deliberately an explicit act rather than a configuration value: the account
  * answers "whose money is this?", and there is no answer a deployment can give on a workspace's
  * behalf. Until a workspace registers one it cannot reconcile at all.
+ *
+ * <p>That last sentence is a rule, so it is one method rather than a query every caller repeats.
+ * {@link #accountOf} refuses; nothing in this module may fall back to an account it was not given.
  */
 @Service
 @Transactional
 public class WorkspaceAccountService {
 
-    private final JdbcTemplate jdbc;
+    private final WorkspaceAccountRepository accounts;
     private final Clock clock;
 
-    public WorkspaceAccountService(JdbcTemplate jdbc, Clock clock) {
-        this.jdbc = jdbc;
+    public WorkspaceAccountService(WorkspaceAccountRepository accounts, Clock clock) {
+        this.accounts = accounts;
         this.clock = clock;
     }
 
@@ -39,10 +41,18 @@ public class WorkspaceAccountService {
         if (iban == null || iban.isBlank()) {
             throw new IllegalArgumentException("an account registration needs an iban");
         }
-        jdbc.update("""
-            insert into acc_workspace_account(workspace_id, iban, registered_on) values (?,?,?)
-            on conflict (workspace_id) do update set iban = excluded.iban,
-                                                     registered_on = excluded.registered_on
-            """, workspaceId, iban.strip(), LocalDate.now(clock));
+        accounts.register(workspaceId, iban.strip(), LocalDate.now(clock));
+    }
+
+    /**
+     * The account to fetch this workspace's statement from.
+     *
+     * <p>There is no fallback and there must not be one. Ingesting from a configured account and
+     * handing every line to whichever workspace asked is how one transfer came to be suggested
+     * against charges in two different agencies and, if both accepted, read as paid in both.
+     */
+    public String accountOf(UUID workspaceId) {
+        return accounts.ibanOf(workspaceId)
+            .orElseThrow(() -> new NoBankAccountRegisteredException(workspaceId));
     }
 }
