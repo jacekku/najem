@@ -1,6 +1,7 @@
 package pl.najem.um.application;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.eventstore.EventStore;
@@ -44,6 +45,7 @@ public class InvitationService {
         this.keycloak = keycloak;
     }
 
+    @PreAuthorize("@caller.isAdminOf(#workspaceId)")
     public Issued invite(UUID workspaceId, String email, Role role, UUID invitedByUserId,
                          LocalDate on, LocalDate expiresOn) {
         if (email == null || email.isBlank()) {
@@ -70,6 +72,7 @@ public class InvitationService {
         return new Issued(invitationId, token);
     }
 
+    @PreAuthorize("@caller.isAdminOf(#workspaceId)")
     public void revoke(UUID workspaceId, UUID invitationId, LocalDate on) {
         // Scope the row by workspace, and check before appending. The workspace used to pick the
         // event stream and nothing else, so an admin of one agency holding another's invitation

@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
@@ -45,8 +46,25 @@ import org.springframework.security.web.SecurityFilterChain;
  * looks like a broken deployment and invites someone to "fix" it by turning security off, whereas
  * an app that will not start names exactly what is missing.
  */
+/*
+ * @EnableMethodSecurity turns on @PreAuthorize, which is where workspace-role authorization is
+ * enforced (see ActingCaller). It supersedes @EnableGlobalMethodSecurity and uses the
+ * AuthorizationManager API.
+ *
+ * It is on unconditionally, including under permit-all. That posture removes the requirement to
+ * authenticate; it does not remove the requirement to be an ADMIN of the agency you are
+ * administering, and a switch that silently did both would be exactly the fail-open this class
+ * exists to refuse.
+ *
+ * IMPORTANT, and written here because it is not obvious: method security is proxy-based, so it
+ * applies only to calls that arrive through a Spring bean reference. A service built with `new` --
+ * every test fixture in this repository does -- has no proxy and therefore no check. Those tests
+ * exercise rules, not permissions, and a green one is not evidence that authorization works.
+ * MethodSecurityWiringTest is what covers that, by booting a context.
+ */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     static final String ISSUER_URI = "spring.security.oauth2.resourceserver.jwt.issuer-uri";

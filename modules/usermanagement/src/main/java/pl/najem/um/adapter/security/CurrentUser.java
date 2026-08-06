@@ -6,6 +6,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
+import pl.najem.um.application.AuthenticatedSubject;
 import pl.najem.um.application.UserService;
 import pl.najem.um.application.WorkspaceAccess;
 import pl.najem.um.domain.Role;
@@ -18,9 +19,13 @@ import java.util.UUID;
  * Turns a JWT into NAJEM's own notion of who is calling. The token is trusted for exactly one claim
  * — {@code sub} — and never for roles or workspace membership; those resolve from this module's own
  * projection (decision D1, Keycloak is the identity provider only).
+ *
+ * <p>Implements {@link AuthenticatedSubject}, which is how the application layer asks this question
+ * without importing Spring Security or this package. Everything here that takes a {@link Jwt} is for
+ * the web layer, which legitimately holds one; the port carries only a subject.
  */
 @Component
-public class CurrentUser {
+public class CurrentUser implements AuthenticatedSubject {
 
     private final UserService users;
     private final WorkspaceAccess access;
@@ -50,6 +55,11 @@ public class CurrentUser {
      * <p>Empty means nobody is authenticated, which is a different thing from being refused: under
      * permit-all there is genuinely no caller, and the operator fallback is correct there.
      */
+    @Override
+    public Optional<UUID> current() {
+        return authenticatedSubject();
+    }
+
     public Optional<UUID> authenticatedSubject() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {

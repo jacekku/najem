@@ -3,6 +3,7 @@ package pl.najem.app.web;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import pl.najem.app.web.api.ApiWorkspaceResolver;
+import pl.najem.um.adapter.rest.ActingUserArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
@@ -33,16 +34,23 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final WebWorkspaceArgumentResolver workspaces;
     private final ApiWorkspaceResolver apiWorkspaces;
+    private final ActingUserArgumentResolver actingUsers;
 
     public WebConfig(WebWorkspaceArgumentResolver workspaces,
-                     ApiWorkspaceResolver apiWorkspaces) {
+                     ApiWorkspaceResolver apiWorkspaces,
+                     ActingUserArgumentResolver actingUsers) {
         this.workspaces = workspaces;
         this.apiWorkspaces = apiWorkspaces;
+        this.actingUsers = actingUsers;
     }
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(workspaces);
         resolvers.add(apiWorkspaces);
+        // Identity, not workspace: user-management's own endpoints need to know which person is
+        // acting, which no other module asks. Registered here because argument resolvers are
+        // application-wide and this is the class that owns that list.
+        resolvers.add(actingUsers);
     }
 }

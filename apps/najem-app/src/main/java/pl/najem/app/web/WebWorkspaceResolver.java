@@ -6,7 +6,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import pl.najem.um.adapter.security.CurrentUser;
 import pl.najem.um.application.WorkspaceAccess;
-import pl.najem.um.application.WorkspaceCaller;
+import pl.najem.um.application.ActingCaller;
 
 import java.util.UUID;
 
@@ -14,7 +14,7 @@ import java.util.UUID;
  * Resolves the workspace a request acts in, from UserManagement's own projection.
  *
  * <p>Nothing here invents a notion of identity, membership or role: the acting user comes from
- * {@link WorkspaceCaller} (a JWT when secured, the configured platform operator when not, and
+ * {@link ActingCaller} (a JWT when secured, the configured platform operator when not, and
  * {@link AccessDeniedException} when neither — an unauthenticated request never ends up acting as
  * somebody), and the memberships come from {@link WorkspaceAccess}. Keycloak is trusted for
  * {@code sub} and nothing else.
@@ -25,11 +25,11 @@ public class WebWorkspaceResolver {
     /** Where a chosen workspace is remembered between requests. Chosen, never trusted. */
     static final String SESSION_KEY = "najem.activeWorkspace";
 
-    private final WorkspaceCaller caller;
+    private final ActingCaller caller;
     private final WorkspaceAccess access;
     private final CurrentUser currentUser;
 
-    public WebWorkspaceResolver(WorkspaceCaller caller, WorkspaceAccess access, CurrentUser currentUser) {
+    public WebWorkspaceResolver(ActingCaller caller, WorkspaceAccess access, CurrentUser currentUser) {
         this.caller = caller;
         this.access = access;
         this.currentUser = currentUser;
@@ -48,7 +48,7 @@ public class WebWorkspaceResolver {
     }
 
     public WebWorkspace resolve(Jwt jwt, HttpSession session) {
-        UUID userId = caller.resolveWithoutWorkspace(jwt);
+        UUID userId = caller.actingUserId();
         UUID subject = subjectOf(jwt);
 
         var memberships = access.forSubject(subject);
@@ -103,7 +103,7 @@ public class WebWorkspaceResolver {
     private UUID subjectOf(Jwt jwt) {
         return jwt != null
             ? currentUser.subject(jwt)
-            : access.subjectOf(caller.resolveWithoutWorkspace(jwt)).orElseThrow(
+            : access.subjectOf(caller.actingUserId()).orElseThrow(
                 () -> new AccessDeniedException("no Keycloak subject for the acting user"));
     }
 

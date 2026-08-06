@@ -1,6 +1,7 @@
 package pl.najem.um.application;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.eventstore.EventStore;
@@ -24,6 +25,7 @@ public class MembershipService {
         this.jdbc = jdbc;
     }
 
+    @PreAuthorize("@caller.isAdminOf(#workspaceId)")
     public void changeRole(UUID workspaceId, UUID userId, Role role, LocalDate on) {
         requireMember(workspaceId, userId);
         if (role != Role.ADMIN) {
@@ -36,6 +38,7 @@ public class MembershipService {
             role.name(), workspaceId, userId);
     }
 
+    @PreAuthorize("@caller.isAdminOf(#workspaceId)")
     public void remove(UUID workspaceId, UUID userId, LocalDate on) {
         requireMember(workspaceId, userId);
         requireAnotherAdmin(workspaceId, userId);

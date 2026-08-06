@@ -44,6 +44,25 @@ public class WorkspaceAccess {
             keycloakSubject);
     }
 
+    /**
+     * The same list, reached by NAJEM user id rather than by Keycloak subject.
+     *
+     * <p>{@code /me} used to resolve the caller to a user id, then turn that back into a subject via
+     * {@link #subjectOf}, purely because {@link #forSubject} was the only way in. Two lookups and a
+     * round trip through the identity provider's notion of a person to answer a question about ours.
+     */
+    public List<Membership> membershipsOfUser(UUID userId) {
+        return jdbc.query("""
+            select m.workspace_id, w.name, m.role
+            from um_membership m
+              join um_workspace w on w.workspace_id = m.workspace_id
+            where m.user_id = ?
+            order by m.joined_on, m.workspace_id
+            """, (rs, i) -> new Membership(
+                rs.getObject(1, UUID.class), rs.getString(2), Role.valueOf(rs.getString(3))),
+            userId);
+    }
+
     public Optional<Role> roleIn(UUID keycloakSubject, UUID workspaceId) {
         return forSubject(keycloakSubject).stream()
             .filter(m -> m.workspaceId().equals(workspaceId))

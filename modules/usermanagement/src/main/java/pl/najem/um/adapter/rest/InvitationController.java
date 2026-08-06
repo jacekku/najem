@@ -1,17 +1,13 @@
 package pl.najem.um.adapter.rest;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import pl.najem.um.adapter.security.CurrentUser;
 import pl.najem.um.application.InvitationService;
-import pl.najem.um.application.WorkspaceCaller;
 import pl.najem.um.domain.Role;
 
 import java.time.Clock;
@@ -27,32 +23,29 @@ public class InvitationController {
     public record AcceptRequest(String token) {}
 
     private final InvitationService invitations;
-    private final CurrentUser currentUser;
-    private final WorkspaceCaller caller;
     private final Clock clock;
 
-    public InvitationController(InvitationService invitations, CurrentUser currentUser,
-                                WorkspaceCaller caller, Clock clock) {
+    public InvitationController(InvitationService invitations, Clock clock) {
         this.invitations = invitations;
-        this.currentUser = currentUser;
-        this.caller = caller;
         this.clock = clock;
     }
 
+    /**
+     * {@code invitedBy} is injected, not read from the request — an inviter who cannot state who
+     * they are cannot state somebody else. Whether they may invite is {@code InvitationService}'s
+     * {@code @PreAuthorize}, a separate question decided in a separate place.
+     */
     @PostMapping("/workspaces/{workspaceId}/invitations")
     public Map<String, Object> invite(@PathVariable UUID workspaceId,
                                       @RequestBody InviteRequest request,
-                                      @AuthenticationPrincipal Jwt jwt) {
-        UUID invitedBy = caller.resolve(jwt, workspaceId, Role.ADMIN);
+                                      @ActingUser UUID invitedBy) {
         var issued = invitations.invite(workspaceId, request.email(), request.role(), invitedBy,
             LocalDate.now(clock), request.expiresOn());
         return Map.of("invitationId", issued.invitationId(), "token", issued.token());
     }
 
     @DeleteMapping("/workspaces/{workspaceId}/invitations/{invitationId}")
-    public ResponseEntity<Void> revoke(@PathVariable UUID workspaceId, @PathVariable UUID invitationId,
-                                       @AuthenticationPrincipal Jwt jwt) {
-        caller.resolve(jwt, workspaceId, Role.ADMIN);
+    public ResponseEntity<Void> revoke(@PathVariable UUID workspaceId, @PathVariable UUID invitationId) {
         invitations.revoke(workspaceId, invitationId, LocalDate.now(clock));
         return ResponseEntity.noContent().build();
     }
