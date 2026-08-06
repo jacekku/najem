@@ -10,6 +10,7 @@ import pl.najem.acc.application.IngestionService;
 import pl.najem.acc.application.MatchingPolicy;
 import pl.najem.acc.application.WorkspaceAccountService;
 import pl.najem.acc.application.DepositService;
+import pl.najem.acc.application.InvoiceRepository;
 import pl.najem.acc.application.InvoiceService;
 import pl.najem.acc.application.ReconciliationService;
 import pl.najem.acc.application.SuspenseService;
@@ -32,9 +33,11 @@ import java.time.Clock;
  * real services and need the same wiring, which is why this is a fixtures source set rather than
  * one module's private test helper.
  *
- * <p>The clock here is the system default rather than the {@code Europe/Warsaw} bean the container
- * supplies. Callers whose assertions depend on today should build the services themselves and pass
- * a fixed clock rather than reaching for these.
+ * <p>The clock defaults to the system default rather than the {@code Europe/Warsaw} bean the
+ * container supplies. Every service whose answer moves with the date has a second form taking one
+ * explicitly, because the alternative was worse: three tests could not say when they were asking,
+ * so they built the services themselves and named four adapters to do it. A fixture that cannot
+ * express a fixed clock is a fixture those tests route around.
  */
 public final class PostgresAccounting {
 
@@ -57,14 +60,34 @@ public final class PostgresAccounting {
     }
 
     public static AccountingService accountingService(EventStore store, JdbcTemplate jdbc) {
+        return accountingService(store, jdbc, Clock.systemDefaultZone());
+    }
+
+    public static AccountingService accountingService(EventStore store, JdbcTemplate jdbc,
+                                                      Clock clock) {
         return new AccountingService(allocationService(store, jdbc),
-            arrearsBoardService(jdbc, Clock.systemDefaultZone()));
+            arrearsBoardService(jdbc, clock));
     }
 
     public static InvoiceService invoiceService(EventStore store, JdbcTemplate jdbc,
                                               WarningService warnings) {
+        return invoiceService(store, jdbc, warnings, Clock.systemDefaultZone());
+    }
+
+    public static InvoiceService invoiceService(EventStore store, JdbcTemplate jdbc,
+                                              WarningService warnings, Clock clock) {
         return new InvoiceService(store, new PostgresInvoiceRepository(jdbc), warnings,
-            arrearsBoardService(jdbc, Clock.systemDefaultZone()));
+            arrearsBoardService(jdbc, clock));
+    }
+
+    /**
+     * The charge record, exposed because a test that posts a charge and then reads it back needs the
+     * port rather than the SQL — and because reaching for the adapter to get one is what put an
+     * adapter import in three test files. The same reason {@code processDue} is exposed on the
+     * property-management fixture.
+     */
+    public static InvoiceRepository invoices(JdbcTemplate jdbc) {
+        return new PostgresInvoiceRepository(jdbc);
     }
 
     /**
@@ -103,10 +126,19 @@ public final class PostgresAccounting {
     }
 
     public static CorrectionService correctionService(EventStore store, JdbcTemplate jdbc) {
+        return correctionService(store, jdbc, Clock.systemDefaultZone());
+    }
+
+    /**
+     * One clock, not two. The service dates the reversal from it and the board reads today from it,
+     * and a caller who fixed only the second would be asserting a colour as of 2027 while reversing
+     * a payment on the real today — which is the shape the hand-wiring in {@code ReversalTest} had.
+     */
+    public static CorrectionService correctionService(EventStore store, JdbcTemplate jdbc,
+                                                      Clock clock) {
         return new CorrectionService(store, new PostgresPaymentRepository(jdbc),
             new PostgresInvoiceRepository(jdbc), new PostgresAccountingRepository(jdbc),
-            accountingService(store, jdbc), arrearsBoardService(jdbc, Clock.systemDefaultZone()),
-            Clock.systemDefaultZone());
+            accountingService(store, jdbc, clock), arrearsBoardService(jdbc, clock), clock);
     }
 
     public static SuspenseService suspenseService(EventStore store, JdbcTemplate jdbc) {

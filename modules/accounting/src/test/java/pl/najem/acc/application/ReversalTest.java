@@ -12,9 +12,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
-import pl.najem.acc.adapter.persistence.PostgresAccountingRepository;
-import pl.najem.acc.adapter.persistence.PostgresInvoiceRepository;
-import pl.najem.acc.adapter.persistence.PostgresPaymentRepository;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.PaymentAlreadyReversedException;
@@ -71,18 +68,13 @@ class ReversalTest {
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         // The board colours are a function of today, so the clock is fixed a day past DUE. Left on
         // the system clock these assertions would read green/yellow until 2027 and red after it.
-        var board = PostgresAccounting.arrearsBoardService(jdbc, Clock.fixed(
-            DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
-        invoicing = new InvoiceService(store, new PostgresInvoiceRepository(jdbc), PostgresAccounting.warningService(jdbc), board);
+        var clock = Clock.fixed(DUE.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(),
+            ZoneId.systemDefault());
+        invoicing = PostgresAccounting.invoiceService(store, jdbc,
+            PostgresAccounting.warningService(jdbc), clock);
         ingestion = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc);
-        var accounting = new AccountingService(
-            PostgresAccounting.allocationService(store, jdbc), board);
         suspense = PostgresAccounting.suspenseService(store, jdbc);
-        // Built here rather than through PostgresAccounting, which would supply a board on the
-        // system clock and quietly discard the fixed one these colour assertions depend on.
-        corrections = new CorrectionService(store, new PostgresPaymentRepository(jdbc),
-            new PostgresInvoiceRepository(jdbc), new PostgresAccountingRepository(jdbc),
-            accounting, board, Clock.systemDefaultZone());
+        corrections = PostgresAccounting.correctionService(store, jdbc, clock);
     }
 
     /** The tenant owes it again, on the day they always owed it. */

@@ -1,7 +1,6 @@
 package pl.najem.acc.application;
 
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
-import pl.najem.acc.adapter.persistence.PostgresInvoiceRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.flywaydb.core.Flyway;
@@ -53,7 +52,7 @@ class ComponentTaxonomyTest {
         var registry = new EventTypeRegistry();
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        charges = new PostgresInvoiceRepository(jdbc);
+        charges = PostgresAccounting.invoices(jdbc);
         invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
     }
 
