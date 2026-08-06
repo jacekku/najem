@@ -63,8 +63,9 @@ class MethodSecurityWiringTest {
         context = new AnnotationConfigApplicationContext();
         context.registerBean("caller", ActingCaller.class, () -> caller);
         context.registerBean(EventStore.class, () -> mock(EventStore.class));
-        context.registerBean(org.springframework.jdbc.core.JdbcTemplate.class,
-            () -> mock(org.springframework.jdbc.core.JdbcTemplate.class));
+        // Stubbed to nothing on purpose: a refused call must not reach the store at all, so these
+        // exist only to let the bean be constructed.
+        context.registerBean(MembershipProjection.class, () -> mock(MembershipProjection.class));
         context.register(MethodSecurity.class, MembershipService.class);
         context.refresh();
         return context.getBean(MembershipService.class);

@@ -49,7 +49,7 @@ public class InMemoryEventStore implements EventStore {
 
     @Override
     public void append(UUID streamId, String streamType, long expectedVersion,
-                       List<Object> events, List<IntegrationEvent> integrationEvents) {
+                       List<?> events, List<IntegrationEvent> integrationEvents) {
         var stream = streams.computeIfAbsent(new StreamKey(streamId, streamType),
             key -> new ArrayList<>());
         if (expectedVersion < stream.size()) {

@@ -20,6 +20,7 @@ import java.util.UUID;
  */
 @Component
 @ConditionalOnProperty("najem.bootstrap.operator-subject")
+// TODO: ALL this should be replaced with an Operator API that allows for creation of users.
 public class PlatformOperator {
 
     private final UserService users;

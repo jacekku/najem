@@ -1,14 +1,11 @@
 package pl.najem.um.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.eventstore.EventStore;
-import pl.najem.um.domain.InvitationAccepted;
-import pl.najem.um.domain.InvitationRevoked;
-import pl.najem.um.domain.MemberInvited;
 import pl.najem.um.domain.Role;
+import pl.najem.um.domain.Workspace;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -22,6 +19,18 @@ import java.util.UUID;
 /**
  * Invite-only provisioning (human ruling, najem-build seq 21). Accepting an invitation is the ONLY
  * code path that creates a NAJEM user or a workspace membership.
+ *
+ * <h2>Why the token exists</h2>
+ *
+ * <p>{@code /api/um/invitations/accept} is the one endpoint a secured deployment leaves open, and it
+ * has to be: the person accepting has no NAJEM account and no Keycloak subject yet — the account is
+ * created <em>by</em> accepting. So nothing else can authenticate that request, and this token is
+ * the only thing that proves whoever followed the link is who was invited. Handed out in plaintext
+ * exactly once and stored only as a SHA-256 hash (D4).
+ *
+ * <p><b>Nothing delivers it.</b> There is no mailer: {@code InvitationController} returns the token
+ * to the inviting admin, who passes it on out of band. That makes {@code um_invitation_recipient}
+ * an address which is collected, required at acceptance, and never sent anything.
  */
 @Service
 @Transactional
@@ -33,14 +42,17 @@ public class InvitationService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final InvitationRepository invitations;
+    private final MembershipProjection memberships;
     private final UserService users;
     private final KeycloakAdminPort keycloak;
 
-    public InvitationService(EventStore store, JdbcTemplate jdbc, UserService users,
+    public InvitationService(EventStore store, InvitationRepository invitations,
+                             MembershipProjection memberships, UserService users,
                              KeycloakAdminPort keycloak) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.invitations = invitations;
+        this.memberships = memberships;
         this.users = users;
         this.keycloak = keycloak;
     }
@@ -51,69 +63,49 @@ public class InvitationService {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("invitee email is required");
         }
-        if (expiresOn.isBefore(on)) {
-            throw new IllegalArgumentException("invitation cannot expire before it is issued");
-        }
         UUID invitationId = UUID.randomUUID();
         String token = newToken();
 
         var stream = store.load(workspaceId, "Workspace");
-        store.append(workspaceId, "Workspace", stream.version(),
-            List.of(new MemberInvited(workspaceId, invitationId, role, invitedByUserId, on, expiresOn)),
-            List.of());
+        var events = Workspace.from(UmStreams.workspaceEvents(stream))
+            .invite(invitationId, role, invitedByUserId, on, expiresOn);
+        store.append(workspaceId, "Workspace", stream.version(), events, List.of());
 
-        jdbc.update("""
-            insert into um_invitation(invitation_id, workspace_id, role, token_hash, status,
-                                      invited_by_user_id, issued_on, expires_on)
-            values (?,?,?,?,'PENDING',?,?,?)
-            """, invitationId, workspaceId, role.name(), hash(token), invitedByUserId, on, expiresOn);
-        jdbc.update("insert into um_invitation_recipient(invitation_id, email) values (?,?)",
-            invitationId, email);
+        invitations.issue(invitationId, workspaceId, role, hash(token), invitedByUserId, email,
+            on, expiresOn);
         return new Issued(invitationId, token);
     }
 
+    /**
+     * The workspace scopes the invitation, not just the event stream. An admin of one agency holding
+     * another's invitation id used to revoke it — while the victim's stream recorded nothing, leaving
+     * them an invitation that had silently stopped working and no audit trail saying why. The
+     * aggregate only holds its own workspace's invitations, so "unknown here" now covers both
+     * not-found and not-yours without this method arranging it.
+     */
     @PreAuthorize("@caller.isAdminOf(#workspaceId)")
     public void revoke(UUID workspaceId, UUID invitationId, LocalDate on) {
-        // Scope the row by workspace, and check before appending. The workspace used to pick the
-        // event stream and nothing else, so an admin of one agency holding another's invitation
-        // id revoked it -- while the victim's stream recorded nothing, leaving them an invitation
-        // that had silently stopped working and no audit trail saying why.
-        int revoked = jdbc.update("""
-            update um_invitation set status = 'REVOKED'
-            where invitation_id = ? and workspace_id = ? and status = 'PENDING'
-            """, invitationId, workspaceId);
-        if (revoked == 0) {
-            // Not-found and not-yours are deliberately the same answer: telling the caller which
-            // one it was confirms the existence of an invitation in someone else's workspace.
-            throw new IllegalStateException("no pending invitation " + invitationId + " in this workspace");
-        }
-        jdbc.update("delete from um_invitation_recipient where invitation_id = ?", invitationId);
         var stream = store.load(workspaceId, "Workspace");
-        store.append(workspaceId, "Workspace", stream.version(),
-            List.of(new InvitationRevoked(workspaceId, invitationId, on)), List.of());
+        var events = Workspace.from(UmStreams.workspaceEvents(stream))
+            .revokeInvitation(invitationId, on);
+        store.append(workspaceId, "Workspace", stream.version(), events, List.of());
+        invitations.revoke(invitationId);
     }
 
     /** Returns the accepting user's id, provisioning them in Keycloak on first acceptance. */
     public UUID accept(String token, LocalDate on) {
-        var pending = jdbc.query("""
-            select i.invitation_id, i.workspace_id, i.role, i.status, i.expires_on, r.email
-            from um_invitation i
-            left join um_invitation_recipient r on r.invitation_id = i.invitation_id
-            where i.token_hash = ?
-            """, (rs, i) -> new Pending(
-                rs.getObject(1, UUID.class), rs.getObject(2, UUID.class), Role.valueOf(rs.getString(3)),
-                rs.getString(4), rs.getObject(5, LocalDate.class), rs.getString(6)),
-            hash(token));
-        if (pending.isEmpty()) {
-            throw new IllegalStateException("unknown invitation token");
-        }
-        var invitation = pending.getFirst();
-        if (!"PENDING".equals(invitation.status())) {
-            throw new IllegalStateException("invitation is not pending: " + invitation.status());
-        }
-        if (on.isAfter(invitation.expiresOn())) {
-            throw new IllegalStateException("invitation expired on " + invitation.expiresOn());
-        }
+        // Only the repository can answer this: the token hash and the recipient's address appear in
+        // no event, so a stream cannot say which invitation a token names. Everything after this is
+        // decided by the aggregate.
+        var invitation = invitations.byTokenHash(hash(token))
+            .orElseThrow(() -> new IllegalStateException("unknown invitation token"));
+
+        // Whether it may be used is asked before Keycloak is called, so a spent or expired link is
+        // refused for its own reason rather than for whatever fails afterwards, and so accepting
+        // twice does not provision anybody a second time.
+        var stream = store.load(invitation.workspaceId(), "Workspace");
+        var workspace = Workspace.from(UmStreams.workspaceEvents(stream));
+        workspace.requireInvitationOpen(invitation.invitationId(), on);
         if (invitation.email() == null) {
             throw new IllegalStateException("invitation has no recipient on record");
         }
@@ -121,18 +113,11 @@ public class InvitationService {
         UUID subject = keycloak.provision(invitation.email());
         UUID userId = users.findBySubject(subject).orElseGet(() -> users.register(subject, on));
 
-        var stream = store.load(invitation.workspaceId(), "Workspace");
-        store.append(invitation.workspaceId(), "Workspace", stream.version(),
-            List.of(new InvitationAccepted(invitation.workspaceId(), invitation.invitationId(), userId, on)),
-            List.of());
+        var events = workspace.acceptInvitation(invitation.invitationId(), userId, on);
+        store.append(invitation.workspaceId(), "Workspace", stream.version(), events, List.of());
 
-        jdbc.update("""
-            insert into um_membership(workspace_id, user_id, role, joined_on) values (?,?,?,?)
-            on conflict (workspace_id, user_id) do update set role = excluded.role
-            """, invitation.workspaceId(), userId, invitation.role().name(), on);
-        jdbc.update("update um_invitation set status = 'ACCEPTED', accepted_by_user_id = ? where invitation_id = ?",
-            userId, invitation.invitationId());
-        jdbc.update("delete from um_invitation_recipient where invitation_id = ?", invitation.invitationId());
+        memberships.join(invitation.workspaceId(), userId, invitation.role(), on);
+        invitations.accept(invitation.invitationId(), userId);
         return userId;
     }
 
@@ -150,7 +135,4 @@ public class InvitationService {
         RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
-
-    private record Pending(UUID invitationId, UUID workspaceId, Role role, String status,
-                           LocalDate expiresOn, String email) {}
 }

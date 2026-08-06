@@ -1,4 +1,4 @@
-package pl.najem.contacts.application;
+package pl.najem.um.application;
 
 import pl.najem.contracts.events.IntegrationEvent;
 import pl.najem.eventstore.ConcurrencyException;
@@ -14,15 +14,16 @@ import java.util.UUID;
 /**
  * An event store in a map, partitioned by (stream id, stream type) as the real one is.
  *
- * <p>A third copy of this idea, after property-management's and accounting's {@code
- * RecordingEventStore}. Each module's test source set is its own, and the three differ in what they
- * model — but if a fourth is ever wanted, the honest move is a double in {@code platform:eventstore}'s
- * fixtures beside the interface, not a fourth copy.
+ * <p><b>The fourth copy of this idea</b>, after property-management's, accounting's and contacts'.
+ * The third one's javadoc said that if a fourth was ever wanted, the honest move was a double in
+ * {@code platform:eventstore}'s fixtures beside the interface rather than another copy. A fourth is
+ * now wanted, so that note has come due — it is left here rather than acted on because moving it is
+ * a change to four modules' test wiring and does not belong inside this one. This is a copy that
+ * says it is one.
  *
- * <p>Contacts keys every stream on the contact id under the type {@code "Contact"}, and a contact id
- * names a stream in no other module, so the partitioning is not load-bearing here the way it is in
- * PM. It is kept anyway because the port it implements is shared, and a double that answered
- * {@code load} with everything appended would be modelling a store that does not exist.
+ * <p>Usermanagement runs two stream types, {@code "Workspace"} and {@code "User"}, so the
+ * partitioning is load-bearing here: a double that answered {@code load} with everything appended
+ * would hand a user's events to a workspace and fail the cast in {@code UmStreams}.
  *
  * <p>The version check refuses an append below the head, which is what {@code JdbcEventStore}
  * rejects: it writes {@code ++version} per event and turns the duplicate key into a
@@ -50,7 +51,7 @@ public class InMemoryEventStore implements EventStore {
         if (expectedVersion > stream.size()) {
             throw new IllegalArgumentException("Appending at version " + expectedVersion
                 + " would leave a gap after " + stream.size()
-                + "; the real store allows this and no caller in contacts does it");
+                + "; the real store allows this and no caller in usermanagement does it");
         }
         stream.addAll(events);
         outbox.addAll(integrationEvents);

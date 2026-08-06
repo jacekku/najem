@@ -1,76 +1,52 @@
 package pl.najem.um.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.eventstore.EventStore;
-import pl.najem.um.domain.MemberRemoved;
-import pl.najem.um.domain.MemberRoleChanged;
 import pl.najem.um.domain.Role;
+import pl.najem.um.domain.Workspace;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Who belongs to an agency and at what role.
+ *
+ * <p>Both rules — you must already be a member, and the last ADMIN may not be demoted or removed —
+ * used to be three SQL queries issued immediately before this service loaded the same workspace's
+ * stream for its version. They now come off {@link Workspace}, which is the thing that holds them.
+ * One round trip instead of four, but that is a side effect rather than the reason: the reason is
+ * that the question had two possible answers and this was trusting the derived one.
+ */
 @Service
 @Transactional
 public class MembershipService {
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final MembershipProjection memberships;
 
-    public MembershipService(EventStore store, JdbcTemplate jdbc) {
+    public MembershipService(EventStore store, MembershipProjection memberships) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.memberships = memberships;
     }
 
     @PreAuthorize("@caller.isAdminOf(#workspaceId)")
     public void changeRole(UUID workspaceId, UUID userId, Role role, LocalDate on) {
-        requireMember(workspaceId, userId);
-        if (role != Role.ADMIN) {
-            requireAnotherAdmin(workspaceId, userId);
-        }
         var stream = store.load(workspaceId, "Workspace");
-        store.append(workspaceId, "Workspace", stream.version(),
-            List.of(new MemberRoleChanged(workspaceId, userId, role, on)), List.of());
-        jdbc.update("update um_membership set role = ? where workspace_id = ? and user_id = ?",
-            role.name(), workspaceId, userId);
+        var events = Workspace.from(UmStreams.workspaceEvents(stream)).changeRole(userId, role, on);
+        store.append(workspaceId, "Workspace", stream.version(), events, List.of());
+        memberships.changeRole(workspaceId, userId, role);
     }
 
     @PreAuthorize("@caller.isAdminOf(#workspaceId)")
     public void remove(UUID workspaceId, UUID userId, LocalDate on) {
-        requireMember(workspaceId, userId);
-        requireAnotherAdmin(workspaceId, userId);
         var stream = store.load(workspaceId, "Workspace");
-        store.append(workspaceId, "Workspace", stream.version(),
-            List.of(new MemberRemoved(workspaceId, userId, on)), List.of());
-        jdbc.update("delete from um_membership where workspace_id = ? and user_id = ?", workspaceId, userId);
-    }
-
-    private void requireMember(UUID workspaceId, UUID userId) {
-        Integer count = jdbc.queryForObject(
-            "select count(*) from um_membership where workspace_id = ? and user_id = ?",
-            Integer.class, workspaceId, userId);
-        if (count == null || count == 0) {
-            throw new IllegalStateException("user is not a member of this workspace");
-        }
-    }
-
-    /** A workspace must always keep at least one ADMIN, or nobody can ever invite into it again. */
-    private void requireAnotherAdmin(UUID workspaceId, UUID userId) {
-        Boolean isAdmin = jdbc.queryForObject(
-            "select role = 'ADMIN' from um_membership where workspace_id = ? and user_id = ?",
-            Boolean.class, workspaceId, userId);
-        if (!Boolean.TRUE.equals(isAdmin)) {
-            return;
-        }
-        Integer otherAdmins = jdbc.queryForObject("""
-            select count(*) from um_membership
-            where workspace_id = ? and role = 'ADMIN' and user_id <> ?
-            """, Integer.class, workspaceId, userId);
-        if (otherAdmins == null || otherAdmins == 0) {
-            throw new IllegalStateException("workspace must keep at least one admin");
-        }
+        var events = Workspace.from(UmStreams.workspaceEvents(stream)).removeMember(userId, on);
+        store.append(workspaceId, "Workspace", stream.version(), events, List.of());
+        // A hard delete, and safe now that it is one: the membership record is the stream, so this
+        // row destroys nothing that cannot be rebuilt from MemberJoined/MemberRemoved.
+        memberships.remove(workspaceId, userId);
     }
 }

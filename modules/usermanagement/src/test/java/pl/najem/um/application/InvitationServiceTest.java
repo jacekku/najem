@@ -15,6 +15,7 @@ import pl.najem.contracts.events.WorkspaceCreatedEvent;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.um.UmEventTypes;
+import pl.najem.um.adapter.persistence.PostgresUserManagement;
 import pl.najem.um.domain.Role;
 
 import java.time.LocalDate;
@@ -54,10 +55,10 @@ class InvitationServiceTest {
         UmEventTypes.register(registry);
         registry.register(WorkspaceCreatedEvent.class);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        users = new UserService(store, jdbc);
-        workspaces = new WorkspaceService(store, jdbc);
-        access = new WorkspaceAccess(jdbc);
-        invitations = new InvitationService(store, jdbc, users,
+        users = PostgresUserManagement.userService(store, jdbc);
+        workspaces = PostgresUserManagement.workspaceService(store, jdbc);
+        access = PostgresUserManagement.workspaceAccess(jdbc);
+        invitations = PostgresUserManagement.invitationService(store, jdbc,
             email -> KEYCLOAK.computeIfAbsent(email, e -> UUID.randomUUID()));
     }
 

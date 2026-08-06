@@ -14,6 +14,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.um.UmEventTypes;
+import pl.najem.um.adapter.persistence.PostgresUserManagement;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -38,7 +39,7 @@ class UserServiceTest {
         jdbc = new JdbcTemplate(dataSource);
         var registry = new EventTypeRegistry();
         UmEventTypes.register(registry);
-        service = new UserService(
+        service = PostgresUserManagement.userService(
             new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry), jdbc);
     }
 

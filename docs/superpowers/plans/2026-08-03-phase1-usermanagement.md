@@ -432,8 +432,8 @@ package pl.najem.um;
 
 import org.springframework.stereotype.Component;
 import pl.najem.eventstore.EventTypeRegistry;
-import pl.najem.um.domain.WorkspaceCreated;
-import pl.najem.um.domain.WorkspaceRenamed;
+import pl.najem.um.domain.events.WorkspaceCreated;
+import pl.najem.um.domain.events.WorkspaceRenamed;
 
 @Component
 public class UmEventTypes {

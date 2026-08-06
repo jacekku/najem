@@ -1,4 +1,6 @@
-package pl.najem.um.domain;
+package pl.najem.um.domain.events;
+
+import pl.najem.um.domain.Role;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -9,4 +11,5 @@ import java.util.UUID;
  * in the Contacts PII table either (settled with najem-contacts, najem-build seq 47).
  */
 public record MemberInvited(UUID workspaceId, UUID invitationId, Role role,
-                            UUID invitedByUserId, LocalDate issuedOn, LocalDate expiresOn) {}
+                            UUID invitedByUserId, LocalDate issuedOn, LocalDate expiresOn)
+    implements WorkspaceEvent {}

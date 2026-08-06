@@ -25,7 +25,7 @@ public class JdbcEventStore implements EventStore {
 
     @Override
     public void append(UUID streamId, String streamType, long expectedVersion,
-                       List<Object> events, List<IntegrationEvent> integrationEvents) {
+                       List<?> events, List<IntegrationEvent> integrationEvents) {
         long version = expectedVersion;
         try {
             for (Object event : events) {

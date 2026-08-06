@@ -1,4 +1,7 @@
-plugins { `java-library` }
+plugins {
+    `java-library`
+    `java-test-fixtures`
+}
 
 // The Keycloak Testcontainers suite pulls and boots a real identity provider: minutes, against
 // seconds for everything else in the repo. Every agent now runs a full build two or three times per
@@ -21,6 +24,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.security:spring-security-config")
     implementation("org.springframework.security:spring-security-web")
+
+    testFixturesImplementation(project(":platform:eventstore"))
+    testFixturesImplementation("org.springframework:spring-jdbc")
 
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.testcontainers:postgresql")

@@ -72,7 +72,7 @@ class AccountingContextTest {
             return new EventStore() {
                 @Override
                 public void append(UUID streamId, String streamType, long expectedVersion,
-                                   List<Object> events, List<IntegrationEvent> integrationEvents) {
+                                   List<?> events, List<IntegrationEvent> integrationEvents) {
                 }
 
                 @Override

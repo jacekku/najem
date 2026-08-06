@@ -1,5 +1,9 @@
 package pl.najem.um.domain;
 
+import pl.najem.um.domain.events.UserEvent;
+import pl.najem.um.domain.events.UserLinkedToContact;
+import pl.najem.um.domain.events.UserRegistered;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -16,32 +20,41 @@ public class User {
 
     private User() {}
 
-    public static List<Object> register(UUID userId, UUID keycloakSubject, LocalDate on) {
+    public static List<UserEvent> register(UUID userId, UUID keycloakSubject, LocalDate on) {
         if (keycloakSubject == null) {
             throw new IllegalArgumentException("keycloak subject is required");
         }
         return List.of(new UserRegistered(userId, keycloakSubject, on));
     }
 
-    public List<Object> linkContact(UUID contactId, LocalDate on) {
+    /**
+     * Applied to this instance before it is returned, as {@link Workspace#decided} explains. Without
+     * it, calling this twice on one instance would link a second contact — the guard above reads
+     * state that the first call never updated.
+     */
+    public List<UserEvent> linkContact(UUID contactId, LocalDate on) {
         if (this.contactId != null) {
             throw new IllegalStateException("user is already linked to a contact");
         }
-        return List.of(new UserLinkedToContact(id, contactId, on));
+        var decided = List.<UserEvent>of(new UserLinkedToContact(id, contactId, on));
+        decided.forEach(this::apply);
+        return decided;
     }
 
-    public static User from(List<Object> events) {
+    public static User from(List<UserEvent> events) {
         var user = new User();
         events.forEach(user::apply);
         return user;
     }
 
-    private void apply(Object event) {
-        if (event instanceof UserRegistered e) {
-            id = e.userId();
-            keycloakSubject = e.keycloakSubject();
-        } else if (event instanceof UserLinkedToContact e) {
-            contactId = e.contactId();
+    /** Exhaustive, no {@code default}: see {@link Workspace#apply} for why that is the point. */
+    private void apply(UserEvent event) {
+        switch (event) {
+            case UserRegistered e -> {
+                id = e.userId();
+                keycloakSubject = e.keycloakSubject();
+            }
+            case UserLinkedToContact e -> contactId = e.contactId();
         }
     }
 

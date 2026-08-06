@@ -47,6 +47,18 @@ imports nothing outside the JDK, and that is checkable. `Invoice`, `Payment`, `P
 `Component`, `ChargePosted` are the domain; they hold rules and are reached for, and reach for
 nothing.
 
+*Checked 2026-08-06, and it holds:* grepping every module's `domain` package for a non-JDK import
+returns nothing. Zero exceptions in four modules, which is worth knowing before anyone spends the
+first one.
+
+*One is being asked for.* A shared `DomainEvent` marker in `platform:eventstore` would let
+`EventStore.append` take `List<? extends DomainEvent>` instead of `List<?>` — the only version of
+that signature which actually refuses a `String`. It would also be the first A3 exception, and the
+argument for it is that an empty marker interface drives nothing, so it breaks A3's letter and not
+its spirit. Left as a TODO on `EventStore.append` rather than taken, because a rule with zero
+exceptions and a rule with one are different rules, and which one this is should be decided
+deliberately rather than as a side effect of a typing cleanup.
+
 **A4. Repositories and other outgoing collaborators drive nothing.**
 They are called. A repository that calls a service has become a service.
 
