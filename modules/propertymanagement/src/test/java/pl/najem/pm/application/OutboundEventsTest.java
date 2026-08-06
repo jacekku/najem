@@ -2,6 +2,8 @@ package pl.najem.pm.application;
 
 import pl.najem.pm.adapter.persistence.PostgresInspectionProjection;
 import pl.najem.pm.adapter.persistence.PostgresOverdueInspectionQuery;
+import pl.najem.pm.adapter.persistence.PostgresOpenRepairQuery;
+import pl.najem.pm.adapter.persistence.PostgresRepairProjection;
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -91,7 +93,7 @@ class OutboundEventsTest {
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         checklists = new ChecklistService(store);
-        repairs = new RepairService(store, jdbc, portfolio);
+        repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
         compliance = new ComplianceService(store, new PostgresInspectionProjection(jdbc),
             new PostgresOverdueInspectionQuery(jdbc));
     }
@@ -113,9 +115,9 @@ class OutboundEventsTest {
         portfolio.updateUnitDetails(workspaceId, unitId, java.util.Map.of("listingRef", "OLX-1"));
         compliance.recordInspection(workspaceId, propertyId,
             pl.najem.pm.domain.InspectionType.GAS, LocalDate.of(2026, 5, 10), null, "ok");
-        var repairId = repairs.report(RepairScope.UNIT, unitId, "leaking tap", null,
+        var repairId = repairs.report(workspaceId, RepairScope.UNIT, unitId, "leaking tap", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 8, 1));
-        repairs.complete(repairId, LocalDate.of(2026, 8, 3), "done");
+        repairs.complete(workspaceId, repairId, LocalDate.of(2026, 8, 3), "done");
 
         // A reservation that gets cancelled — cancellation is PM's own fact.
         var abandoned = reserve(unitId, LocalDate.of(2029, 1, 1), LocalDate.of(2029, 12, 31));

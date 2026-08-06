@@ -28,14 +28,12 @@ public class AttentionListsQuery {
                                       String propertyAddress, LocalDate on) {
     }
 
-    public record OpenRepairRow(UUID repairId, String scope, UUID assetId, String description,
-                                String statutoryDutyHint, LocalDate reportedOn) {
-    }
-
     private final JdbcTemplate jdbc;
+    private final OpenRepairQuery repairs;
 
-    public AttentionListsQuery(JdbcTemplate jdbc) {
+    public AttentionListsQuery(JdbcTemplate jdbc, OpenRepairQuery repairs) {
         this.jdbc = jdbc;
+        this.repairs = repairs;
     }
 
     /** Reserved tenancies whose start date is within the window — get the keys ready. */
@@ -60,17 +58,14 @@ public class AttentionListsQuery {
             "t.state = 'ACTIVE' and t.insurance_valid_to is not null", workspaceId, on);
     }
 
-    public List<OpenRepairRow> openRepairs(UUID workspaceId) {
-        return jdbc.query("""
-            select repair_id, scope, asset_id, description, statutory_duty_hint, reported_on
-            from pm_repair
-            where workspace_id = ? and completed_on is null
-            order by reported_on
-            """,
-            (rs, n) -> new OpenRepairRow(rs.getObject(1, UUID.class), rs.getString(2),
-                rs.getObject(3, UUID.class), rs.getString(4), rs.getString(5),
-                rs.getObject(6, LocalDate.class)),
-            workspaceId);
+    /**
+     * Delegated to {@link OpenRepairQuery} rather than queried here: pm_repair is written through
+     * {@link RepairProjection}, and a table written through a port and read around it has two
+     * definitions of its own shape. The tenancy lists below are still raw — they go when this class
+     * gets its own turn.
+     */
+    public List<OpenRepair> openRepairs(UUID workspaceId) {
+        return repairs.openRepairs(workspaceId);
     }
 
     /**

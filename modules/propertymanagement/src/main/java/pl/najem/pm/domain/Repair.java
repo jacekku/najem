@@ -83,6 +83,19 @@ public class Repair {
         return completedOn == null;
     }
 
+    /**
+     * Refuses a caller who does not own this repair — asked of the repair rebuilt from its own
+     * stream, as {@code Unit} and {@code Property} answer the same question.
+     *
+     * <p>A repair's workspace is inherited from the asset at the moment it was reported and never
+     * moves, so this is the same answer the asset would give, one load closer to the decision.
+     */
+    public void requireOwnedBy(UUID caller) {
+        if (caller == null || workspaceId == null || !workspaceId.equals(caller)) {
+            throw new UnknownInThisWorkspaceException("repair " + id);
+        }
+    }
+
     public UUID workspaceId() {
         return workspaceId;
     }

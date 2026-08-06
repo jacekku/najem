@@ -121,19 +121,25 @@ public class PortfolioService {
     }
 
     /**
-     * The workspace of a unit, read from its own stream, for a caller who has no workspace to check
-     * it against yet.
+     * Refuses a caller who does not own this property. For another service that needs the portfolio
+     * to vouch for an asset before hanging something off it — {@link RepairService} is the caller.
      *
-     * <p>{@link RepairService} is the caller: a repair inherits its workspace from the asset it is
-     * reported against, the way a unit inherits it from its property. That slice still guards at the
-     * controller, so this is still two reads of one fact there — it goes when repairs get the same
-     * treatment this one just had.
+     * <p>These replace {@code workspaceOf} and {@code workspaceOfUnit}, which answered "whose is
+     * this?" and left the comparing to the caller. Nobody wanted the answer: every caller had a
+     * workspace already and only needed to know whether it matched. Handing back an owner meant the
+     * check could be forgotten, and it was a second read of a fact the controller's guard had just
+     * looked up in the projection tables.
+     *
+     * <p>Two methods rather than one taking a {@code RepairScope}: the portfolio has no business
+     * knowing that repairs classify their assets, and the day a second caller needs this it will not
+     * be talking about repairs either. Mapping a scope onto a property or a unit belongs to whoever
+     * has the scope.
      */
-    public UUID workspaceOfUnit(UUID unitId) {
-        return Unit.from(store.load(unitId, "Unit").events()).workspaceId();
+    public void requireOwnsProperty(UUID workspaceId, UUID propertyId) {
+        propertyOwnedBy(workspaceId, propertyId);
     }
 
-    public UUID workspaceOf(UUID propertyId) {
-        return Property.from(store.load(propertyId, "Property").events()).workspaceId();
+    public void requireOwnsUnit(UUID workspaceId, UUID unitId) {
+        Unit.from(store.load(unitId, "Unit").events()).requireOwnedBy(workspaceId);
     }
 }

@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
@@ -70,7 +71,8 @@ class PortfolioServiceTest {
         var propertyId = service.createProperty(workspaceId, "Testowa 1, Kraków", owners());
         var unitId = service.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
 
-        assertThat(service.workspaceOf(propertyId)).isEqualTo(workspaceId);
+        assertThatCode(() -> service.requireOwnsProperty(workspaceId, propertyId))
+            .doesNotThrowAnyException();
         UUID unitWorkspace = jdbc.queryForObject(
             "select workspace_id from pm_unit where unit_id = ?", UUID.class, unitId);
         assertThat(unitWorkspace).isEqualTo(workspaceId);

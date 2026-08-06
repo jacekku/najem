@@ -1,5 +1,7 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresOpenRepairQuery;
+import pl.najem.pm.adapter.persistence.PostgresRepairProjection;
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -47,7 +49,7 @@ class RepairServiceTest {
         PmEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        repairs = new RepairService(store, jdbc, portfolio);
+        repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
     }
 
     /** Same rule as units: a child never takes a caller-supplied workspace. */
@@ -56,7 +58,7 @@ class RepairServiceTest {
         var workspaceId = UUID.randomUUID();
         var unitId = unitIn(workspaceId);
 
-        var repairId = repairs.report(RepairScope.UNIT, unitId, "leaking tap", null,
+        var repairId = repairs.report(workspaceId, RepairScope.UNIT, unitId, "leaking tap", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
 
         assertThat(Repair.from(store.load(repairId, "Repair").events()).workspaceId())
@@ -70,7 +72,7 @@ class RepairServiceTest {
         var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners());
 
-        var repairId = repairs.report(RepairScope.PROPERTY, propertyId, "roof leak", null,
+        var repairId = repairs.report(workspaceId, RepairScope.PROPERTY, propertyId, "roof leak", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
 
         assertThat(Repair.from(store.load(repairId, "Repair").events()).workspaceId())
@@ -79,10 +81,11 @@ class RepairServiceTest {
 
     @Test
     void completingClosesTheRepairInBothTheStreamAndTheProjection() {
-        var repairId = repairs.report(RepairScope.UNIT, unitIn(UUID.randomUUID()), "leaking tap",
-            null, StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
+        var workspaceId = UUID.randomUUID();
+        var repairId = repairs.report(workspaceId, RepairScope.UNIT, unitIn(workspaceId),
+            "leaking tap", null, StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
 
-        repairs.complete(repairId, LocalDate.of(2026, 9, 10), "plumber done");
+        repairs.complete(workspaceId, repairId, LocalDate.of(2026, 9, 10), "plumber done");
 
         assertThat(Repair.from(store.load(repairId, "Repair").events()).isOpen()).isFalse();
         assertThat(jdbc.queryForObject("select completed_on from pm_repair where repair_id = ?",
@@ -96,9 +99,10 @@ class RepairServiceTest {
      */
     @Test
     void arepairSurvivesTheTenancyThatCausedIt() {
-        var unitId = unitIn(UUID.randomUUID());
+        var workspaceId = UUID.randomUUID();
+        var unitId = unitIn(workspaceId);
         var tenancyId = UUID.randomUUID();
-        var repairId = repairs.report(RepairScope.UNIT, unitId, "cracked basin", tenancyId,
+        var repairId = repairs.report(workspaceId, RepairScope.UNIT, unitId, "cracked basin", tenancyId,
             StatutoryDutyHint.NEGOTIABLE, LocalDate.of(2026, 9, 5));
 
         var repair = Repair.from(store.load(repairId, "Repair").events());

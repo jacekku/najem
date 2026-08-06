@@ -1,5 +1,7 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresOpenRepairQuery;
+import pl.najem.pm.adapter.persistence.PostgresRepairProjection;
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -14,7 +16,7 @@ import pl.najem.contracts.events.TenancyActivatedEvent;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 import pl.najem.pm.PmEventTypes;
-import pl.najem.pm.application.AttentionListsQuery.OpenRepairRow;
+
 import pl.najem.pm.application.AttentionListsQuery.TenancyAttentionRow;
 import pl.najem.pm.domain.DocType;
 import pl.najem.pm.domain.LegalForm;
@@ -57,8 +59,8 @@ class AttentionListsQueryTest {
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
-        repairs = new RepairService(store, jdbc, portfolio);
-        attention = new AttentionListsQuery(jdbc);
+        repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
+        attention = new AttentionListsQuery(jdbc, new PostgresOpenRepairQuery(jdbc));
     }
 
     @Test
@@ -129,14 +131,14 @@ class AttentionListsQueryTest {
     void openRepairsAreListedAndCompletedOnesAreNot() {
         var workspaceId = UUID.randomUUID();
         var unitId = unitIn(workspaceId);
-        var open = repairs.report(RepairScope.UNIT, unitId, "leaking tap", null,
+        var open = repairs.report(workspaceId, RepairScope.UNIT, unitId, "leaking tap", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
-        var done = repairs.report(RepairScope.UNIT, unitId, "blown bulb", null,
+        var done = repairs.report(workspaceId, RepairScope.UNIT, unitId, "blown bulb", null,
             StatutoryDutyHint.TENANT, LocalDate.of(2026, 9, 5));
-        repairs.complete(done, LocalDate.of(2026, 9, 6), "replaced");
+        repairs.complete(workspaceId, done, LocalDate.of(2026, 9, 6), "replaced");
 
         assertThat(attention.openRepairs(workspaceId))
-            .extracting(OpenRepairRow::repairId).containsExactly(open);
+            .extracting(OpenRepair::repairId).containsExactly(open);
     }
 
     /** Every attention query filters on workspace_id — the hard tenancy boundary. */
@@ -146,7 +148,7 @@ class AttentionListsQueryTest {
         var tenancyId = activeTenancy(workspaceId, LocalDate.of(2027, 8, 31));
         tenancies.attachDocument(tenancyId, DocType.INSURANCE_POLICY, "s3://docs/oc.pdf",
             null, LocalDate.of(2027, 8, 31), LocalDate.of(2026, 8, 20));
-        repairs.report(RepairScope.UNIT, unitIn(workspaceId), "leaking tap", null,
+        repairs.report(workspaceId, RepairScope.UNIT, unitIn(workspaceId), "leaking tap", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
         var stranger = UUID.randomUUID();
 

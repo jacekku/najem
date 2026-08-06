@@ -53,9 +53,13 @@ public class WorkspaceGuard {
         require(caller, "pm_tenancy", "tenancy_id", tenancyId);
     }
 
-    public void requireRepair(UUID caller, UUID repairId) {
-        require(caller, "pm_repair", "repair_id", repairId);
-    }
+    /*
+     * requireRepair is gone. Repairs are the one subject this class was written for -- the concrete
+     * hole was POST /repairs/{id}/complete finishing a repair in any agency -- and the defence has
+     * moved to Repair.requireOwnedBy, asked by RepairService for every caller rather than by one
+     * handler. Leaving the method here with no production caller would have kept a second, weaker
+     * answer to the same question available to whoever found it first.
+     */
 
     /**
      * The table and column are literals chosen in this class, never caller input. The query asks

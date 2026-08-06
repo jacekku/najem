@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.najem.pm.application.AttentionListsQuery;
 import pl.najem.pm.application.ComplianceService;
+import pl.najem.pm.application.OpenRepair;
 import pl.najem.pm.application.OverdueInspection;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.application.WorkspaceGuard;
@@ -66,7 +67,7 @@ public class AttentionController {
     }
 
     @GetMapping("/repairs-open")
-    public List<AttentionListsQuery.OpenRepairRow> openRepairs(
+    public List<OpenRepair> openRepairs(
             @ActingWorkspace UUID workspaceId) {
         return attention.openRepairs(workspaceId);
     }

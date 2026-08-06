@@ -1,6 +1,5 @@
 package pl.najem.pm.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.eventstore.EventStore;
@@ -15,50 +14,64 @@ import java.util.UUID;
 /**
  * Repairs against a property or a unit. Nothing here reaches Accounting: recharging a repair is a
  * manual decision in the MVP (domain model §2 item 16), so there is no integration event.
+ *
+ * <p>The workspace still comes from the caller and the asset still has to be owned by them, but
+ * both used to be established twice. {@code report} was guarded against pm_property or pm_unit in
+ * the controller and then asked {@code PortfolioService} to rebuild the same aggregate for its
+ * workspace; {@code complete} was guarded against pm_repair and then rebuilt the Repair for the
+ * same fact. Now the portfolio vouches for the asset once, and the repair answers for itself.
  */
 @Service
 @Transactional
 public class RepairService {
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final RepairProjection projection;
     private final PortfolioService portfolio;
 
-    public RepairService(EventStore store, JdbcTemplate jdbc, PortfolioService portfolio) {
+    public RepairService(EventStore store, RepairProjection projection, PortfolioService portfolio) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.projection = projection;
         this.portfolio = portfolio;
     }
 
-    /** The workspace comes from the asset, never from the caller — same rule as units. */
-    public UUID report(RepairScope scope, UUID assetId, String description, UUID causedByTenancy,
-                       StatutoryDutyHint hint, LocalDate reportedOn) {
-        UUID workspaceId = workspaceOfAsset(scope, assetId);
+    /**
+     * The asset must be owned by the caller before anything is hung off it, and the repair inherits
+     * that workspace — the same rule as a unit inheriting its property's.
+     */
+    public UUID report(UUID workspaceId, RepairScope scope, UUID assetId, String description,
+                       UUID causedByTenancy, StatutoryDutyHint hint, LocalDate reportedOn) {
+        requireOwnedAsset(workspaceId, scope, assetId);
         UUID repairId = UUID.randomUUID();
         var events = Repair.report(repairId, workspaceId, scope, assetId, description,
             causedByTenancy, hint, reportedOn);
         store.append(repairId, "Repair", 0, events, List.of());
-        jdbc.update("insert into pm_repair(repair_id, workspace_id, scope, asset_id, description, "
-                + "caused_by_tenancy, statutory_duty_hint, reported_on) values (?,?,?,?,?,?,?,?)",
-            repairId, workspaceId, scope.name(), assetId, description, causedByTenancy,
-            hint.name(), reportedOn);
+        projection.repairReported(repairId, workspaceId, scope, assetId, description,
+            causedByTenancy, hint, reportedOn);
         return repairId;
     }
 
-    public void complete(UUID repairId, LocalDate on, String notes) {
+    public void complete(UUID workspaceId, UUID repairId, LocalDate on, String notes) {
         var stream = store.load(repairId, "Repair");
         var repair = Repair.from(stream.events());
+        repair.requireOwnedBy(workspaceId);
         store.append(repairId, "Repair", stream.version(), repair.complete(on, notes), List.of());
-        jdbc.update("update pm_repair set completed_on = ? where repair_id = ? "
-            + "and workspace_id = ?", on, repairId, repair.workspaceId());
+        projection.repairCompleted(repairId, workspaceId, on);
     }
 
-    private UUID workspaceOfAsset(RepairScope scope, UUID assetId) {
+    /**
+     * Mapping a scope onto a property or a unit is done here because the scope is this service's
+     * vocabulary. {@link PortfolioService} is asked whether the caller owns a property or owns a
+     * unit, and is not told that repairs exist.
+     */
+    private void requireOwnedAsset(UUID workspaceId, RepairScope scope, UUID assetId) {
         if (scope == null || assetId == null) {
             throw new IllegalArgumentException("A repair needs an explicit scope and asset");
         }
-        return scope == RepairScope.PROPERTY
-            ? portfolio.workspaceOf(assetId)
-            : portfolio.workspaceOfUnit(assetId);
+        if (scope == RepairScope.PROPERTY) {
+            portfolio.requireOwnsProperty(workspaceId, assetId);
+        } else {
+            portfolio.requireOwnsUnit(workspaceId, assetId);
+        }
     }
 }

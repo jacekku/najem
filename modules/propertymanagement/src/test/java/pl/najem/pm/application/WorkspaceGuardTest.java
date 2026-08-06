@@ -1,6 +1,7 @@
 package pl.najem.pm.application;
 
 import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
+import pl.najem.pm.adapter.persistence.PostgresRepairProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -52,22 +53,31 @@ class WorkspaceGuardTest {
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
-        repairs = new RepairService(store, jdbc, portfolio);
+        repairs = new RepairService(store, new PostgresRepairProjection(jdbc), portfolio);
         guard = new WorkspaceGuard(jdbc);
     }
 
-    /** The concrete hole najem-reviewer found: any repair id completed by any caller. */
+    /**
+     * The concrete hole najem-reviewer found: any repair id completed by any caller.
+     *
+     * <p>Kept, and moved off the guard. {@code requireRepair} was deleted with this slice -- the
+     * check is now {@code Repair.requireOwnedBy}, made by the service for every caller instead of by
+     * the one handler that remembered. So the incident is still pinned, against a database, but
+     * through the door an attacker would actually use.
+     */
     @Test
-    void arepairInAnotherAgencyIsNotFound() {
+    void arepairInAnotherAgencyCannotBeCompleted() {
         var agencyA = UUID.randomUUID();
         var agencyB = UUID.randomUUID();
-        var repairId = repairs.report(RepairScope.UNIT, unitIn(agencyA), "leaking tap", null,
+        var repairId = repairs.report(agencyA, RepairScope.UNIT, unitIn(agencyA), "leaking tap", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
 
-        guard.requireRepair(agencyA, repairId);   // the owner may
-
-        assertThatThrownBy(() -> guard.requireRepair(agencyB, repairId))
+        assertThatThrownBy(() -> repairs.complete(agencyB, repairId, LocalDate.of(2026, 9, 6), "x"))
             .isInstanceOf(UnknownInThisWorkspaceException.class);
+
+        repairs.complete(agencyA, repairId, LocalDate.of(2026, 9, 6), "the owner may");
+        assertThat(jdbc.queryForObject("select completed_on from pm_repair where repair_id = ?",
+            LocalDate.class, repairId)).isEqualTo(LocalDate.of(2026, 9, 6));
     }
 
     @Test
