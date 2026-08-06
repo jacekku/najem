@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import pl.najem.contacts.application.ContactDetails;
 import pl.najem.contacts.application.ContactDirectory;
+import pl.najem.contacts.application.ContactMatch;
 import pl.najem.contacts.application.ContactService;
 import pl.najem.contacts.application.NewContact;
 import pl.najem.contacts.application.RetentionHoldActiveException;
@@ -83,7 +84,7 @@ public class ContactsController {
      * {@link ContactDirectory#search}.
      */
     @GetMapping("/search")
-    public List<ContactDirectory.Match> search(@ActingWorkspace UUID workspaceId,
+    public List<ContactMatch> search(@ActingWorkspace UUID workspaceId,
                                                @RequestParam(required = false) String q) {
         return directory.search(workspaceId, q);
     }

@@ -12,6 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.contacts.ContactsEventTypes;
+import pl.najem.contacts.adapter.persistence.PostgresContacts;
 import pl.najem.contacts.domain.ContactRegistered;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -43,8 +44,7 @@ class ContactServiceTest {
         var registry = new EventTypeRegistry();
         ContactsEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        var contactDirectory = new ContactDirectory(jdbc);
-        service = new ContactService(store, jdbc, new RetentionService(store, jdbc, contactDirectory), contactDirectory);
+        service = PostgresContacts.contactService(store, jdbc);
     }
 
     @Test

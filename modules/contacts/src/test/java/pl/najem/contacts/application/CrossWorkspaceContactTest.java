@@ -12,6 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.contacts.ContactsEventTypes;
+import pl.najem.contacts.adapter.persistence.PostgresContacts;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
 
@@ -64,10 +65,10 @@ class CrossWorkspaceContactTest {
         var registry = new EventTypeRegistry();
         ContactsEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        directory = new ContactDirectory(jdbc);
-        retention = new RetentionService(store, jdbc, directory);
-        contacts = new ContactService(store, jdbc, retention, directory);
-        interests = new InterestService(store, jdbc, directory);
+        directory = PostgresContacts.directory(jdbc);
+        retention = PostgresContacts.retentionService(store, jdbc);
+        contacts = PostgresContacts.contactService(store, jdbc);
+        interests = PostgresContacts.interestService(store, jdbc);
     }
 
     private static UUID aContactOfTheOwner(LocalDate retainUntil) {

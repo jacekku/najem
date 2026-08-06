@@ -1,4 +1,7 @@
-plugins { `java-library` }
+plugins {
+    `java-library`
+    `java-test-fixtures`
+}
 
 dependencies {
     api(project(":contracts"))
@@ -8,6 +11,9 @@ dependencies {
     implementation("org.springframework:spring-tx")
     implementation("org.springframework:spring-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-databind")
+
+    testFixturesImplementation(project(":platform:eventstore"))
+    testFixturesImplementation("org.springframework:spring-jdbc")
 
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:junit-jupiter")

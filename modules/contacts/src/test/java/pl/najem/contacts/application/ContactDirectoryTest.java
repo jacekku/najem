@@ -12,6 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.contacts.ContactsEventTypes;
+import pl.najem.contacts.adapter.persistence.PostgresContacts;
 import pl.najem.contacts.domain.ContactDetailsCorrected;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -46,9 +47,8 @@ class ContactDirectoryTest {
         var registry = new EventTypeRegistry();
         ContactsEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        var contactDirectory = new ContactDirectory(jdbc);
-        service = new ContactService(store, jdbc, new RetentionService(store, jdbc, contactDirectory), contactDirectory);
-        directory = new ContactDirectory(jdbc);
+        service = PostgresContacts.contactService(store, jdbc);
+        directory = PostgresContacts.directory(jdbc);
     }
 
     private static UUID anna(UUID workspaceId) {
@@ -115,13 +115,13 @@ class ContactDirectoryTest {
     void searchFindsAPersonByAFragmentOfEitherName() {
         var found = person(AGENCY, "Bogumiła", "Szukalska");
 
-        assertThat(directory.search(AGENCY, "szukal")).extracting(ContactDirectory.Match::contactId)
+        assertThat(directory.search(AGENCY, "szukal")).extracting(ContactMatch::contactId)
             .as("surname fragment, case-insensitively")
             .contains(found);
-        assertThat(directory.search(AGENCY, "Bogumi")).extracting(ContactDirectory.Match::contactId)
+        assertThat(directory.search(AGENCY, "Bogumi")).extracting(ContactMatch::contactId)
             .as("given-name fragment")
             .contains(found);
-        assertThat(directory.search(AGENCY, "Bogumiła Szuka")).extracting(ContactDirectory.Match::contactId)
+        assertThat(directory.search(AGENCY, "Bogumiła Szuka")).extracting(ContactMatch::contactId)
             .as("a manager types the whole name, which is in neither column on its own")
             .contains(found);
     }
@@ -140,10 +140,10 @@ class ContactDirectoryTest {
         var theirs = person(OTHER_AGENCY, "Halina", "Szukanowska");
 
         assertThat(directory.search(AGENCY, "Szukanowska"))
-            .extracting(ContactDirectory.Match::contactId)
+            .extracting(ContactMatch::contactId)
             .containsExactly(mine);
         assertThat(directory.search(OTHER_AGENCY, "Szukanowska"))
-            .extracting(ContactDirectory.Match::contactId)
+            .extracting(ContactMatch::contactId)
             .containsExactly(theirs);
     }
 

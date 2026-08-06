@@ -13,6 +13,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.contacts.ContactsEventTypes;
+import pl.najem.contacts.adapter.persistence.PostgresContacts;
 import pl.najem.contacts.domain.InterestRegistered;
 import pl.najem.eventstore.EventTypeRegistry;
 import pl.najem.eventstore.JdbcEventStore;
@@ -45,9 +46,8 @@ class InterestServiceTest {
         var registry = new EventTypeRegistry();
         ContactsEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
-        var contactDirectory = new ContactDirectory(jdbc);
-        contacts = new ContactService(store, jdbc, new RetentionService(store, jdbc, contactDirectory), contactDirectory);
-        interests = new InterestService(store, jdbc, contactDirectory);
+        contacts = PostgresContacts.contactService(store, jdbc);
+        interests = PostgresContacts.interestService(store, jdbc);
     }
 
     private static UUID aContactIn(UUID workspaceId) {

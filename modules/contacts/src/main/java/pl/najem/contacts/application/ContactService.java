@@ -1,6 +1,5 @@
 package pl.najem.contacts.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.contacts.domain.ContactDetailsCorrected;
@@ -17,14 +16,16 @@ import java.util.UUID;
 public class ContactService {
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final ContactRepository contacts;
+    private final InterestRepository interests;
     private final RetentionService retention;
     private final ContactDirectory directory;
 
-    public ContactService(EventStore store, JdbcTemplate jdbc, RetentionService retention,
-                          ContactDirectory directory) {
+    public ContactService(EventStore store, ContactRepository contacts, InterestRepository interests,
+                          RetentionService retention, ContactDirectory directory) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.contacts = contacts;
+        this.interests = interests;
         this.retention = retention;
         this.directory = directory;
     }
@@ -35,14 +36,7 @@ public class ContactService {
         store.append(contactId, "Contact", stream.version(),
             List.of(new ContactRegistered(contact.workspaceId(), contactId, contact.lawfulBasis(),
                 contact.infoClauseServedAt(), contact.retainUntil())), List.of());
-        jdbc.update("""
-            insert into contacts_person(contact_id, workspace_id, given_name, surname, email, phone,
-                                        lawful_basis, info_clause_served_at, retain_until)
-            values (?,?,?,?,?,?,?,?,?)
-            """,
-            contactId, contact.workspaceId(), contact.details().givenName(), contact.details().surname(),
-            contact.details().email(), contact.details().phone(),
-            contact.lawfulBasis(), contact.infoClauseServedAt(), contact.retainUntil());
+        contacts.insert(contactId, contact);
         return contactId;
     }
 
@@ -51,11 +45,7 @@ public class ContactService {
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new ContactDetailsCorrected(workspaceId, contactId, correctedOn)), List.of());
-        jdbc.update("""
-            update contacts_person set given_name = ?, surname = ?, email = ?, phone = ?
-            where workspace_id = ? and contact_id = ?
-            """,
-            details.givenName(), details.surname(), details.email(), details.phone(), workspaceId, contactId);
+        contacts.updateDetails(workspaceId, contactId, details);
     }
 
     /**
@@ -79,8 +69,7 @@ public class ContactService {
         if (!holds.isEmpty()) {
             throw new RetentionHoldActiveException(contactId, holds);
         }
-        int erased = jdbc.update("delete from contacts_person where workspace_id = ? and contact_id = ?",
-            workspaceId, contactId);
+        int erased = contacts.delete(workspaceId, contactId);
         if (erased == 0) {
             // Already erased by this workspace: the gate let it through, so this is the idempotent
             // repeat rather than a foreign contact. Claim nothing a second time.
@@ -89,9 +78,7 @@ public class ContactService {
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new ContactErased(workspaceId, contactId, erasedOn)), List.of());
-        jdbc.update("delete from contacts_interest where workspace_id = ? and contact_id = ?",
-            workspaceId, contactId);
-        jdbc.update("insert into contacts_erasure_log(contact_id, workspace_id, erased_on) values (?,?,?)",
-            contactId, workspaceId, erasedOn);
+        interests.deleteAllFor(workspaceId, contactId);
+        contacts.logErasure(workspaceId, contactId, erasedOn);
     }
 }

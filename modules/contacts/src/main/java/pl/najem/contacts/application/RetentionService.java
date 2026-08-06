@@ -1,6 +1,5 @@
 package pl.najem.contacts.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.contacts.domain.RetentionHoldReleased;
@@ -16,12 +15,15 @@ import java.util.UUID;
 public class RetentionService {
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final RetentionHoldRepository holds;
+    private final ErasureDueQuery erasureDue;
     private final ContactDirectory directory;
 
-    public RetentionService(EventStore store, JdbcTemplate jdbc, ContactDirectory directory) {
+    public RetentionService(EventStore store, RetentionHoldRepository holds,
+                            ErasureDueQuery erasureDue, ContactDirectory directory) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.holds = holds;
+        this.erasureDue = erasureDue;
         this.directory = directory;
     }
 
@@ -42,12 +44,7 @@ public class RetentionService {
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new RetentionHoldSet(workspaceId, contactId, reason, sourceRef, setOn)), List.of());
-        jdbc.update("""
-            insert into contacts_retention_hold(contact_id, workspace_id, reason, source_ref, set_on)
-            values (?,?,?,?,?)
-            on conflict (contact_id, reason, source_ref)
-              do update set set_on = excluded.set_on, released_on = null
-            """, contactId, workspaceId, reason, sourceRef, setOn);
+        holds.set(workspaceId, contactId, reason, sourceRef, setOn);
     }
 
     public void releaseHold(UUID workspaceId, UUID contactId, String reason, LocalDate releasedOn) {
@@ -60,18 +57,12 @@ public class RetentionService {
         var stream = store.load(contactId, "Contact");
         store.append(contactId, "Contact", stream.version(),
             List.of(new RetentionHoldReleased(workspaceId, contactId, reason, sourceRef, releasedOn)), List.of());
-        jdbc.update("""
-            update contacts_retention_hold set released_on = ?
-            where workspace_id = ? and contact_id = ? and reason = ? and source_ref = ?
-            """, releasedOn, workspaceId, contactId, reason, sourceRef);
+        holds.release(workspaceId, contactId, reason, sourceRef, releasedOn);
     }
 
     /** The reasons erasure is currently blocked for — distinct, because a caller needs causes, not rows. */
     public List<String> activeHolds(UUID workspaceId, UUID contactId) {
-        return jdbc.queryForList("""
-            select distinct reason from contacts_retention_hold
-            where workspace_id = ? and contact_id = ? and released_on is null order by reason
-            """, String.class, workspaceId, contactId);
+        return holds.activeReasons(workspaceId, contactId);
     }
 
     public boolean hasActiveHold(UUID workspaceId, UUID contactId) {
@@ -80,27 +71,11 @@ public class RetentionService {
 
     /**
      * Reports only — erasure stays a deliberate act while hotspot #15 (retention duration) is open.
-     * <p>
-     * The {@code h.workspace_id = p.workspace_id} join predicate is redundant TODAY, and is stated
-     * anyway. {@link ContactDirectory#requireIn} now refuses to raise a hold on another workspace's
-     * contact, so no row can exist for which it changes the answer — a mutation removing it will
-     * survive, and that is expected rather than a gap in the tests.
-     * <p>
-     * It is here because this query and {@link #hasActiveHold} are two statements of one rule, and
-     * without it they said different things: a hold raised by anybody removed the contact from this
-     * report while leaving the erasure gate open. That disagreement failed toward <em>keeping</em>
-     * personal data past its retention date and telling the operator there was nothing to erase.
-     * Making the two agree is worth a line the guard already makes unreachable.
+     *
+     * <p>This and {@link #hasActiveHold} are two statements of one rule and must keep agreeing;
+     * {@link ErasureDueQuery} records what happened when they did not.
      */
     public List<UUID> dueForErasure(UUID workspaceId, LocalDate asOf) {
-        return jdbc.queryForList("""
-            select p.contact_id from contacts_person p
-            where p.workspace_id = ? and p.retain_until is not null and p.retain_until <= ?
-              and not exists (select 1 from contacts_retention_hold h
-                              where h.contact_id = p.contact_id
-                                and h.workspace_id = p.workspace_id
-                                and h.released_on is null)
-            order by p.retain_until
-            """, UUID.class, workspaceId, asOf);
+        return erasureDue.dueForErasure(workspaceId, asOf);
     }
 }

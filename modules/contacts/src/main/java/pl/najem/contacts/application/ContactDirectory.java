@@ -1,6 +1,5 @@
 package pl.najem.contacts.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -10,20 +9,14 @@ import java.util.UUID;
 @Service
 public class ContactDirectory {
 
-    private final JdbcTemplate jdbc;
+    private final ContactRepository contacts;
 
-    public ContactDirectory(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public ContactDirectory(ContactRepository contacts) {
+        this.contacts = contacts;
     }
 
     public Optional<ContactDetails> find(UUID workspaceId, UUID contactId) {
-        return jdbc.query("""
-                select given_name, surname, email, phone from contacts_person
-                where workspace_id = ? and contact_id = ?
-                """,
-                (rs, i) -> new ContactDetails(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)),
-                workspaceId, contactId)
-            .stream().findFirst();
+        return contacts.find(workspaceId, contactId);
     }
 
     /**
@@ -33,6 +26,11 @@ public class ContactDirectory {
      * contact", and a second place answering that question would eventually answer it differently —
      * which is the defect this method was written to close, where {@code hasActiveHold} filtered by
      * workspace and {@code dueForErasure} did not.
+     * <p>
+     * It reads the record to answer, which is what makes it different from the guard
+     * property-management retired. There, a projection was asked who owned a subject while the
+     * service rebuilt the aggregate holding the same fact one line later — one question with two
+     * answers. Here {@code contacts_person} is the only place the answer exists.
      * <p>
      * Callers must invoke it BEFORE appending to the event stream, not merely before the SQL write.
      * Every write in this module was already scoped by {@code workspace_id} and every one of them
@@ -60,23 +58,9 @@ public class ContactDirectory {
      * here discloses nothing they do not.
      */
     public void requireErasable(UUID workspaceId, UUID contactId) {
-        Integer known = jdbc.queryForObject("""
-            select count(*) from (
-                select contact_id from contacts_person where workspace_id = ? and contact_id = ?
-                union all
-                select contact_id from contacts_erasure_log where workspace_id = ? and contact_id = ?
-            ) mine
-            """, Integer.class, workspaceId, contactId, workspaceId, contactId);
-        if (known == null || known == 0) {
+        if (!contacts.isKnownOrErased(workspaceId, contactId)) {
             throw new NoSuchContactException(contactId);
         }
-    }
-
-    /**
-     * A hit in the people half of search. {@code contactId} is what every other contacts endpoint
-     * takes, so a hit is navigable rather than merely informative.
-     */
-    public record Match(UUID contactId, String givenName, String surname, String email) {
     }
 
     /** A search box is a browse aid, not an export. */
@@ -93,37 +77,20 @@ public class ContactDirectory {
      * was built anywhere else. Reading the live table instead means an erased person leaves search
      * at the instant they are erased, with no projector to catch up.
      * <p>
-     * Matches a name fragment across given name and surname, workspace-scoped like every other read
-     * here: a blank term returns nothing rather than the whole directory.
+     * The blank term and the limit stay here rather than moving behind the port: how much of a
+     * directory a search box may return, and whether an empty box means everybody or nobody, are
+     * decisions this module owns and must not vary with the store (rule 10). Escaping the term so
+     * that {@code %} is a character rather than a wildcard is dialect-specific and did move.
      */
-    public List<Match> search(UUID workspaceId, String term) {
+    public List<ContactMatch> search(UUID workspaceId, String term) {
         if (term == null || term.isBlank()) {
             return List.of();
         }
-        var pattern = "%" + escapeLike(term.strip()) + "%";
-        return jdbc.query("""
-            select contact_id, given_name, surname, email from contacts_person
-            where workspace_id = ?
-              and (given_name ilike ? escape '\\' or surname ilike ? escape '\\'
-                   or (given_name || ' ' || surname) ilike ? escape '\\')
-            order by surname, given_name
-            limit %d
-            """.formatted(SEARCH_LIMIT),
-            (rs, i) -> new Match(UUID.fromString(rs.getString(1)),
-                rs.getString(2), rs.getString(3), rs.getString(4)),
-            workspaceId, pattern, pattern, pattern);
-    }
-
-    /** A term containing {@code %} is a term, not a wildcard that returns the whole directory. */
-    private static String escapeLike(String term) {
-        return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return contacts.search(workspaceId, term.strip(), SEARCH_LIMIT);
     }
 
     /** Candidates for "do we already know this person?" — the manager judges, no uniqueness enforced. */
     public List<UUID> findByEmail(UUID workspaceId, String email) {
-        return jdbc.queryForList("""
-            select contact_id from contacts_person
-            where workspace_id = ? and email = ? order by contact_id
-            """, UUID.class, workspaceId, email);
+        return contacts.findByEmail(workspaceId, email);
     }
 }
