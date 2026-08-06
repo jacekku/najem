@@ -67,6 +67,15 @@ public class PostgresInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
+    public void unapplyAllocation(UUID workspaceId, UUID invoiceId, BigDecimal amount) {
+        jdbc.update("""
+            update acc_charge
+            set allocated_amount = greatest(allocated_amount - ?, 0), allocated = false
+            where workspace_id = ? and charge_id = ?
+            """, amount, workspaceId, invoiceId);
+    }
+
+    @Override
     public void withdraw(UUID workspaceId, UUID invoiceId) {
         jdbc.update("""
             update acc_charge set active = false where workspace_id = ? and charge_id = ?

@@ -140,6 +140,23 @@ public class InMemoryInvoiceRepository implements InvoiceRepository {
             settledAfter.compareTo(stored.amount()) >= 0));
     }
 
+    /**
+     * Floored at zero and the flag cleared, exactly as the statement does. A bare subtraction that
+     * went negative would make {@code amount > allocated_amount} read the invoice as open forever,
+     * and a fake without the floor could not catch that.
+     */
+    @Override
+    public void unapplyAllocation(UUID workspaceId, UUID invoiceId, BigDecimal amount) {
+        Stored stored = invoices.get(invoiceId);
+        if (stored == null || !stored.workspaceId().equals(workspaceId)) {
+            return;
+        }
+        BigDecimal settledAfter = stored.allocatedAmount().subtract(amount).max(BigDecimal.ZERO);
+        invoices.put(invoiceId, new Stored(stored.workspaceId(), stored.tenancyId(),
+            stored.component(), stored.amount(), settledAfter, stored.dueDate(), stored.active(),
+            false));
+    }
+
     /** The row survives, exactly as the update does — a withdrawal is not a delete. */
     @Override
     public void withdraw(UUID workspaceId, UUID invoiceId) {

@@ -4,6 +4,7 @@ import pl.najem.acc.domain.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -17,4 +18,13 @@ public interface AccountingRepository {
     /** Writes one allocation line. The identifier is the caller's, so the write stays replayable. */
     void recordAllocation(UUID allocationId, UUID workspaceId, UUID paymentId, UUID invoiceId,
                           UUID tenancyId, Component component, BigDecimal amount, LocalDate dueDate);
+
+    /** Every allocation of this payment that has not been undone. */
+    List<LiveAllocation> liveAllocations(UUID workspaceId, UUID paymentId);
+
+    /**
+     * Marks this payment's live allocations undone. They stay on file: what the books did before
+     * they were corrected is part of the record, so nothing here deletes a line.
+     */
+    void markReversed(UUID workspaceId, UUID paymentId);
 }

@@ -2,7 +2,6 @@ package pl.najem.acc.application;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.PaymentMarkedNonTenant;
@@ -22,25 +21,29 @@ import java.util.UUID;
  * <p>Suspense is derived rather than stored: a payment is waiting when it still holds unallocated
  * money and nobody has judged it to be something other than a tenant's payment. A stored queue
  * would be a second source of truth that can disagree with the payments themselves.
+ *
+ * <p>How long something has waited is arithmetic; what that <em>means</em> is this service's, and
+ * the two thresholds live here rather than in a query. An ageing band is a policy about how long a
+ * manager may leave money unplaced, and it must not vary with the store.
  */
 @Service
 @Transactional
 public class SuspenseService {
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final PaymentRepository payments;
     private final AccountingService accounting;
     private final Clock clock;
     private final int warnAfterDays;
     private final int redAfterDays;
 
     @Autowired
-    public SuspenseService(EventStore store, JdbcTemplate jdbc, AccountingService accounting,
-                           Clock clock,
+    public SuspenseService(EventStore store, PaymentRepository payments,
+                           AccountingService accounting, Clock clock,
                            @Value("${acc.suspense.warn-after-days:7}") int warnAfterDays,
                            @Value("${acc.suspense.red-after-days:30}") int redAfterDays) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.payments = payments;
         this.accounting = accounting;
         this.clock = clock;
         this.warnAfterDays = warnAfterDays;
@@ -48,8 +51,9 @@ public class SuspenseService {
     }
 
     /** The domain-model defaults: a decision expected within the week, red at a month. */
-    public SuspenseService(EventStore store, JdbcTemplate jdbc, AccountingService accounting) {
-        this(store, jdbc, accounting, Clock.systemDefaultZone(), 7, 30);
+    public SuspenseService(EventStore store, PaymentRepository payments,
+                           AccountingService accounting) {
+        this(store, payments, accounting, Clock.systemDefaultZone(), 7, 30);
     }
 
     /**
@@ -68,20 +72,13 @@ public class SuspenseService {
      *             so an ageing rule can be tested at its boundary instead of near it
      */
     public List<SuspenseEntry> waiting(UUID workspaceId, LocalDate asOf) {
-        return jdbc.query("""
-            select payment_id, external_id, unallocated_amount, title, counterparty_name,
-                   direction, currency, booking_date
-            from acc_payment
-            where workspace_id = ? and unallocated_amount > 0 and status <> 'non-tenant'
-            order by booking_date, external_id
-            """, (rs, i) -> {
-                LocalDate bookingDate = rs.getDate(8).toLocalDate();
-                int daysWaiting = (int) ChronoUnit.DAYS.between(bookingDate, asOf);
-                return new SuspenseEntry(rs.getObject(1, UUID.class), rs.getString(2),
-                    rs.getBigDecimal(3), rs.getString(4), rs.getString(5), rs.getString(6),
-                    rs.getString(7), bookingDate, daysWaiting,
-                    SuspenseAge.of(daysWaiting, warnAfterDays, redAfterDays));
-            }, workspaceId);
+        return payments.unrested(workspaceId).stream().map(payment -> {
+            int daysWaiting = (int) ChronoUnit.DAYS.between(payment.bookingDate(), asOf);
+            return new SuspenseEntry(payment.paymentId(), payment.externalId(), payment.amount(),
+                payment.title(), payment.counterpartyName(), payment.direction(),
+                payment.currency(), payment.bookingDate(), daysWaiting,
+                SuspenseAge.of(daysWaiting, warnAfterDays, redAfterDays));
+        }).toList();
     }
 
     /**
@@ -92,21 +89,14 @@ public class SuspenseService {
      * <p>Without this a line the ladder could not place had no exit at all: {@code confirm} works
      * only from a suggestion, so an overpayment or a garbled reference would have waited forever.
      *
+     * <p>A missing payment is not checked for here. It used to be, with its own sentence and its own
+     * exception type, which meant one absence had two vocabularies and a caller catching one type
+     * caught half the cases. Allocation raises {@link PaymentNotFoundException} for exactly this,
+     * and the pre-check existed only because it once failed obscurely instead.
+     *
      * @return what came to rest; any remainder stays as the tenant's credit and keeps waiting
      */
     public BigDecimal allocateTo(UUID workspaceId, UUID paymentId, UUID tenancyId) {
-        Integer mine = jdbc.queryForObject("""
-            select count(*) from acc_payment where workspace_id = ? and payment_id = ?
-            """, Integer.class, workspaceId, paymentId);
-        if (mine == null || mine == 0) {
-            // TODO: same absence, two vocabularies. AllocationService now raises
-            // PaymentNotFoundException for exactly this sentence, so a caller catching one type
-            // catches half the cases. When this service moves onto PaymentRepository, drop the
-            // pre-check and let the repository's empty answer speak — the count query exists only
-            // because allocate used to fail obscurely on a missing row.
-            throw new IllegalArgumentException(
-                "no payment " + paymentId + " in workspace " + workspaceId);
-        }
         return accounting.allocate(workspaceId, paymentId, tenancyId);
     }
 
@@ -122,11 +112,7 @@ public class SuspenseService {
             throw new IllegalArgumentException(
                 "classifying payment " + paymentId + " as non-tenant needs a reason");
         }
-        int classified = jdbc.update("""
-            update acc_payment set status = 'non-tenant', non_tenant_reason = ?, classified_on = ?
-            where workspace_id = ? and payment_id = ?
-            """, reason, LocalDate.now(clock), workspaceId, paymentId);
-        if (classified == 0) {
+        if (!payments.markNonTenant(workspaceId, paymentId, reason, LocalDate.now(clock))) {
             throw new IllegalArgumentException(
                 "no payment " + paymentId + " in workspace " + workspaceId);
         }

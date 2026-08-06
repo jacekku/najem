@@ -60,7 +60,11 @@ Verified from imports in `modules/accounting/src/main/java/pl/najem/acc`, not fr
         │                                                               │
         │  ports (interfaces owned here)                                │
         │  ├── PaymentRepository       ├── InvoiceRepository            │
-        │  └── AccountingRepository                                     │
+        │  ├── AccountingRepository    ├── InvoiceMatching              │
+        │  ├── WarningRepository       ├── DepositRepository            │
+        │  ├── PayerAccountRepository  ├── SuggestionRepository         │
+        │  ├── WorkspaceAccountRepo…   ├── ArrearsStandingProjection    │
+        │  └── ArrearsBoardProjection  └── SuggestionQuery              │
         │                                                               │
         │  services                                                     │
         │  ├── AccountingService ──► AllocationService ──► [ports]      │
@@ -89,10 +93,9 @@ In one line: `AllocationService` names `PaymentRepository`; `PostgresPaymentRepo
 
 Two things the diagram hides, both true today:
 
-- `application` imports `org.springframework.jdbc.core.JdbcTemplate` **6 times**. The layer is
-  clean with respect to this module's adapter package but is still directly coupled to Spring JDBC
-  everywhere except `allocate`. The ports covered one method, not the layer — this is the
-  remaining work.
+- `application` imports `org.springframework.jdbc.core.JdbcTemplate` **0 times** as of 2026-08-06,
+  down from 11. When this was written the ports covered one method rather than the layer; they now
+  cover the layer.
 - `application` imports `pl.najem.eventstore` 6 times. That is the same inversion owned one level
   up: `EventStore` is a platform interface and `JdbcEventStore` its adapter.
 

@@ -3,7 +3,7 @@ package pl.najem.app.web;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import pl.najem.acc.application.ArrearsBoardQuery;
+import pl.najem.acc.application.ArrearsBoardProjection;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -22,11 +22,11 @@ import java.time.LocalDate;
 @Controller
 public class ReportScreenController {
 
-    private final ArrearsBoardQuery board;
+    private final ArrearsBoardProjection board;
     private final TenancyLabels labels;
     private final Clock clock;
 
-    public ReportScreenController(ArrearsBoardQuery board, TenancyLabels labels, Clock clock) {
+    public ReportScreenController(ArrearsBoardProjection board, TenancyLabels labels, Clock clock) {
         this.board = board;
         this.labels = labels;
         this.clock = clock;

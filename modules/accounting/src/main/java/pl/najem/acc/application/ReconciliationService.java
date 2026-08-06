@@ -1,7 +1,6 @@
 package pl.najem.acc.application;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.WarningKind;
@@ -15,15 +14,23 @@ import java.util.UUID;
 @Transactional
 public class ReconciliationService {
 
-    private final JdbcTemplate jdbc;
+    private final SuggestionRepository suggestions;
+    private final InvoiceRepository invoices;
+    private final PaymentRepository payments;
+    private final PayerAccountRepository payerAccounts;
     private final WarningService warnings;
     private final AccountingService accounting;
     private final Clock clock;
 
     @Autowired
-    public ReconciliationService(JdbcTemplate jdbc, WarningService warnings,
-                                 AccountingService accounting, Clock clock) {
-        this.jdbc = jdbc;
+    public ReconciliationService(SuggestionRepository suggestions, InvoiceRepository invoices,
+                                 PaymentRepository payments, PayerAccountRepository payerAccounts,
+                                 WarningService warnings, AccountingService accounting,
+                                 Clock clock) {
+        this.suggestions = suggestions;
+        this.invoices = invoices;
+        this.payments = payments;
+        this.payerAccounts = payerAccounts;
         this.warnings = warnings;
         this.accounting = accounting;
         this.clock = clock;
@@ -31,19 +38,19 @@ public class ReconciliationService {
 
     /**
      * Confirms a suggested match. A payment belonging to another workspace is invisible rather than
-     * forbidden — the query scopes the boundary, so there is nothing to confirm and nothing happens.
+     * forbidden — the workspace is part of the question, so there is nothing to confirm and nothing
+     * happens.
      */
     public void confirm(UUID workspaceId, UUID paymentId) {
-        var suggested = jdbc.queryForList(
-            "select charge_id from acc_suggestion where workspace_id = ? and payment_id = ?",
-            UUID.class, workspaceId, paymentId);
+        var suggested = suggestions.suggestedInvoice(workspaceId, paymentId);
         if (suggested.isEmpty()) {
             return;
         }
-        UUID chargeId = suggested.getFirst();
-        UUID tenancyId = jdbc.queryForObject(
-            "select tenancy_id from acc_charge where workspace_id = ? and charge_id = ?",
-            UUID.class, workspaceId, chargeId);
+        UUID invoiceId = suggested.get();
+        UUID tenancyId = invoices.find(workspaceId, invoiceId)
+            .orElseThrow(() -> new IllegalStateException("suggestion for payment " + paymentId
+                + " names charge " + invoiceId + ", which is not in workspace " + workspaceId))
+            .tenancyId();
 
         // What the manager confirms is which tenancy the money belongs to. Where it comes to rest
         // within that tenancy is the ledger's rule, not theirs: oldest due first, rent last.
@@ -61,34 +68,25 @@ public class ReconciliationService {
      * account first becomes ambiguous the manager is told once, because that is the moment tier 3
      * stops being able to identify a tenancy from it. A first association is how tier 3 learns
      * anything and is not news.
+     *
+     * <p>One question to the register instead of three to the database. "Which tenancies does this
+     * account pay for" answers both halves — whether any others are known, and whether this one
+     * already is — and the two used to be separate queries that could in principle disagree.
      */
     private void rememberPayerAccount(UUID workspaceId, UUID paymentId, UUID tenancyId) {
-        var payerAccounts = jdbc.queryForList("""
-            select counterparty_iban from acc_payment
-            where workspace_id = ? and payment_id = ? and counterparty_iban is not null
-            """, String.class, workspaceId, paymentId);
-        if (payerAccounts.isEmpty()) {
+        var payerAccount = payments.payerAccountOf(workspaceId, paymentId);
+        if (payerAccount.isEmpty()) {
             return;
         }
-        String iban = payerAccounts.getFirst();
-        var known = jdbc.queryForList("""
-            select tenancy_id from acc_payer_account
-            where workspace_id = ? and counterparty_iban = ? and tenancy_id <> ?
-            """, UUID.class, workspaceId, iban, tenancyId);
-        boolean alreadyKnownHere = jdbc.queryForObject("""
-            select count(*) from acc_payer_account
-            where workspace_id = ? and counterparty_iban = ? and tenancy_id = ?
-            """, Integer.class, workspaceId, iban, tenancyId) > 0;
-        if (!known.isEmpty() && !alreadyKnownHere) {
-            warnings.raise(workspaceId, tenancyId, List.of(new WarningToRaise(WarningKind.PAYER_ACCOUNT_AMBIGUOUS,
-                "konto " + iban + " płaci za więcej niż jeden najem (" + known.getFirst() + ", "
-                    + tenancyId + "); nie podpowiadamy już najmu na podstawie samego konta")));
+        String iban = payerAccount.get();
+        var known = payerAccounts.tenanciesPaidFrom(workspaceId, iban);
+        var others = known.stream().filter(other -> !other.equals(tenancyId)).toList();
+        if (!others.isEmpty() && !known.contains(tenancyId)) {
+            warnings.raise(workspaceId, tenancyId,
+                List.of(new WarningToRaise(WarningKind.PAYER_ACCOUNT_AMBIGUOUS,
+                    "konto " + iban + " płaci za więcej niż jeden najem (" + others.getFirst() + ", "
+                        + tenancyId + "); nie podpowiadamy już najmu na podstawie samego konta")));
         }
-        jdbc.update("""
-            insert into acc_payer_account(workspace_id, counterparty_iban, tenancy_id, learned_from, learned_on)
-            values (?,?,?,?,?)
-            on conflict (workspace_id, counterparty_iban, tenancy_id)
-            do update set learned_from = excluded.learned_from, learned_on = excluded.learned_on
-            """, workspaceId, iban, tenancyId, paymentId, LocalDate.now(clock));
+        payerAccounts.learn(workspaceId, iban, tenancyId, paymentId, LocalDate.now(clock));
     }
 }

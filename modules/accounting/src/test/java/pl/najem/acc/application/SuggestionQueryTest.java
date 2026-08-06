@@ -58,7 +58,7 @@ class SuggestionQueryTest {
         var store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
         laddered = PostgresAccounting.ingestionService((since, iban) -> List.of(), store, jdbc, MatchingPolicy.tiersOn());
-        suggestions = new SuggestionQuery(jdbc);
+        suggestions = new pl.najem.acc.adapter.persistence.PostgresSuggestionQuery(jdbc);
     }
 
     /** Tier 1: the payer quoted the reference exactly, and both references read the same. */

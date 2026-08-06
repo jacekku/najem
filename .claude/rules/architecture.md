@@ -98,25 +98,29 @@ Prefer `Projection` over `ReadModelRepository`. A projection is denormalized and
 definition, so the longer name adds a word and drops the more useful signal — that the suffix
 `Repository` does not apply here at all.
 
-## Migration front
+## A7, and the third suffix
 
-Rule A5 is the destination. As of 2026-08-05 the accounting module is partway there:
+`Repository` for the record, `Projection` for a derived store — and `Query` for a read that is
+neither. `SuggestionQuery` joins acc_suggestion to the payment and charge it names; there is no
+denormalized table to rebuild, so `Projection` would be a claim about storage that is not true, and
+`Repository` is taken by the record itself. Reach for it only when both of the others are wrong.
 
-- **Behind ports:** the `allocate` path — `PaymentRepository`, `InvoiceRepository`,
-  `AccountingRepository` — the arrears board, which reads through `InvoiceRepository` and writes
-  through `ArrearsStandingProjection`, the posting path: `InvoiceService` (was `LedgerService`)
-  asserts, withdraws and credits obligations through that same `InvoiceRepository`, and the warning
-  register behind `WarningRepository`, deposits behind `DepositRepository` — which reuse
-  `InvoiceRepository` for the obligation the tenant actually pays — and the bank-account register
-  behind `WorkspaceAccountRepository`.
-- **Not yet:** `org.springframework.jdbc.core.JdbcTemplate` is imported **6 times** in
-  `pl.najem.acc.application`. `CorrectionService`, `IngestionService`, `SuspenseService`,
-  `ReconciliationService`, `ArrearsBoardQuery` and `SuggestionQuery` are each a service and their
-  own repository at once.
+Two ports over one derived table is not duplication. `ArrearsStandingProjection` writes
+acc_tenancy_status and is what services hold; `ArrearsBoardProjection` reads it and is what a screen
+holds. One port carrying both would put a read of the colour within reach of every service that
+refreshes it, which is the failure A7 exists to prevent.
 
-Each of those imports is a port that has not been named yet. `CorrectionService` holding a
-`JdbcTemplate` is not a violation of A5 — it is a class the extraction has not reached. The
-distinction is practical: a violation blocks a merge, a migration front is tracked and worked
-down. Treating them alike is how a rule stops being believed.
+## The migration front is closed
 
-When the last one is extracted, delete this section.
+As of 2026-08-06, `org.springframework.jdbc.core.JdbcTemplate` is imported **0 times** in
+`pl.najem.acc.application`, down from 11. Every service reaches its store through a port with a
+Postgres adapter and an in-memory double, and the mechanical check — grepping the application
+package for adapter imports — returns nothing.
+
+*This section replaces the tracked front and should stay until it stops being news.* What it was for
+is worth remembering: a violation blocks a merge, a migration front is tracked and worked down, and
+treating them alike is how a rule stops being believed.
+
+`application` still imports `pl.najem.eventstore` directly. That is the same inversion owned one
+level up — `EventStore` is a platform interface and `JdbcEventStore` its adapter — so it is not this
+module's front, and it is the next one worth naming.

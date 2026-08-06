@@ -1,11 +1,11 @@
 package pl.najem.acc.application;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.PaymentAllocationAmended;
 import pl.najem.acc.domain.PaymentReversed;
+import pl.najem.acc.domain.PaymentStatus;
 import pl.najem.eventstore.EventStore;
 
 import java.math.BigDecimal;
@@ -24,14 +24,16 @@ import java.util.UUID;
  * <p>Confusing them would be a quiet disaster in either direction — reversing as an amendment
  * leaves a tenancy credited with money that does not exist, and amending as a reversal loses a real
  * payment. Neither ever deletes an allocation: the undone row survives marked as reversed, because
- * what the ledger did before it was corrected is part of the record.
+ * what the books did before they were corrected is part of the record.
  */
 @Service
 @Transactional
 public class CorrectionService {
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final PaymentRepository payments;
+    private final InvoiceRepository invoices;
+    private final AccountingRepository allocations;
     private final AccountingService accounting;
     /**
      * Held directly rather than reached through {@link AccountingService}: unwinding reopens
@@ -43,19 +45,16 @@ public class CorrectionService {
     private final Clock clock;
 
     @Autowired
-    public CorrectionService(EventStore store, JdbcTemplate jdbc, AccountingService accounting,
-                             ArrearsBoardService board, Clock clock) {
+    public CorrectionService(EventStore store, PaymentRepository payments,
+                             InvoiceRepository invoices, AccountingRepository allocations,
+                             AccountingService accounting, ArrearsBoardService board, Clock clock) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.payments = payments;
+        this.invoices = invoices;
+        this.allocations = allocations;
         this.accounting = accounting;
         this.board = board;
         this.clock = clock;
-    }
-
-    /** For tests and callers outside the container, which have no Clock bean to hand. */
-    public CorrectionService(EventStore store, JdbcTemplate jdbc, AccountingService accounting,
-                             ArrearsBoardService board) {
-        this(store, jdbc, accounting, board, Clock.systemDefaultZone());
     }
 
     /**
@@ -65,16 +64,11 @@ public class CorrectionService {
      */
     public void reverse(UUID workspaceId, UUID paymentId, String reason) {
         requireReason(reason, "reversing payment " + paymentId);
-        String status = statusOf(workspaceId, paymentId);
-        if ("reversed".equals(status)) {
+        if (statusOf(workspaceId, paymentId) == PaymentStatus.REVERSED) {
             throw new IllegalStateException("payment " + paymentId + " is already reversed");
         }
         unwind(workspaceId, paymentId);
-        jdbc.update("""
-            update acc_payment
-            set status = 'reversed', unallocated_amount = 0, reversal_reason = ?, reversed_on = ?
-            where workspace_id = ? and payment_id = ?
-            """, reason, LocalDate.now(clock), workspaceId, paymentId);
+        payments.reverse(workspaceId, paymentId, reason, LocalDate.now(clock));
         append(paymentId, new PaymentReversed(paymentId, reason));
     }
 
@@ -84,8 +78,7 @@ public class CorrectionService {
      */
     public BigDecimal amendAllocation(UUID workspaceId, UUID paymentId, UUID tenancyId, String reason) {
         requireReason(reason, "amending payment " + paymentId);
-        String status = statusOf(workspaceId, paymentId);
-        if ("reversed".equals(status)) {
+        if (statusOf(workspaceId, paymentId) == PaymentStatus.REVERSED) {
             throw new IllegalStateException(
                 "payment " + paymentId + " was reversed; there is no money to move");
         }
@@ -95,59 +88,39 @@ public class CorrectionService {
     }
 
     /**
-     * Takes every live allocation of this payment back off its charge and returns the money to the
+     * Takes every live allocation of this payment back off its invoice and returns the money to the
      * payment. The allocation rows stay, marked reversed.
      *
      * <p>Tenancies that lose a settlement go back to awaiting on the board. Telling a manager a
      * tenancy is current when its payment has been taken back is worse than telling them nothing.
      */
     private void unwind(UUID workspaceId, UUID paymentId) {
-        var live = jdbc.queryForList("""
-            select charge_id, tenancy_id, amount from acc_allocation
-            where workspace_id = ? and payment_id = ? and not reversed
-            """, workspaceId, paymentId);
-        for (var row : live) {
-            // greatest(...) rather than a bare subtraction: if the two ever disagreed the column
-            // would go negative, and "amount > allocated_amount" would read the charge as open
-            // forever. A floor makes the disagreement loud instead of permanent.
-            jdbc.update("""
-                update acc_charge
-                set allocated_amount = greatest(allocated_amount - ?, 0), allocated = false
-                where workspace_id = ? and charge_id = ?
-                """, row.get("amount"), workspaceId, row.get("charge_id"));
+        var live = allocations.liveAllocations(workspaceId, paymentId);
+        for (LiveAllocation allocation : live) {
+            invoices.unapplyAllocation(workspaceId, allocation.invoiceId(), allocation.amount());
         }
-        // The board is derived, never asserted. Writing 'awaiting' here would be right today and
-        // wrong the moment the colours proper exist, and it would look like a colour bug rather
-        // than a missing call. Once per tenancy, after the charges have finished moving.
-        live.stream().map(row -> (UUID) row.get("tenancy_id")).distinct()
+        // The board is derived, never asserted. Once per tenancy, after the charges have finished
+        // moving.
+        live.stream().map(LiveAllocation::tenancyId).distinct()
             .forEach(tenancyId -> board.refresh(workspaceId, tenancyId));
-        jdbc.update("""
-            update acc_payment
-            set unallocated_amount = unallocated_amount
-                + coalesce((select sum(amount) from acc_allocation
-                            where workspace_id = ? and payment_id = ? and not reversed), 0)
-            where workspace_id = ? and payment_id = ?
-            """, workspaceId, paymentId, workspaceId, paymentId);
-        jdbc.update("""
-            update acc_allocation set reversed = true
-            where workspace_id = ? and payment_id = ? and not reversed
-            """, workspaceId, paymentId);
+        payments.returnUnallocated(workspaceId, paymentId, live.stream()
+            .map(LiveAllocation::amount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add));
+        allocations.markReversed(workspaceId, paymentId);
     }
 
-    /** A payment outside the caller's workspace does not exist, rather than being forbidden. */
-    private String statusOf(UUID workspaceId, UUID paymentId) {
-        var rows = jdbc.queryForList("""
-            select status from acc_payment where workspace_id = ? and payment_id = ?
-            """, String.class, workspaceId, paymentId);
-        if (rows.isEmpty()) {
-            // TODO: same absence, two vocabularies. AllocationService now raises
-            // PaymentNotFoundException for exactly this sentence. This one also reads the status,
-            // so it cannot simply defer to the repository — it wants a payment, not a count, and
-            // should move onto PaymentRepository once that port carries status too.
-            throw new IllegalArgumentException(
-                "no payment " + paymentId + " in workspace " + workspaceId);
-        }
-        return rows.getFirst();
+    /**
+     * A payment outside the caller's workspace does not exist, rather than being forbidden.
+     *
+     * <p>Still {@link IllegalArgumentException} rather than {@link PaymentNotFoundException}, which
+     * is what allocation raises for the same absence. Unifying them is worth doing and is not a
+     * refactoring: the type is visible to callers, and {@code ReversalTest} pins this one. It wants
+     * deciding on purpose rather than as a side effect of moving a query.
+     */
+    private PaymentStatus statusOf(UUID workspaceId, UUID paymentId) {
+        return payments.statusOf(workspaceId, paymentId).orElseThrow(
+            () -> new IllegalArgumentException(
+                "no payment " + paymentId + " in workspace " + workspaceId));
     }
 
     private void append(UUID paymentId, Object event) {

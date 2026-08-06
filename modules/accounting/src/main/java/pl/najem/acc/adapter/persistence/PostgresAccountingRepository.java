@@ -30,4 +30,23 @@ public class PostgresAccountingRepository implements AccountingRepository {
             """, allocationId, workspaceId, paymentId, invoiceId, tenancyId, component.wireName(),
             amount, dueDate);
     }
+
+    @Override
+    public java.util.List<pl.najem.acc.application.LiveAllocation> liveAllocations(UUID workspaceId,
+                                                                                   UUID paymentId) {
+        return jdbc.query("""
+            select charge_id, tenancy_id, amount from acc_allocation
+            where workspace_id = ? and payment_id = ? and not reversed
+            order by charge_id
+            """, (rs, i) -> new pl.najem.acc.application.LiveAllocation(rs.getObject(1, UUID.class),
+                rs.getObject(2, UUID.class), rs.getBigDecimal(3)), workspaceId, paymentId);
+    }
+
+    @Override
+    public void markReversed(UUID workspaceId, UUID paymentId) {
+        jdbc.update("""
+            update acc_allocation set reversed = true
+            where workspace_id = ? and payment_id = ? and not reversed
+            """, workspaceId, paymentId);
+    }
 }

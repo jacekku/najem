@@ -12,7 +12,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
+import pl.najem.acc.adapter.persistence.PostgresAccountingRepository;
 import pl.najem.acc.adapter.persistence.PostgresInvoiceRepository;
+import pl.najem.acc.adapter.persistence.PostgresPaymentRepository;
 import pl.najem.acc.AccEventTypes;
 import pl.najem.acc.TestWorkspace;
 import pl.najem.acc.domain.PaymentAllocationAmended;
@@ -74,7 +76,11 @@ class ReversalTest {
         var accounting = new AccountingService(
             PostgresAccounting.allocationService(store, jdbc), board);
         suspense = PostgresAccounting.suspenseService(store, jdbc);
-        corrections = new CorrectionService(store, jdbc, accounting, board);
+        // Built here rather than through PostgresAccounting, which would supply a board on the
+        // system clock and quietly discard the fixed one these colour assertions depend on.
+        corrections = new CorrectionService(store, new PostgresPaymentRepository(jdbc),
+            new PostgresInvoiceRepository(jdbc), new PostgresAccountingRepository(jdbc),
+            accounting, board, Clock.systemDefaultZone());
     }
 
     /** The tenant owes it again, on the day they always owed it. */

@@ -4,7 +4,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import pl.najem.acc.application.ArrearsBoardQuery;
+import pl.najem.acc.application.ArrearsBoardProjection;
 
 import java.util.List;
 import java.util.Map;
@@ -14,9 +14,9 @@ import java.util.UUID;
 @RequestMapping("/api/acc")
 public class BoardController {
 
-    private final ArrearsBoardQuery board;
+    private final ArrearsBoardProjection board;
 
-    public BoardController(ArrearsBoardQuery board) {
+    public BoardController(ArrearsBoardProjection board) {
         this.board = board;
     }
 

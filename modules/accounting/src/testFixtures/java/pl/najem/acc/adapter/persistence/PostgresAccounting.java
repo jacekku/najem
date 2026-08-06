@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import pl.najem.acc.application.AccountingService;
 import pl.najem.acc.application.AllocationService;
 import pl.najem.acc.application.ArrearsBoardService;
+import pl.najem.acc.application.CorrectionService;
 import pl.najem.acc.application.BankStatementPort;
 import pl.najem.acc.application.IngestionService;
 import pl.najem.acc.application.MatchingPolicy;
@@ -90,20 +91,33 @@ public final class PostgresAccounting {
      */
     public static IngestionService ingestionService(BankStatementPort bank, EventStore store,
                                                     JdbcTemplate jdbc) {
-        return new IngestionService(bank, store, jdbc, workspaceAccountService(jdbc));
+        return ingestionService(bank, store, jdbc, MatchingPolicy.tierOneOnly());
     }
 
     public static IngestionService ingestionService(BankStatementPort bank, EventStore store,
                                                     JdbcTemplate jdbc, MatchingPolicy policy) {
-        return new IngestionService(bank, store, jdbc, workspaceAccountService(jdbc), policy);
+        return new IngestionService(bank, store, new PostgresPaymentRepository(jdbc),
+            new PostgresInvoiceMatching(jdbc), new PostgresPayerAccountRepository(jdbc),
+            new PostgresSuggestionRepository(jdbc), workspaceAccountService(jdbc), policy,
+            Clock.systemDefaultZone());
+    }
+
+    public static CorrectionService correctionService(EventStore store, JdbcTemplate jdbc) {
+        return new CorrectionService(store, new PostgresPaymentRepository(jdbc),
+            new PostgresInvoiceRepository(jdbc), new PostgresAccountingRepository(jdbc),
+            accountingService(store, jdbc), arrearsBoardService(jdbc, Clock.systemDefaultZone()),
+            Clock.systemDefaultZone());
     }
 
     public static SuspenseService suspenseService(EventStore store, JdbcTemplate jdbc) {
-        return new SuspenseService(store, jdbc, accountingService(store, jdbc));
+        return new SuspenseService(store, new PostgresPaymentRepository(jdbc),
+            accountingService(store, jdbc));
     }
 
     public static ReconciliationService reconciliationService(EventStore store, JdbcTemplate jdbc) {
-        return new ReconciliationService(jdbc, warningService(jdbc),
+        return new ReconciliationService(new PostgresSuggestionRepository(jdbc),
+            new PostgresInvoiceRepository(jdbc), new PostgresPaymentRepository(jdbc),
+            new PostgresPayerAccountRepository(jdbc), warningService(jdbc),
             accountingService(store, jdbc), Clock.systemDefaultZone());
     }
 }

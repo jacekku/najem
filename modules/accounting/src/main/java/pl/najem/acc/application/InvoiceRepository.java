@@ -46,6 +46,16 @@ public interface InvoiceRepository {
      */
     void applyAllocation(UUID workspaceId, UUID invoiceId, BigDecimal amount);
 
+    /**
+     * Takes a settlement back off the invoice, reopening what it had covered.
+     *
+     * <p>Floored at zero rather than trusted to subtract cleanly. If the stored figure and the
+     * allocations ever disagreed, a bare subtraction would push it negative and
+     * {@code amount > allocated_amount} would then read the invoice as open forever — a floor makes
+     * the disagreement loud instead of permanent.
+     */
+    void unapplyAllocation(UUID workspaceId, UUID invoiceId, BigDecimal amount);
+
     /** Marks an invoice withdrawn. The row survives — the record does not delete what it asserted. */
     void withdraw(UUID workspaceId, UUID invoiceId);
 

@@ -2,7 +2,6 @@ package pl.najem.acc.application;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.acc.domain.MatchTier;
@@ -15,44 +14,50 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Taking a bank statement in, and deciding what — if anything — each line looks like it is paying.
+ *
+ * <p>The ladder's rungs are lookups and live behind {@link InvoiceMatching}. The <em>order</em> they
+ * are tried in, and where it stops, is the decision this service exists to make and stays here: a
+ * store that answered rungs in its own order would be deciding how confident the module is.
+ */
 @Service
 @Transactional
 public class IngestionService {
 
     private final BankStatementPort bank;
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final PaymentRepository payments;
+    private final InvoiceMatching matching;
+    private final PayerAccountRepository payerAccounts;
+    private final SuggestionRepository suggestions;
     private final WorkspaceAccountService accounts;
     private final MatchingPolicy policy;
     private final Clock clock;
 
     @Autowired
-    public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
-                            WorkspaceAccountService accounts,
+    public IngestionService(BankStatementPort bank, EventStore store, PaymentRepository payments,
+                            InvoiceMatching matching, PayerAccountRepository payerAccounts,
+                            SuggestionRepository suggestions, WorkspaceAccountService accounts,
                             @Value("${acc.matching.tiers-enabled:false}") boolean tiersEnabled,
                             @Value("${acc.matching.auto-confirm:false}") boolean autoConfirm) {
-        this(bank, store, jdbc, accounts, new MatchingPolicy(tiersEnabled, autoConfirm));
+        this(bank, store, payments, matching, payerAccounts, suggestions, accounts,
+            new MatchingPolicy(tiersEnabled, autoConfirm), Clock.systemDefaultZone());
     }
 
-    public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
-                            WorkspaceAccountService accounts, MatchingPolicy policy) {
-        this(bank, store, jdbc, accounts, policy, Clock.systemDefaultZone());
-    }
-
-    public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
-                            WorkspaceAccountService accounts, MatchingPolicy policy, Clock clock) {
+    public IngestionService(BankStatementPort bank, EventStore store, PaymentRepository payments,
+                            InvoiceMatching matching, PayerAccountRepository payerAccounts,
+                            SuggestionRepository suggestions, WorkspaceAccountService accounts,
+                            MatchingPolicy policy, Clock clock) {
         this.bank = bank;
         this.store = store;
-        this.jdbc = jdbc;
+        this.payments = payments;
+        this.matching = matching;
+        this.payerAccounts = payerAccounts;
+        this.suggestions = suggestions;
         this.accounts = accounts;
         this.policy = policy;
         this.clock = clock;
-    }
-
-    /** Ingestion with the launch policy: tier 1 only, no automatic allocation. */
-    public IngestionService(BankStatementPort bank, EventStore store, JdbcTemplate jdbc,
-                            WorkspaceAccountService accounts) {
-        this(bank, store, jdbc, accounts, MatchingPolicy.tierOneOnly());
     }
 
     /**
@@ -71,25 +76,14 @@ public class IngestionService {
     }
 
     public void ingest(UUID workspaceId, BankLine line) {
-        Integer existing = jdbc.queryForObject(
-            "select count(*) from acc_payment where workspace_id = ? and external_id = ?",
-            Integer.class, workspaceId, line.externalId());
-        if (existing != null && existing > 0) {
+        if (payments.alreadyIngested(workspaceId, line.externalId())) {
             return;
         }
         UUID paymentId = UUID.randomUUID();
         store.append(paymentId, "Payment", 0,
             List.of(new PaymentIngested(paymentId, line.externalId(), line.amount(),
                 line.title(), line.bookingDate())), List.of());
-        jdbc.update("""
-            insert into acc_payment(payment_id, workspace_id, external_id, amount, title, booking_date,
-                                    status, unallocated_amount, counterparty_name, counterparty_iban,
-                                    bank_reference, value_date, direction, currency)
-            values (?,?,?,?,?,?,'unmatched',?,?,?,?,?,?,?)
-            """, paymentId, workspaceId, line.externalId(), line.amount(), line.title(), line.bookingDate(),
-            line.amount(),
-            line.counterpartyName(), line.counterpartyIban(), line.bankReference(), line.valueDate(),
-            line.creditDebitIndicator(), line.currency());
+        payments.record(workspaceId, paymentId, line);
         climbTheLadder(workspaceId, paymentId, line);
     }
 
@@ -122,11 +116,7 @@ public class IngestionService {
 
     /** Tier 1 — the reference and the amount both name an open charge. */
     private Optional<UUID> exactMatch(UUID workspaceId, BankLine line) {
-        return first(jdbc.queryForList("""
-            select charge_id from acc_charge
-            where workspace_id = ? and payment_reference = ? and amount = ? and not allocated and active
-            order by due_date limit 1
-            """, UUID.class, workspaceId, line.title(), line.amount()));
+        return matching.byExactReferenceAndAmount(workspaceId, line.title(), line.amount());
     }
 
     /**
@@ -134,28 +124,12 @@ public class IngestionService {
      * both sides, and the charge's reference need only appear somewhere in the title, because banks
      * prepend their own words and payers paste more than they were asked to.
      *
-     * <p>The amount is deliberately not constrained: a part payment is still that tenant's money.
-     * A reference that normalises to nothing matches no charge rather than every charge.
-     *
-     * <p>The <em>longest</em> matching reference wins, not the oldest charge. A short reference is a
-     * substring of a longer one, so a payer naming {@code NAJEM/M1/2027/09} also literally names
-     * {@code NAJEM/M1}; oldest-first would suggest a small January charge against a full September
-     * payment, and the tier badge would read as mild uncertainty rather than as the wrong month.
+     * <p>A title that normalises to nothing is not asked about at all: it would be a substring of
+     * every reference, and a rung that matches everything is worse than one that matches nothing.
      */
     private Optional<UUID> referenceMatch(UUID workspaceId, BankLine line) {
         String title = normalise(line.title());
-        if (title.isEmpty()) {
-            return Optional.empty();
-        }
-        return first(jdbc.queryForList("""
-            select charge_id from acc_charge
-            where workspace_id = ? and not allocated and active
-              and regexp_replace(upper(payment_reference), '[^A-Z0-9]', '', 'g') <> ''
-              and position(regexp_replace(upper(payment_reference), '[^A-Z0-9]', '', 'g') in ?) > 0
-            order by length(regexp_replace(upper(payment_reference), '[^A-Z0-9]', '', 'g')) desc,
-                     due_date
-            limit 1
-            """, UUID.class, workspaceId, title));
+        return title.isEmpty() ? Optional.empty() : matching.byReferenceWithin(workspaceId, title);
     }
 
     /**
@@ -174,36 +148,22 @@ public class IngestionService {
         if (line.counterpartyIban() == null || line.counterpartyIban().isBlank()) {
             return Optional.empty();
         }
-        var tenancies = jdbc.queryForList("""
-            select tenancy_id from acc_payer_account
-            where workspace_id = ? and counterparty_iban = ?
-            """, UUID.class, workspaceId, line.counterpartyIban());
+        var tenancies = payerAccounts.tenanciesPaidFrom(workspaceId, line.counterpartyIban());
         if (tenancies.size() != 1) {
             return Optional.empty();
         }
-        return first(jdbc.queryForList("""
-            select charge_id from acc_charge
-            where workspace_id = ? and tenancy_id = ? and not allocated and active
-            order by due_date limit 1
-            """, UUID.class, workspaceId, tenancies.getFirst()));
+        return matching.oldestOpenOf(workspaceId, tenancies.getFirst());
     }
 
     /** Records the rung that answered. Nothing here allocates — the manager still confirms. */
-    private boolean suggest(UUID workspaceId, UUID paymentId, Optional<UUID> chargeId, MatchTier tier) {
-        if (chargeId.isEmpty()) {
+    private boolean suggest(UUID workspaceId, UUID paymentId, Optional<UUID> invoiceId,
+                            MatchTier tier) {
+        if (invoiceId.isEmpty()) {
             return false;
         }
-        jdbc.update("insert into acc_suggestion(payment_id, workspace_id, charge_id, tier) values (?,?,?,?)",
-            paymentId, workspaceId, chargeId.get(), tier.number());
-        jdbc.update("""
-            update acc_payment set status = 'suggested'
-            where workspace_id = ? and payment_id = ?
-            """, workspaceId, paymentId);
+        suggestions.suggest(workspaceId, paymentId, invoiceId.get(), tier);
+        payments.markSuggested(workspaceId, paymentId);
         return true;
-    }
-
-    private static Optional<UUID> first(List<UUID> ids) {
-        return ids.isEmpty() ? Optional.empty() : Optional.of(ids.getFirst());
     }
 
     private static String normalise(String value) {

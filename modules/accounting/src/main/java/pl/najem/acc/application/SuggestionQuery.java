@@ -1,9 +1,5 @@
 package pl.najem.acc.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -18,13 +14,16 @@ import java.util.UUID;
  * same confidence, and if they look alike on screen the manager either trusts all of them or checks
  * all of them — and both of those are the same as having no tiers at all.
  *
+ * <p>Neither a repository nor a projection, and the name says which: acc_suggestion is
+ * the record and {@link SuggestionRepository} owns it, while this assembles a view by joining that
+ * record to the payment and the charge it names. There is no derived table to rebuild, so
+ * {@code Projection} would be a claim about storage that is not true here. It is a query.
+ *
  * <p>So the tier comes back as a number this module owns, and with it the facts the tier is an
  * assertion about. <strong>The evidence matters as much as the confidence.</strong> A tier without
  * what it was derived from is just a number, and a manager cannot check a number.
  */
-@Service
-@Transactional(readOnly = true)
-public class SuggestionQuery {
+public interface SuggestionQuery {
 
     /**
      * One suggested match, and why it was suggested.
@@ -43,22 +42,16 @@ public class SuggestionQuery {
      *                    · 4 placed by hand from the suspense queue
      * @param outstanding what is still owed on the charge, before this payment is applied
      */
-    public record Row(UUID paymentId, UUID chargeId, UUID tenancyId, int tier,
-                      BigDecimal paidAmount, BigDecimal chargedAmount, BigDecimal outstanding,
-                      LocalDate paidOn, LocalDate dueDate, String component,
-                      String quotedReference, String expectedReference,
-                      String payerName, String payerIban) {
+    record Row(UUID paymentId, UUID chargeId, UUID tenancyId, int tier,
+               BigDecimal paidAmount, BigDecimal chargedAmount, BigDecimal outstanding,
+               LocalDate paidOn, LocalDate dueDate, String component,
+               String quotedReference, String expectedReference,
+               String payerName, String payerIban) {
 
         /** Whether confirming this would leave the charge still partly unpaid. */
         public boolean isPartPayment() {
             return paidAmount.compareTo(outstanding) < 0;
         }
-    }
-
-    private final JdbcTemplate jdbc;
-
-    public SuggestionQuery(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
     }
 
     /**
@@ -68,22 +61,5 @@ public class SuggestionQuery {
      * down the list is then spending their attention where it is actually needed, and the ordering
      * carries the same message as the tier itself.
      */
-    public List<Row> forWorkspace(UUID workspaceId) {
-        return jdbc.query("""
-            select s.payment_id, s.charge_id, c.tenancy_id, s.tier,
-                   p.amount, c.amount, c.amount - c.allocated_amount,
-                   p.booking_date, c.due_date, c.component,
-                   p.title, c.payment_reference, p.counterparty_name, p.counterparty_iban
-            from acc_suggestion s
-            join acc_payment p on p.payment_id = s.payment_id
-            join acc_charge  c on c.charge_id  = s.charge_id
-            where s.workspace_id = ?
-            order by s.tier, p.booking_date, s.payment_id
-            """, (rs, i) -> new Row(
-                rs.getObject(1, UUID.class), rs.getObject(2, UUID.class), rs.getObject(3, UUID.class),
-                rs.getInt(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getBigDecimal(7),
-                rs.getDate(8).toLocalDate(), rs.getDate(9).toLocalDate(), rs.getString(10),
-                rs.getString(11), rs.getString(12), rs.getString(13), rs.getString(14)),
-            workspaceId);
-    }
+    List<Row> forWorkspace(UUID workspaceId);
 }
