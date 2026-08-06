@@ -121,26 +121,57 @@ class WorkspaceBoundaryTest {
     }
 
     /**
-     * The header is only the input; {@link pl.najem.pm.application.WorkspaceGuard} is what refuses.
+     * The header is only the input; something has to refuse.
      *
      * <p>This is the assertion that actually defends PM, and it did not exist until seq 243 pointed
      * out why: the {@code workspace_id = ?} predicates the tests above check are bound to the
      * aggregate's own workspace, so they are satisfied by construction and cannot exclude anything.
      * That derivation is the right design — a caller cannot assert a workspace it does not own —
-     * but it means the SQL scan passes for a reason unrelated to safety. Delete a {@code guard.}
-     * line and every other test in this class stays green while the endpoint stands wide open.
+     * but it means the SQL scan passes for a reason unrelated to safety. Drop the check and every
+     * other test in this class stays green while the endpoint stands wide open.
+     *
+     * <p><b>Two forms count, and the second is the one being migrated to.</b> The original is
+     * {@code guard.requireX(workspaceId, id)} in the controller, which asks whether a row with this
+     * id exists in the caller's workspace — a question put to the projection tables. The second is
+     * handing the acting workspace to the service as the first argument, which then asks the
+     * aggregate rebuilt from its own stream. Both refuse; the second refuses closer to the decision
+     * and against the record rather than a copy of it, and it also covers callers that never pass
+     * through a controller at all.
+     *
+     * <p>What must not pass is an endpoint that accepts a workspace and does neither — takes the
+     * header, and hands the subject id onward without the workspace ever being compared to
+     * anything. That is the shape of the original defect and it is still what this fails on.
      */
     @Test
-    void everyWriteMappingReachesTheGuard() throws IOException {
+    void everyWriteMappingChecksTheWorkspaceOrHandsItOn() throws IOException {
         var offenders = writeMappings()
-            .filter(mapping -> !GUARD_NOT_APPLICABLE.contains(mapping.method()))
-            .filter(mapping -> !mapping.reachesGuard())
+            .filter(mapping -> !mapping.checksTheWorkspace())
             .map(Mapping::name)
             .toList();
 
         assertThat(offenders)
             .as("these endpoints accept a workspace and never check it against the subject")
             .isEmpty();
+    }
+
+    /**
+     * Both forms are actually present, so neither branch above is dead.
+     *
+     * <p>A two-branch check silently degrades to a one-branch check the moment one branch stops
+     * matching anything — and a predicate that never matches is indistinguishable from a predicate
+     * that is wrong. When the migration finishes and no controller calls {@code guard.} any more,
+     * this fails, and the right response is to delete the guard branch rather than to widen this.
+     */
+    @Test
+    void bothFormsOfTheCheckAreInUse() throws IOException {
+        var mappings = writeMappings().toList();
+
+        assertThat(mappings).filteredOn(Mapping::reachesGuard)
+            .as("no controller guards any more — delete that branch of the check")
+            .isNotEmpty();
+        assertThat(mappings).filteredOn(Mapping::handsTheWorkspaceToTheService)
+            .as("nothing hands the workspace on — the migrated form has gone")
+            .isNotEmpty();
     }
 
     /**
@@ -160,12 +191,14 @@ class WorkspaceBoundaryTest {
             .contains("RepairController.complete", "TenancyController.end");
     }
 
-    /**
-     * A create owns nothing yet: {@code createProperty} takes the workspace and stamps it on a
-     * property that did not exist a moment ago, so there is no prior row to check it against. By
-     * name rather than by rule, for the same reason as the table exemption above.
+    /*
+     * There used to be a by-name exemption here for createProperty: a property that did not exist a
+     * moment ago has no prior owner, so there was nothing for the guard to check it against and the
+     * endpoint could not satisfy the rule. It is gone, and nothing replaced it — createProperty
+     * passes the acting workspace to the service like every other command, so it now satisfies the
+     * rule outright. An exemption that stops being needed is deleted rather than kept: a list of
+     * names nobody rechecks is how the next endpoint gets added to it.
      */
-    private static final Set<String> GUARD_NOT_APPLICABLE = Set.of("createProperty");
 
     /** Nothing in PM may reintroduce a dev-workspace stand-in under any name. */
     @Test
@@ -204,11 +237,32 @@ class WorkspaceBoundaryTest {
             return file + "." + method;
         }
 
+        boolean checksTheWorkspace() {
+            return reachesGuard() || handsTheWorkspaceToTheService();
+        }
+
         boolean reachesGuard() {
             return source.contains("guard.")
                 || guardHelpers.stream().anyMatch(helper -> source.contains(helper + "("));
         }
+
+        /**
+         * A delegation that names the acting workspace first, e.g.
+         * {@code portfolio.setUnitBaseRent(workspaceId, unitId, …)}.
+         *
+         * <p>First argument specifically, not "mentions workspaceId anywhere". A method that merely
+         * mentions it may be passing it as a value to store — {@code createProperty} stamps it on a
+         * new row — and stamping is not checking. Position is what distinguishes the caller saying
+         * who they are from the caller supplying data, and it is the convention the service side
+         * now holds to.
+         */
+        boolean handsTheWorkspaceToTheService() {
+            return HANDS_ON.matcher(source).find();
+        }
     }
+
+    private static final Pattern HANDS_ON =
+        Pattern.compile("\\.\\w+\\(\\s*workspaceId\\s*,");
 
     private static Stream<Mapping> writeMappings() throws IOException {
         return mappings(WRITE_MAPPING);

@@ -69,6 +69,20 @@ public class Property {
         return warnings;
     }
 
+    /**
+     * Refuses a caller who does not own this property. The unit's rule, on the parent — see
+     * {@link Unit#requireOwnedBy(UUID)} for why the stream answers this rather than the projection.
+     *
+     * <p>It also supplies what a child needs: {@code addUnit} must stamp the new unit with its
+     * parent's workspace, and asking the parent to confirm the caller owns it is the same load. One
+     * read that both checks and answers, rather than a guard query and a rebuild that could differ.
+     */
+    public void requireOwnedBy(UUID caller) {
+        if (caller == null || workspaceId == null || !workspaceId.equals(caller)) {
+            throw new UnknownInThisWorkspaceException("property " + id);
+        }
+    }
+
     public static Property from(List<Object> events) {
         var property = new Property();
         events.forEach(property::apply);

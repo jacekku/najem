@@ -1,5 +1,6 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -76,22 +77,22 @@ class AnnulledTenancyTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
-        var portfolio = new PortfolioService(store, jdbc);
+        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
 
         workspace = UUID.randomUUID();
         propertyId = portfolio.createProperty(workspace, "ul. Omyłkowa 2, Gdynia",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
 
-        annulledUnit = portfolio.addUnit(propertyId, "m. 1", new BigDecimal("2000"));
-        portfolio.openUnitToRent(annulledUnit, "ready");
+        annulledUnit = portfolio.addUnit(workspace, propertyId, "m. 1", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, annulledUnit, "ready");
         annulledTenancy = tenancies.reserve(reserve(annulledUnit)).tenancyId();
         tenancies.activate(annulledTenancy, LocalDate.of(2026, 1, 1));
         tenancies.end(annulledTenancy, new EndTenancy(LocalDate.of(2026, 1, 5), null,
             EndReason.ERROR_ANNULLED, "activated the wrong flat", true));
 
-        endedUnit = portfolio.addUnit(propertyId, "m. 2", new BigDecimal("2000"));
-        portfolio.openUnitToRent(endedUnit, "ready");
+        endedUnit = portfolio.addUnit(workspace, propertyId, "m. 2", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, endedUnit, "ready");
         endedTenancy = tenancies.reserve(reserve(endedUnit)).tenancyId();
         tenancies.activate(endedTenancy, LocalDate.of(2026, 1, 1));
         tenancies.end(endedTenancy, new EndTenancy(LocalDate.of(2026, 6, 30), LocalDate.of(2026, 6, 30),

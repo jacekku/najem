@@ -82,6 +82,25 @@ public class Unit {
         return List.copyOf(periods);
     }
 
+    /**
+     * Refuses a caller who does not own this unit.
+     *
+     * <p>Asked of the unit rebuilt from its own stream, which is the record. The projection row
+     * carries the same workspace and was the thing consulted before, but it is written by a second
+     * statement after the append — so the two could differ, and a check against the derived copy is
+     * a check against something that is allowed to lag. There is one authoritative answer and this
+     * is it.
+     *
+     * <p>Fails closed on a null caller and on a unit no event has created: absence and foreign
+     * ownership are the same answer, because saying which would confirm another agency's id is
+     * real.
+     */
+    public void requireOwnedBy(UUID caller) {
+        if (caller == null || workspaceId == null || !workspaceId.equals(caller)) {
+            throw new UnknownInThisWorkspaceException("unit " + id);
+        }
+    }
+
     public static Unit from(List<Object> events) {
         var unit = new Unit();
         events.forEach(unit::apply);

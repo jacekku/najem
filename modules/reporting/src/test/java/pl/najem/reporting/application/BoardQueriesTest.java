@@ -1,5 +1,6 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -93,7 +94,7 @@ class BoardQueriesTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
-        var portfolio = new PortfolioService(store, jdbc);
+        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
 
         workspace = UUID.randomUUID();
@@ -103,21 +104,21 @@ class BoardQueriesTest {
         letProperty = portfolio.createProperty(workspace, "ul. Portfelowa 1, Gdańsk",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
 
-        occupiedUnit = portfolio.addUnit(letProperty, "m. 1", new BigDecimal("2000"));
-        portfolio.openUnitToRent(occupiedUnit, "ready");
+        occupiedUnit = portfolio.addUnit(workspace, letProperty, "m. 1", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, occupiedUnit, "ready");
         currentTenancy = tenancies.reserve(reserve(occupiedUnit)).tenancyId();
         tenancies.activate(currentTenancy, LocalDate.of(2026, 1, 1));
 
-        var onTheMarket = portfolio.addUnit(letProperty, "m. 2", new BigDecimal("2000"));
-        portfolio.openUnitToRent(onTheMarket, "ready");
+        var onTheMarket = portfolio.addUnit(workspace, letProperty, "m. 2", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, onTheMarket, "ready");
 
-        portfolio.addUnit(letProperty, "m. 3", new BigDecimal("2000"));
+        portfolio.addUnit(workspace, letProperty, "m. 3", new BigDecimal("2000"));
 
         // A property whose only tenancy ran for six months and then ended.
         pastProperty = portfolio.createProperty(workspace, "ul. Historyczna 2, Gdańsk",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        pastUnit = portfolio.addUnit(pastProperty, "m. 1", new BigDecimal("2000"));
-        portfolio.openUnitToRent(pastUnit, "ready");
+        pastUnit = portfolio.addUnit(workspace, pastProperty, "m. 1", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, pastUnit, "ready");
         endedTenancy = tenancies.reserve(reserve(pastUnit)).tenancyId();
         tenancies.activate(endedTenancy, LocalDate.of(2026, 1, 1));
         tenancies.end(endedTenancy, new EndTenancy(LocalDate.of(2026, 6, 30), LocalDate.of(2026, 6, 30),
@@ -131,8 +132,8 @@ class BoardQueriesTest {
         // as one of this workspace's units, so a search for that name has something to leak.
         otherProperty = portfolio.createProperty(otherWorkspace, "ul. Cudza 9, Sopot",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        otherUnit = portfolio.addUnit(otherProperty, "m. 2", new BigDecimal("2000"));
-        portfolio.openUnitToRent(otherUnit, "ready");
+        otherUnit = portfolio.addUnit(otherWorkspace, otherProperty, "m. 2", new BigDecimal("2000"));
+        portfolio.openUnitToRent(otherWorkspace, otherUnit, "ready");
 
         board = new PropertyBoardQuery(jdbc);
         occupancy = new PropertyOccupancy(jdbc);

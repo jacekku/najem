@@ -1,5 +1,6 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -94,7 +95,7 @@ class TenancyTimelineProjectionTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
 
-        var portfolio = new PortfolioService(store, jdbc);
+        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
         var invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
@@ -104,8 +105,8 @@ class TenancyTimelineProjectionTest {
         workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Kwiatowa 5, Kraków",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        var unitId = portfolio.addUnit(propertyId, "m. 3", new BigDecimal("2400"));
-        portfolio.openUnitToRent(unitId, "ready to let");
+        var unitId = portfolio.addUnit(workspace, propertyId, "m. 3", new BigDecimal("2400"));
+        portfolio.openUnitToRent(workspace, unitId, "ready to let");
 
         cancelledTenancyId = tenancies.reserve(reserve(unitId, LocalDate.of(2026, 3, 1))).tenancyId();
         tenancies.cancelReservation(cancelledTenancyId, "tenant withdrew");
@@ -134,7 +135,7 @@ class TenancyTimelineProjectionTest {
         var otherWorkspace = UUID.randomUUID();
         var otherProperty = portfolio.createProperty(otherWorkspace, "ul. Inna 1, Gdańsk",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        var otherUnit = portfolio.addUnit(otherProperty, "m. 1", new BigDecimal("1800"));
+        var otherUnit = portfolio.addUnit(otherWorkspace, otherProperty, "m. 1", new BigDecimal("1800"));
         otherWorkspaceTenancyId = tenancies.reserve(reserve(otherUnit, LocalDate.of(2026, 9, 1))).tenancyId();
 
         projection = new TenancyTimelineProjection(jdbc);

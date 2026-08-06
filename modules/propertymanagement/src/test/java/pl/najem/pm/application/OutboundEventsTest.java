@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -85,7 +86,7 @@ class OutboundEventsTest {
         registry.register(TenancyEndedEvent.class);
         registry.register(MoveOutProtocolRecordedEvent.class);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, jdbc);
+        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         checklists = new ChecklistService(store);
         repairs = new RepairService(store, jdbc, portfolio);
@@ -101,12 +102,12 @@ class OutboundEventsTest {
     void pmPublishesExactlyTheFourContractRecordsAndNothingElse() {
         var workspaceId = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspaceId, "Pełna 1", owners());
-        var unitId = portfolio.addUnit(propertyId, "M1", new BigDecimal("2500"));
+        var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
 
         // Portfolio: none of this is anyone else's business.
-        portfolio.openUnitToRent(unitId, "listed");
-        portfolio.setUnitBaseRent(unitId, new BigDecimal("2600"));
-        portfolio.updateUnitDetails(unitId, java.util.Map.of("listingRef", "OLX-1"));
+        portfolio.openUnitToRent(workspaceId, unitId, "listed");
+        portfolio.setUnitBaseRent(workspaceId, unitId, new BigDecimal("2600"));
+        portfolio.updateUnitDetails(workspaceId, unitId, java.util.Map.of("listingRef", "OLX-1"));
         compliance.recordInspection(propertyId, pl.najem.pm.domain.InspectionType.GAS,
             LocalDate.of(2026, 5, 10), null, "ok");
         var repairId = repairs.report(RepairScope.UNIT, unitId, "leaking tap", null,

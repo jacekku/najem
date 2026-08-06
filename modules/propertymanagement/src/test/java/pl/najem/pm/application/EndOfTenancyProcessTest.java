@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -67,7 +68,7 @@ class EndOfTenancyProcessTest {
         registry.register(MoveOutProtocolRecordedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         due = new ProcessDueStore(jdbc);
-        portfolio = new PortfolioService(store, jdbc);
+        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         tenancies = new TenancyService(store, jdbc, due);
         checklists = new ChecklistService(store);
         process = new EndOfTenancyProcess(due, tenancies, Clock.systemDefaultZone());
@@ -263,10 +264,11 @@ class EndOfTenancyProcessTest {
     // --- fixtures ---
 
     private static UUID openUnit() {
-        var propertyId = portfolio.createProperty(UUID.randomUUID(), "Testowa 1",
+        var workspaceId = UUID.randomUUID();
+        var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        var unitId = portfolio.addUnit(propertyId, "M1", new BigDecimal("2500"));
-        portfolio.openUnitToRent(unitId, "ready");
+        var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
+        portfolio.openUnitToRent(workspaceId, unitId, "ready");
         return unitId;
     }
 

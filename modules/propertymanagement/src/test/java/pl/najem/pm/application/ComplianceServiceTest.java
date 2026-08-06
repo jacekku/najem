@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -43,7 +44,7 @@ class ComplianceServiceTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, jdbc);
+        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         compliance = new ComplianceService(store, jdbc);
     }
 

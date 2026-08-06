@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -48,7 +49,7 @@ class TenancyServiceTest {
         PmEventTypes.register(registry);
         registry.register(TenancyActivatedEvent.class);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, jdbc);
+        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         service = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
     }
 
@@ -141,7 +142,7 @@ class TenancyServiceTest {
     private static UUID unitIn(UUID workspaceId) {
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        return portfolio.addUnit(propertyId, "M1", new BigDecimal("2500"));
+        return portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
     }
 
     private static UUID activeTenancy() {

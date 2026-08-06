@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -50,7 +51,7 @@ class WorkspaceGuardTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, jdbc);
+        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         repairs = new RepairService(store, jdbc, portfolio);
         guard = new WorkspaceGuard(jdbc);
     }
@@ -74,7 +75,7 @@ class WorkspaceGuardTest {
         var agencyA = UUID.randomUUID();
         var agencyB = UUID.randomUUID();
         var propertyId = portfolio.createProperty(agencyA, "Testowa 1", owners());
-        var unitId = portfolio.addUnit(propertyId, "M1", new BigDecimal("2500"));
+        var unitId = portfolio.addUnit(agencyA, propertyId, "M1", new BigDecimal("2500"));
 
         guard.requireProperty(agencyA, propertyId);
         guard.requireUnit(agencyA, unitId);
@@ -126,7 +127,8 @@ class WorkspaceGuardTest {
     }
 
     private static UUID unitIn(UUID workspaceId) {
-        return portfolio.addUnit(portfolio.createProperty(workspaceId, "Testowa 1", owners()),
+        return portfolio.addUnit(workspaceId,
+            portfolio.createProperty(workspaceId, "Testowa 1", owners()),
             "M1", new BigDecimal("2500"));
     }
 

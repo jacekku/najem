@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -45,7 +46,7 @@ class RepairServiceTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
-        portfolio = new PortfolioService(store, jdbc);
+        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         repairs = new RepairService(store, jdbc, portfolio);
     }
 
@@ -109,7 +110,7 @@ class RepairServiceTest {
 
     private static UUID unitIn(UUID workspaceId) {
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners());
-        return portfolio.addUnit(propertyId, "M1", new BigDecimal("2500"));
+        return portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
     }
 
     private static List<Owner> owners() {

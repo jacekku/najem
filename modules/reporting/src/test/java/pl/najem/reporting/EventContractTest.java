@@ -1,5 +1,6 @@
 package pl.najem.reporting;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import pl.najem.acc.adapter.persistence.PostgresAccounting;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -151,7 +152,7 @@ class EventContractTest {
         AccEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
 
-        var portfolio = new PortfolioService(store, jdbc);
+        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
         var checklists = new ChecklistService(store);
         var invoicing = PostgresAccounting.invoiceService(store, jdbc, PostgresAccounting.warningService(jdbc));
@@ -161,8 +162,8 @@ class EventContractTest {
         var workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Testowa 1, Warszawa",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        var unitId = portfolio.addUnit(propertyId, "m. 1", new BigDecimal("2400"));
-        portfolio.openUnitToRent(unitId, "ready to let");
+        var unitId = portfolio.addUnit(workspace, propertyId, "m. 1", new BigDecimal("2400"));
+        portfolio.openUnitToRent(workspace, unitId, "ready to let");
 
         // A cancelled reservation, so TenancyPeriodReleased and the cancellation both really happen.
         var cancelled = tenancies.reserve(reservation(unitId, LocalDate.of(2026, 1, 1)));
@@ -186,7 +187,7 @@ class EventContractTest {
         tenancies.end(tenancyId, new EndTenancy(LocalDate.of(2027, 5, 1), LocalDate.of(2027, 5, 3),
             EndReason.LANDLORD_NOTICE, "moved out on time", true));
 
-        portfolio.closeUnitToRent(unitId, "renovation");
+        portfolio.closeUnitToRent(workspace, unitId, "renovation");
 
         var reference = "NAJEM-TRIPWIRE-1";
         var chargeId = invoicing.postRent(workspace, tenancyId, new BigDecimal("2400"),

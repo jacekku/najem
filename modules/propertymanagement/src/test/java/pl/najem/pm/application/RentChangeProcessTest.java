@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -57,7 +58,7 @@ class RentChangeProcessTest {
         registry.register(RentChangeAppliedEvent.class);
         store = new JdbcEventStore(jdbc, TestMapper.productionLike(), registry);
         var due = new ProcessDueStore(jdbc);
-        portfolio = new PortfolioService(store, jdbc);
+        portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         tenancies = new TenancyService(store, jdbc, due);
         process = new RentChangeProcess(due, tenancies, Clock.systemDefaultZone());
     }
@@ -140,9 +141,10 @@ class RentChangeProcessTest {
     }
 
     private static UUID activeTenancy() {
-        var propertyId = portfolio.createProperty(UUID.randomUUID(), "Testowa 1",
+        var workspaceId = UUID.randomUUID();
+        var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        var unitId = portfolio.addUnit(propertyId, "M1", new BigDecimal("2500"));
+        var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
         var tenancyId = tenancies.reserve(new ReserveTenancy(null, null, unitId,
             List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 1, 1),
             new Term.FixedTerm(LocalDate.of(2028, 12, 31)), LegalForm.ZWYKLY,

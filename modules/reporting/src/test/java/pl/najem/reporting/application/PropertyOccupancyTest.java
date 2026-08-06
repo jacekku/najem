@@ -1,5 +1,6 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -73,31 +74,31 @@ class PropertyOccupancyTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
-        var portfolio = new PortfolioService(store, jdbc);
+        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
 
         workspace = UUID.randomUUID();
         propertyId = portfolio.createProperty(workspace, "ul. Rynek 1, Poznań",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
 
-        occupiedUnit = portfolio.addUnit(propertyId, "m. 1", new BigDecimal("2000"));
-        portfolio.openUnitToRent(occupiedUnit, "ready");
+        occupiedUnit = portfolio.addUnit(workspace, propertyId, "m. 1", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, occupiedUnit, "ready");
         tenancies.reserve(reserve(occupiedUnit, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1)));
 
         // A tenant in residence while the flat is closed to new lettings. Occupied, not unavailable.
-        occupiedButClosedUnit = portfolio.addUnit(propertyId, "m. 2", new BigDecimal("2000"));
-        portfolio.openUnitToRent(occupiedButClosedUnit, "ready");
+        occupiedButClosedUnit = portfolio.addUnit(workspace, propertyId, "m. 2", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, occupiedButClosedUnit, "ready");
         tenancies.reserve(reserve(occupiedButClosedUnit, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1)));
-        portfolio.closeUnitToRent(occupiedButClosedUnit, "sale planned");
+        portfolio.closeUnitToRent(workspace, occupiedButClosedUnit, "sale planned");
 
-        availableUnit = portfolio.addUnit(propertyId, "m. 3", new BigDecimal("2000"));
-        portfolio.openUnitToRent(availableUnit, "ready");
+        availableUnit = portfolio.addUnit(workspace, propertyId, "m. 3", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, availableUnit, "ready");
 
-        renovatingUnit = portfolio.addUnit(propertyId, "m. 4", new BigDecimal("2000"));
-        portfolio.openUnitToRent(renovatingUnit, "ready");
-        portfolio.closeUnitToRent(renovatingUnit, "renovation");
+        renovatingUnit = portfolio.addUnit(workspace, propertyId, "m. 4", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, renovatingUnit, "ready");
+        portfolio.closeUnitToRent(workspace, renovatingUnit, "renovation");
 
-        neverListedUnit = portfolio.addUnit(propertyId, "m. 5", new BigDecimal("2000"));
+        neverListedUnit = portfolio.addUnit(workspace, propertyId, "m. 5", new BigDecimal("2000"));
 
         // No removed unit here: PM registers UnitRemovedFromProperty but exposes no command that
         // emits it, so there is no way to drive one. The projection handles the event because the

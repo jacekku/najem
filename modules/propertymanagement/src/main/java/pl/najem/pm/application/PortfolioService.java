@@ -1,6 +1,5 @@
 package pl.najem.pm.application;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.najem.eventstore.EventStore;
@@ -13,63 +12,83 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Properties and the units inside them.
+ *
+ * <p>Every command takes the workspace of the caller making it, and checks it against the aggregate
+ * it is about to change. That used to be split in two: the controller asked {@code WorkspaceGuard}
+ * whether a row with this id existed in the caller's workspace, and then the service rebuilt the
+ * aggregate from its stream to find out the same workspace again. Two answers to one question, from
+ * two stores that a second statement is allowed to leave disagreeing — and a wasted rebuild per
+ * write.
+ *
+ * <p>Its store is reached through {@link PortfolioProjection}, which is write-only on purpose:
+ * pm_property and pm_unit are derived from these same streams, so nothing here may read a row back
+ * to decide something.
+ *
+ * <p>Now the rebuild does both jobs. {@code addUnit} loads the parent property once, which both
+ * refuses a caller who does not own it and supplies the workspace the new unit is stamped with. The
+ * child still never takes a caller-supplied workspaceId for its own row: the caller says who they
+ * are, and the parent says what the child inherits.
+ */
 @Service
 @Transactional
 public class PortfolioService {
 
     private final EventStore store;
-    private final JdbcTemplate jdbc;
+    private final PortfolioProjection projection;
 
-    public PortfolioService(EventStore store, JdbcTemplate jdbc) {
+    public PortfolioService(EventStore store, PortfolioProjection projection) {
         this.store = store;
-        this.jdbc = jdbc;
+        this.projection = projection;
     }
 
+    /**
+     * The one command with nothing to check against: a property that did not exist a moment ago has
+     * no prior owner, so the caller's workspace is stamped on it rather than compared to it.
+     */
     public UUID createProperty(UUID workspaceId, String address, List<Owner> owners) {
         UUID propertyId = UUID.randomUUID();
         store.append(propertyId, "Property", 0,
             Property.create(propertyId, workspaceId, address, owners), List.of());
-        jdbc.update("insert into pm_property(property_id, workspace_id, address) values (?,?,?)",
-            propertyId, workspaceId, address);
+        projection.propertyCreated(propertyId, workspaceId, address);
         return propertyId;
     }
 
-    public UUID addUnit(UUID propertyId, String name, BigDecimal baseRent) {
-        UUID workspaceId = workspaceOf(propertyId);
+    public UUID addUnit(UUID workspaceId, UUID propertyId, String name, BigDecimal baseRent) {
+        propertyOwnedBy(workspaceId, propertyId);
         UUID unitId = UUID.randomUUID();
         store.append(unitId, "Unit", 0,
             Unit.add(unitId, workspaceId, propertyId, name, baseRent), List.of());
-        jdbc.update("insert into pm_unit(unit_id, property_id, workspace_id, name, base_rent, market_state) "
-            + "values (?,?,?,?,?,?)", unitId, propertyId, workspaceId, name, baseRent,
-            Unit.MarketState.INVENTORY.name());
+        projection.unitAdded(unitId, propertyId, workspaceId, name, baseRent,
+            Unit.MarketState.INVENTORY);
         return unitId;
     }
 
-    public void setUnitBaseRent(UUID unitId, BigDecimal amount) {
+    public void setUnitBaseRent(UUID workspaceId, UUID unitId, BigDecimal amount) {
         var stream = store.load(unitId, "Unit");
         var unit = Unit.from(stream.events());
+        unit.requireOwnedBy(workspaceId);
         store.append(unitId, "Unit", stream.version(), unit.setBaseRent(amount), List.of());
-        jdbc.update("update pm_unit set base_rent = ? where unit_id = ? and workspace_id = ?",
-            amount, unitId, unit.workspaceId());
+        projection.baseRentSet(unitId, unit.workspaceId(), amount);
     }
 
-    public void updateUnitDetails(UUID unitId, Map<String, String> details) {
+    public void updateUnitDetails(UUID workspaceId, UUID unitId, Map<String, String> details) {
         var stream = store.load(unitId, "Unit");
         var unit = Unit.from(stream.events());
+        unit.requireOwnedBy(workspaceId);
         store.append(unitId, "Unit", stream.version(), unit.updateDetails(details), List.of());
         if (details.containsKey("listingRef")) {
-            jdbc.update("update pm_unit set listing_ref = ? where unit_id = ? "
-                    + "and workspace_id = ?",
-                details.get("listingRef"), unitId, unit.workspaceId());
+            projection.listingRefSet(unitId, unit.workspaceId(), details.get("listingRef"));
         }
     }
 
-    public void openUnitToRent(UUID unitId, String reason) {
-        applyMarketTransition(unitId, reason, true);
+    public void openUnitToRent(UUID workspaceId, UUID unitId, String reason) {
+        applyMarketTransition(workspaceId, unitId, reason, true);
     }
 
-    public void closeUnitToRent(UUID unitId, String reason) {
-        applyMarketTransition(unitId, reason, false);
+    public void closeUnitToRent(UUID workspaceId, UUID unitId, String reason) {
+        applyMarketTransition(workspaceId, unitId, reason, false);
     }
 
     /**
@@ -77,30 +96,38 @@ public class PortfolioService {
      * hard invariant is period overlap, and a removed unit keeps its calendar, so removing a flat
      * that still has a sitting tenant is a transaction the manager may legitimately be recording.
      */
-    public void removeUnit(UUID unitId, String reason) {
+    public void removeUnit(UUID workspaceId, UUID unitId, String reason) {
         var stream = store.load(unitId, "Unit");
         var unit = Unit.from(stream.events());
+        unit.requireOwnedBy(workspaceId);
         store.append(unitId, "Unit", stream.version(), unit.remove(reason), List.of());
-        jdbc.update("update pm_unit set market_state = ? where unit_id = ? "
-                + "and workspace_id = ?",
-            Unit.MarketState.REMOVED.name(), unitId, unit.workspaceId());
+        projection.marketStateSet(unitId, unit.workspaceId(), Unit.MarketState.REMOVED);
     }
 
-    private void applyMarketTransition(UUID unitId, String reason, boolean open) {
+    private void applyMarketTransition(UUID workspaceId, UUID unitId, String reason, boolean open) {
         var stream = store.load(unitId, "Unit");
         var unit = Unit.from(stream.events());
+        unit.requireOwnedBy(workspaceId);
         var events = open ? unit.openToRent(reason) : unit.closeToRent(reason);
         store.append(unitId, "Unit", stream.version(), events, List.of());
-        jdbc.update("update pm_unit set market_state = ? where unit_id = ? "
-                + "and workspace_id = ?",
-            (open ? Unit.MarketState.OPEN : Unit.MarketState.CLOSED).name(), unitId,
-            unit.workspaceId());
+        projection.marketStateSet(unitId, unit.workspaceId(),
+            open ? Unit.MarketState.OPEN : Unit.MarketState.CLOSED);
+    }
+
+    private Property propertyOwnedBy(UUID workspaceId, UUID propertyId) {
+        var property = Property.from(store.load(propertyId, "Property").events());
+        property.requireOwnedBy(workspaceId);
+        return property;
     }
 
     /**
-     * The workspace of a property, read from its own stream. Children never take a
-     * caller-supplied workspaceId — that makes cross-workspace writes structurally impossible
-     * rather than merely validated.
+     * The workspace of a unit, read from its own stream, for a caller who has no workspace to check
+     * it against yet.
+     *
+     * <p>{@link RepairService} is the caller: a repair inherits its workspace from the asset it is
+     * reported against, the way a unit inherits it from its property. That slice still guards at the
+     * controller, so this is still two reads of one fact there — it goes when repairs get the same
+     * treatment this one just had.
      */
     public UUID workspaceOfUnit(UUID unitId) {
         return Unit.from(store.load(unitId, "Unit").events()).workspaceId();

@@ -1,5 +1,6 @@
 package pl.najem.reporting.application;
 
+import pl.najem.pm.adapter.persistence.PostgresPortfolioProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -73,15 +74,15 @@ class UnitTimelineProjectionTest {
         var registry = new EventTypeRegistry();
         PmEventTypes.register(registry);
         var store = new JdbcEventStore(jdbc, json, registry);
-        var portfolio = new PortfolioService(store, jdbc);
+        var portfolio = new PortfolioService(store, new PostgresPortfolioProjection(jdbc));
         var tenancies = new TenancyService(store, jdbc, new ProcessDueStore(jdbc));
 
         workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Długa 7, Wrocław",
             List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
-        unitId = portfolio.addUnit(propertyId, "m. 12", new BigDecimal("2000"));
-        portfolio.openUnitToRent(unitId, "ready to let");
-        portfolio.setUnitBaseRent(unitId, new BigDecimal("2200"));
+        unitId = portfolio.addUnit(workspace, propertyId, "m. 12", new BigDecimal("2000"));
+        portfolio.openUnitToRent(workspace, unitId, "ready to let");
+        portfolio.setUnitBaseRent(workspace, unitId, new BigDecimal("2200"));
 
         // Two tenancies with a deliberate three-month gap between them, and a cancelled one.
         firstTenancy = tenancies.reserve(reserve(unitId,
@@ -93,9 +94,9 @@ class UnitTimelineProjectionTest {
         tenancies.cancelReservation(cancelledTenancy, "tenant withdrew");
 
         // A unit nobody has ever put on the market, to prove 'inventory' is a real third state.
-        neverOpenedUnitId = portfolio.addUnit(propertyId, "m. 13", new BigDecimal("1900"));
+        neverOpenedUnitId = portfolio.addUnit(workspace, propertyId, "m. 13", new BigDecimal("1900"));
 
-        portfolio.closeUnitToRent(unitId, "renovation");
+        portfolio.closeUnitToRent(workspace, unitId, "renovation");
 
         occupancy = new UnitOccupancy(jdbc);
         runner = new ProjectionRunner(new EventFeed(jdbc, json), jdbc,
