@@ -6,14 +6,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+
+import pl.najem.app.SharedDatabase;
 
 import java.time.Instant;
 import java.util.List;
@@ -60,13 +58,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
     "najem.bank.base-url=http://localhost:8081",
     "najem.bank.iban=PL61109010140000071219812874"})
 @AutoConfigureMockMvc
-@Testcontainers
 @Tag("integration")
-class SecuredBranchTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
+class SecuredBranchTest extends SharedDatabase {
 
     @Autowired
     MockMvc mvc;

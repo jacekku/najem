@@ -3,10 +3,6 @@ package pl.najem.app;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * The bank and security properties are supplied here rather than packaged: without them there is
@@ -19,13 +15,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
     "najem.bank.base-url=http://localhost:8081",
     "najem.bank.iban=PL61109010140000071219812874",
     "najem.security.permit-all=true"})
-@Testcontainers
 @Tag("integration")
-class NajemApplicationTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
+class NajemApplicationTest extends SharedDatabase {
 
     @Test
     void contextLoads() {

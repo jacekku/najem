@@ -6,11 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.app.SharedDatabase;
 import pl.najem.um.application.UserService;
 import pl.najem.um.application.WorkspaceService;
 
@@ -40,16 +37,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
     "najem.bank.fake.enabled=true",
     "najem.bank.base-url=http://localhost:8081"})
 @AutoConfigureMockMvc
-@Testcontainers
 @Tag("integration")
-class WebSignedInIdentityTest {
+class WebSignedInIdentityTest extends SharedDatabase {
 
     /** The account every unauthenticated request falls back to, and the one nobody may become. */
     static final String OPERATOR = "3f1d9c22-0000-4000-8000-00000000000a";
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired
     MockMvc mvc;

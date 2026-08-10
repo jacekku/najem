@@ -3,11 +3,8 @@ package pl.najem.app.web;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.app.NajemApplication;
+import pl.najem.app.SharedDatabase;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,13 +20,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>Boots the real application rather than a slice, because the thing under test is what happens
  * when the context is assembled — a sliced test could not observe a refusal to start.
  */
-@Testcontainers
 @Tag("integration")
 class SecurityFailsClosedTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     @Test
     void refusesToStartWithNoIssuerAndNoExplicitOptIn() {
@@ -77,9 +69,9 @@ class SecurityFailsClosedTest {
     private static String[] baseArgs() {
         return new String[] {
             "--server.port=0",
-            "--spring.datasource.url=" + pg.getJdbcUrl(),
-            "--spring.datasource.username=" + pg.getUsername(),
-            "--spring.datasource.password=" + pg.getPassword(),
+            "--spring.datasource.url=" + SharedDatabase.jdbcUrl(),
+            "--spring.datasource.username=" + SharedDatabase.username(),
+            "--spring.datasource.password=" + SharedDatabase.password(),
             // A test is a deployment like any other and names its own bank: without these there is
             // no BankStatementPort and the context refuses to start for a reason that has nothing
             // to do with the security posture under test here.

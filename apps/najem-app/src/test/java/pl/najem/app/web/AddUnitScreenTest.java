@@ -6,13 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.app.SharedDatabase;
 import pl.najem.eventstore.EventStore;
 import pl.najem.pm.application.PortfolioService;
 import pl.najem.pm.domain.Owner;
@@ -49,15 +46,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "najem.bank.fake.enabled=true",
     "najem.bank.base-url=http://localhost:8081"})
 @AutoConfigureMockMvc
-@Testcontainers
 @Tag("integration")
-class AddUnitScreenTest {
+class AddUnitScreenTest extends SharedDatabase {
 
     static final String OPERATOR = "3f1d9c22-0000-4000-8000-000000000030";
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired MockMvc mvc;
     @Autowired UserService users;

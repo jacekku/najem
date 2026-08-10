@@ -6,12 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.app.SharedDatabase;
 import pl.najem.um.application.UserService;
 import pl.najem.um.application.WorkspaceService;
 
@@ -27,8 +24,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * What happens when the workspace is ambiguous or disputed. Every case here resolves to DENIED,
  * per roadmap rule 7: uncertainty is never a permission.
  *
- * <p>Its own operator subject and its own container, so the two workspaces it creates cannot leak
- * into {@link WebWorkspaceTest}'s single-membership case.
+ * <p>Its own operator subject, so the two workspaces it creates cannot leak into
+ * {@link WebWorkspaceTest}'s single-membership case. That is what the isolation rests on — not a
+ * private database. Memberships are resolved per subject, so two operators may hold two and one
+ * agency respectively in the same database without either seeing the other's; the container is
+ * shared via {@link pl.najem.app.SharedDatabase}.
  */
 @SpringBootTest(properties = {
     "najem.bootstrap.operator-subject=" + WebWorkspaceChoiceTest.OPERATOR,
@@ -37,15 +37,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
     "najem.bank.base-url=http://localhost:8081",
     "najem.bank.iban=PL61109010140000071219812874"})
 @AutoConfigureMockMvc
-@Testcontainers
 @Tag("integration")
-class WebWorkspaceChoiceTest {
+class WebWorkspaceChoiceTest extends SharedDatabase {
 
     static final String OPERATOR = "3f1d9c22-0000-4000-8000-000000000002";
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired
     MockMvc mvc;

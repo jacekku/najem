@@ -5,11 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.app.SharedDatabase;
 import pl.najem.um.application.UserService;
 
 import java.time.LocalDate;
@@ -25,9 +22,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * error"</i>. Fail-closed is about permissions rather than copy — this response carries no agency
  * and therefore no agency's data, which is the property that matters.
  *
- * <p>Its own operator subject and its own container, because "belongs to nothing" is a fact about
- * the whole database: a workspace created by a neighbouring test would silently make this pass for
- * the wrong reason, or fail for one.
+ * <p>Its own operator subject, because "belongs to nothing" must not be satisfied by accident. It
+ * shares {@link pl.najem.app.SharedDatabase}'s container with every other application test, which
+ * is safe for a reason worth stating: {@code WebWorkspaceResolver} asks
+ * {@code access.forSubject(subject)}, so "belongs to no agency" is a fact about THIS SUBJECT and
+ * not about the database. A neighbouring test's agency belongs to a different operator and is
+ * invisible here. The earlier version of this comment claimed the whole database had to be empty;
+ * it did not, and believing it would have cost a container per class forever.
  */
 @SpringBootTest(properties = {
     "najem.bootstrap.operator-subject=" + NoAgencyScreenTest.OPERATOR,
@@ -36,15 +37,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
     "najem.bank.base-url=http://localhost:8081",
     "najem.bank.iban=PL61109010140000071219812874"})
 @AutoConfigureMockMvc
-@Testcontainers
 @Tag("integration")
-class NoAgencyScreenTest {
+class NoAgencyScreenTest extends SharedDatabase {
 
     static final String OPERATOR = "3f1d9c22-0000-4000-8000-000000000003";
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired
     MockMvc mvc;

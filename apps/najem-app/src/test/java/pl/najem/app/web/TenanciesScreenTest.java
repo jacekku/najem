@@ -7,14 +7,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.acc.application.ArrearsBoardProjection;
 import pl.najem.acc.application.InvoiceRepository;
 import pl.najem.acc.domain.ArrearsColour;
+import pl.najem.app.SharedDatabase;
 import pl.najem.contacts.application.ContactDetails;
 import pl.najem.contacts.application.ContactDirectory;
 import pl.najem.pm.application.TenancyBoardProjection;
@@ -53,15 +50,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "najem.bank.base-url=http://localhost:8081",
     "najem.bank.iban=PL61109010140000071219812874"})
 @AutoConfigureMockMvc
-@Testcontainers
 @Tag("integration")
-class TenanciesScreenTest {
+class TenanciesScreenTest extends SharedDatabase {
 
     static final String OPERATOR = "3f1d9c22-0000-4000-8000-000000000070";
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired MockMvc mvc;
     @Autowired UserService users;

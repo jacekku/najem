@@ -6,12 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import pl.najem.app.SharedDatabase;
 import pl.najem.contacts.application.ContactDetails;
 import pl.najem.contacts.application.ContactDirectory;
 import pl.najem.contacts.application.ContactService;
@@ -50,9 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "najem.bank.fake.enabled=true",
     "najem.bank.base-url=http://localhost:8081"})
 @AutoConfigureMockMvc
-@Testcontainers
 @Tag("integration")
-class UnitScreenTest {
+class UnitScreenTest extends SharedDatabase {
 
     static final String OPERATOR = "3f1d9c22-0000-4000-8000-000000000010";
 
@@ -64,10 +60,6 @@ class UnitScreenTest {
      * assertion instead of passing it vacuously.
      */
     static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired MockMvc mvc;
     @Autowired UserService users;
