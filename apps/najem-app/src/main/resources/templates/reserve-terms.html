@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Rezerwacja — NAJEM', null, ~{::main})}">
+<body>
+<main>
+    <!--/*
+      Not the breadcrumb fragment — same reasoning as reserve-parties.html: this screen has one
+      real, working link back to the unit, and the fragment's own contract is unlinked plain text.
+    */-->
+    <nav class="breadcrumb">
+        <a th:href="@{/units/{id}(id=${unit.unitId()})}">← Lokal</a>
+    </nav>
+    <h1 th:text="'Rezerwacja: ' + ${unit.name()}">—</h1>
+
+    <p class="form-alert form-alert--danger" th:if="${error}" th:text="${error}">—</p>
+
+    <!--/*
+      Step two of the same two-step flow reserve-parties.html starts. Step one shows done — a
+      manager only reaches this screen once parties=done redirected them here.
+    */-->
+    <div class="grid--steprail">
+        <nav th:replace="~{components :: stepRail(
+                 steps=${ {{'title':'Strony umowy','subline':'Najemcy i poręczyciele'},
+                           {'title':'Warunki','subline':'Forma, okres, czynsz'}} },
+                 current=2)}"></nav>
+
+        <div class="step-rail__content">
+            <section class="card">
+                <header class="card__head"><h2 class="card__title">Najemcy</h2></header>
+                <div class="card__body">
+                    <ul class="party-list">
+                        <li class="party-list__row">
+                            <span th:text="${lead.fullName()}">—</span>
+                            <span class="muted">(zgłoszenie)</span>
+                        </li>
+                        <li class="party-list__row" th:each="party : ${tenants}">
+                            <span th:text="${party.details().givenName()} + ' ' + ${party.details().surname()}">—</span>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <section class="card">
+                <header class="card__head"><h2 class="card__title">Poręczyciele</h2></header>
+                <div class="card__body">
+                    <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+                    <div th:if="${guarantors.isEmpty()}">
+                        <div th:replace="~{components :: emptyState(text='Nikt nie poręcza tej umowy.')}"></div>
+                    </div>
+                    <ul class="party-list" th:unless="${guarantors.isEmpty()}">
+                        <li class="party-list__row" th:each="party : ${guarantors}">
+                            <span th:text="${party.details().givenName()} + ' ' + ${party.details().surname()}">—</span>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <form th:action="@{/units/{u}/reserve(u=${unit.unitId()})}" method="post">
+                <input type="hidden" name="interestId" th:value="${interestId}">
+                <input type="hidden" th:each="id : ${tenantIds}" name="tenant" th:value="${id}">
+                <input type="hidden" th:each="id : ${guarantorIds}" name="guarantor" th:value="${id}">
+
+                <section class="card">
+                    <header class="card__head"><h2 class="card__title">Forma prawna</h2></header>
+                    <div class="card__body">
+                        <!--/*
+                          The wizards' contract-type picker is a `choice`-shaped chip group
+                          (components.html), but `chip()` itself renders a bare, non-interactive
+                          <span> — the mockups substitute styled divs for every real control, and a
+                          radio group needs an actual <input type="radio"> to keep working with
+                          formmethod validation and without JavaScript. The chip classes are applied
+                          directly to the <label> wrapping each native radio instead of going
+                          through the fragment, which has no parameter for that.
+                        */-->
+                        <div class="choice-group">
+                            <label class="chip chip--choice" th:each="form : ${legalForms}"
+                                   th:classappend="${form.name() == legalForm} ? 'chip--selected' : ''">
+                                <input type="radio" name="legalForm" th:value="${form}"
+                                       th:checked="${form.name() == legalForm}" required>
+                                <span th:switch="${form.name()}">
+                                    <span th:case="'ZWYKLY'">zwykły</span>
+                                    <span th:case="'OKAZJONALNY'">okazjonalny</span>
+                                    <span th:case="'INSTYTUCJONALNY'">instytucjonalny</span>
+                                    <span th:case="*" th:text="${form}">—</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <header class="card__head"><h2 class="card__title">Okres</h2></header>
+                    <div class="card__body">
+                        <!--/*
+                          The unit's calendar, above the fields rather than in the error below them:
+                          this is here to prevent the clash, not to explain it afterwards. The dates
+                          come from the unit's own event stream — the same list the reservation is
+                          checked against — so what is shown here and what reserve() refuses cannot
+                          disagree.
+
+                          An end date is the day the unit is FREE, not the last day it is taken.
+                          Periods are half-open, so a tenancy ending 30 Jun leaves 30 Jun open for
+                          the next one, and the copy says "wolny od" rather than "do" to keep a
+                          manager from losing that day.
+
+                          period.start()/period.end() are already dd.mm.rrrr strings by the time this
+                          template sees them (ReserveScreenController.BookedPeriodView) — the project's
+                          stated date convention, formatted in Java the same way TimelineScreenController
+                          does it, because no thymeleaf-extras-java8time is on this module's classpath.
+                          `startDate`/`endDate` just below are a different thing: real `type="date"`
+                          inputs, whose `value` the HTML spec requires to stay ISO — left alone.
+                        */-->
+                        <!--/* th:unless + th:replace on one element never fire together (see properties.html's note). */-->
+                        <span th:unless="${booked.isEmpty()}">
+                            <span th:replace="~{components :: microLabel(text='TERMINY ZAJĘTE')}"></span>
+                        </span>
+                        <ul class="booked-list" th:unless="${booked.isEmpty()}">
+                            <li th:each="period : ${booked}">
+                                <a th:href="@{/tenancies/{t}/timeline(t=${period.tenancyId()})}">
+                                    <span th:if="${period.end() != null}"
+                                          th:text="'zarezerwowany od ' + ${period.start()} + ' do ' + ${period.end()}">—</span>
+                                    <span th:if="${period.end() == null}"
+                                          th:text="'zajęty bezterminowo od ' + ${period.start()}">—</span>
+                                </a>
+                                <span class="muted" th:if="${period.end() != null}"
+                                      th:text="'— wolny od ' + ${period.end()}">—</span>
+                                <span class="muted" th:if="${period.end() == null}">— nie zwolni się, dopóki najem nie zostanie zakończony</span>
+                            </li>
+                        </ul>
+
+                        <div th:if="${booked.isEmpty()}">
+                            <div th:replace="~{components :: emptyState(text='Lokal nie ma jeszcze żadnych rezerwacji — każdy termin jest wolny.')}"></div>
+                        </div>
+
+                        <div th:replace="~{components :: field(name='startDate', label='Data rozpoczęcia', value=${startDate}, type='date', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
+
+                        <label class="choice-label">
+                            <input type="radio" name="termKind" value="indefinite" th:checked="${termKind == 'indefinite'}">
+                            Na czas nieokreślony
+                        </label>
+                        <label class="choice-label">
+                            <input type="radio" name="termKind" value="fixed" th:checked="${termKind == 'fixed'}">
+                            Do
+                        </label>
+                        <div th:replace="~{components :: field(name='endDate', label='Data zakończenia', value=${endDate}, type='date', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <header class="card__head"><h2 class="card__title">Czynsz</h2></header>
+                    <div class="card__body">
+                        <div th:replace="~{components :: field(name='monthlyTotal', label='Kwota miesięczna', value=${monthlyTotal}, type='text', required=true, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+
+                        <label class="choice-label">
+                            <input type="checkbox" name="componentSplit" value="true" th:checked="${componentSplit}">
+                            Podział na składniki
+                        </label>
+
+                        <!--/*
+                          `.lead-fields` alone gives this its grid layout — the split fields need
+                          nothing else visually. `data-role` is a pure JS hook for the script below
+                          (show/hide + disable), not a style hook: a bespoke `.component-split` CSS
+                          class had no rule of its own and nothing to add over `.lead-fields`, so it
+                          was dropped rather than given an empty or redundant rule.
+                        */-->
+                        <div class="lead-fields" data-role="component-split">
+                            <div th:replace="~{components :: field(name='rent', label='Czynsz netto', value=${rent}, type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+                            <div th:replace="~{components :: field(name='adminFee', label='Opłata administracyjna', value=${adminFee}, type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+                            <div th:replace="~{components :: field(name='mediaAdvance', label='Zaliczka na media', value=${mediaAdvance}, type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+                        </div>
+
+                        <label class="field">
+                            <span class="field__label">Dzień płatności<span class="field__req">*</span></span>
+                            <span class="field__wrap">
+                                <input class="field__input" type="number" name="rentDay" min="1" max="28"
+                                       required th:value="${rentDay}">
+                            </span>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <header class="card__head"><h2 class="card__title">Kaucja</h2></header>
+                    <div class="card__body">
+                        <div th:replace="~{components :: field(name='depositAmount', label='Kwota kaucji', value=${depositAmount}, type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <header class="card__head"><h2 class="card__title">Tytuł przelewu</h2></header>
+                    <div class="card__body">
+                        <div th:replace="~{components :: field(name='paymentReference', label='Tytuł przelewu', value=${paymentReference}, type='text', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
+                    </div>
+                </section>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary">Podpisz rezerwację</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!--/*
+      Progressive enhancement only: the controller reads termKind (not just endDate == null) and
+      coerces a blank split component to zero, so both radios and the split fields already mean
+      what they say with this script disabled. What the script buys is tidiness — hiding an
+      irrelevant date or amount field rather than leaving it visibly editable while ignored.
+    */-->
+    <script th:inline="none">
+        (function () {
+            var endDateInput = document.querySelector('input[name="endDate"]');
+            var termRadios = document.querySelectorAll('input[name="termKind"]');
+            function syncTermKind() {
+                var fixed = document.querySelector('input[name="termKind"][value="fixed"]').checked;
+                endDateInput.disabled = !fixed;
+            }
+            termRadios.forEach(function (r) { r.addEventListener('change', syncTermKind); });
+            syncTermKind();
+
+            var split = document.querySelector('input[name="componentSplit"]');
+            var splitFields = document.querySelector('[data-role="component-split"]');
+            function syncSplit() {
+                var on = split.checked;
+                splitFields.style.display = on ? '' : 'none';
+                splitFields.querySelectorAll('input').forEach(function (i) { i.disabled = !on; });
+            }
+            split.addEventListener('change', syncSplit);
+            syncSplit();
+        })();
+    </script>
+</main>
+</body>
+</html>

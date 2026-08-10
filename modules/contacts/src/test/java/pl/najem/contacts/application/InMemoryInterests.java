@@ -11,10 +11,10 @@ import java.util.UUID;
 /**
  * The interest table in a map.
  *
- * <p>{@link #contactOf} filters on the workspace because that filter <em>is</em> the gate on
- * withdrawal — it is the only command in the module not fronted by
- * {@link ContactDirectory#requireIn}, so a double that answered without it would make
- * {@code withdraw} appear guarded when it was not.
+ * <p>{@link #find} filters on the workspace because that filter <em>is</em> the gate on every
+ * command on an interest — it is the only lookup in the module not fronted by
+ * {@link ContactDirectory#requireIn}, so a double that answered without it would make those
+ * commands appear guarded when they were not.
  *
  * <p>{@code status} is a stored string rather than a derived flag, as in the table, so a test can
  * tell a withdrawn interest from an absent one.
@@ -22,7 +22,7 @@ import java.util.UUID;
 public class InMemoryInterests implements InterestRepository {
 
     private record Row(UUID workspaceId, UUID contactId, UUID unitId, BigDecimal willingToPay,
-                       LocalDate desiredStart, String status) {
+                       LocalDate desiredStart, String status, UUID convertedToTenancyId) {
     }
 
     private final Map<UUID, Row> rows = new LinkedHashMap<>();
@@ -30,12 +30,14 @@ public class InMemoryInterests implements InterestRepository {
     @Override
     public void insert(UUID interestId, UUID workspaceId, UUID contactId, UUID unitId,
                        BigDecimal willingToPay, LocalDate desiredStart) {
-        rows.put(interestId, new Row(workspaceId, contactId, unitId, willingToPay, desiredStart, "active"));
+        rows.put(interestId, new Row(workspaceId, contactId, unitId, willingToPay, desiredStart, "active", null));
     }
 
     @Override
-    public Optional<UUID> contactOf(UUID workspaceId, UUID interestId) {
-        return mine(workspaceId, interestId).map(Row::contactId);
+    public Optional<Interest> find(UUID workspaceId, UUID interestId) {
+        return mine(workspaceId, interestId)
+            .map(row -> new Interest(interestId, row.contactId(), row.unitId(),
+                row.willingToPay(), row.desiredStart(), row.status()));
     }
 
     private Optional<Row> mine(UUID workspaceId, UUID interestId) {
@@ -47,7 +49,14 @@ public class InMemoryInterests implements InterestRepository {
     public void withdraw(UUID workspaceId, UUID interestId) {
         mine(workspaceId, interestId).ifPresent(row ->
             rows.put(interestId, new Row(row.workspaceId(), row.contactId(), row.unitId(),
-                row.willingToPay(), row.desiredStart(), "withdrawn")));
+                row.willingToPay(), row.desiredStart(), "withdrawn", row.convertedToTenancyId())));
+    }
+
+    @Override
+    public void convert(UUID workspaceId, UUID interestId, UUID tenancyId) {
+        mine(workspaceId, interestId).ifPresent(row ->
+            rows.put(interestId, new Row(row.workspaceId(), row.contactId(), row.unitId(),
+                row.willingToPay(), row.desiredStart(), "converted", tenancyId)));
     }
 
     @Override

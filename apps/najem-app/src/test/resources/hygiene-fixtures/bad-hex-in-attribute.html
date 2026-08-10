@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<!--/*
+  DELIBERATELY BROKEN FIXTURE — do not fix, do not use as a real template.
+
+  Exists only so TemplateHygieneTest.noTemplateCarriesADesignValue has something it is known to
+  have to catch, on every run, forever — proving the tripwire still bites rather than merely having
+  bitten once on the day it was written (refactoring.md rule 21). Lives under
+  src/test/resources, never under src/main/resources/templates, so Thymeleaf's template resolver
+  never sees it and nothing can accidentally render it.
+
+  Carries exactly one violation of this tripwire: a literal style attribute holding a hardcoded
+  hex colour. Isolated from Tripwires B and C on purpose — no th:replace, no th:if/th:unless, no
+  th:* expression at all — so a change to this file's outcome can only ever be attributed to
+  Tripwire A.
+*/-->
+<html lang="pl">
+<body>
+<div class="specimen" style="color:#b4342a">A hardcoded hex colour in a literal style attribute.</div>
+</body>
+</html>

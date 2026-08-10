@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Szukaj — NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Szukaj — NAJEM', null, ~{::main})}">
 <body>
 <main>
     <h1>Szukaj</h1>
 
-    <form class="search" th:action="@{/search}" method="get">
-        <input type="search" name="q" th:value="${term}" placeholder="Adres lub lokal" autofocus>
-        <button type="submit">Szukaj</button>
+    <form class="lead-search" th:action="@{/search}" method="get">
+        <input class="field__input" type="search" name="q" th:value="${term}" placeholder="Adres lub lokal" autofocus>
+        <div th:replace="~{components :: btn(href=null, text='Szukaj', kind='secondary')}"></div>
     </form>
 
     <!--/*
@@ -19,9 +19,10 @@
         Wpisz fragment adresu albo nazwę lokalu.
     </p>
 
-    <p class="empty" th:if="${asked and properties.isEmpty() and units.isEmpty()}">
-        Nic nie pasuje do „<span th:text="${term}">—</span>”.
-    </p>
+    <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+    <div th:if="${asked and properties.isEmpty() and units.isEmpty()}">
+        <div th:replace="~{components :: emptyState(text='Nic nie pasuje do „' + ${term} + '”.')}"></div>
+    </div>
 
     <!--/*
       Grouped by kind, not ranked. Reporting deliberately does not rank, and an order invented here
@@ -29,28 +30,32 @@
       controller: doing it with a selection expression here threw at render time and no test could
       see it, because the expression is only reached when there is something to show.
     */-->
-    <section th:unless="${properties.isEmpty()}">
-        <h2>Nieruchomości</h2>
-        <ul class="hits">
-            <li th:each="hit : ${properties}">
-                <a th:href="@{/properties/{id}/units(id=${hit.id()})}" th:text="${hit.label()}">—</a>
-            </li>
-        </ul>
-    </section>
+    <div class="card" th:unless="${properties.isEmpty()}">
+        <header class="card__head"><h2 class="card__title">Nieruchomości</h2></header>
+        <div class="card__body">
+            <ul class="lead-hits">
+                <li th:each="hit : ${properties}">
+                    <a th:href="@{/properties/{id}/units(id=${hit.id()})}" th:text="${hit.label()}">—</a>
+                </li>
+            </ul>
+        </div>
+    </div>
 
-    <section th:unless="${units.isEmpty()}">
-        <h2>Lokale</h2>
-        <ul class="hits">
+    <div class="card" th:unless="${units.isEmpty()}">
+        <header class="card__head"><h2 class="card__title">Lokale</h2></header>
+        <div class="card__body">
             <!--/*
               A unit hit links to its property's unit list — Reporting sends the parent id for
               exactly this reason, since a unit on its own is not somewhere a person can go.
             */-->
-            <li th:each="hit : ${units}">
-                <a th:href="@{/properties/{id}/units(id=${hit.propertyId()})}"
-                   th:text="${hit.label()}">—</a>
-            </li>
-        </ul>
-    </section>
+            <ul class="lead-hits">
+                <li th:each="hit : ${units}">
+                    <a th:href="@{/properties/{id}/units(id=${hit.propertyId()})}"
+                       th:text="${hit.label()}">—</a>
+                </li>
+            </ul>
+        </div>
+    </div>
 </main>
 </body>
 </html>

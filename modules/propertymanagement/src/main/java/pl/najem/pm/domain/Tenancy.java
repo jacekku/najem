@@ -93,7 +93,7 @@ public class Tenancy {
 
     public List<Object> cancelReservation(String reason) {
         if (state != State.RESERVED) {
-            throw new IllegalStateException(
+            throw new NotReservedException(
                 "Only a reserved tenancy can be cancelled (state: " + state + ")");
         }
         return List.of(new TenancyEvents.TenancyReservationCancelled(workspaceId, id, reason));
@@ -354,7 +354,7 @@ public class Tenancy {
             case TenancyEvents.TerminationNoticeGiven e -> noticeEffectiveDate = e.effectiveDate();
             case TenancyEvents.TenancyEndingSoon e -> endingSoon = true;
             case TenancyEvents.TenancyEnded e -> state = State.ENDED;
-            default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
+            default -> throw new UnknownEventException(event);
         }
     }
 
@@ -392,6 +392,11 @@ public class Tenancy {
 
     public State state() {
         return state;
+    }
+
+    /** Still only a reservation: nothing has started and it can still be cancelled. */
+    public boolean isReserved() {
+        return state == State.RESERVED;
     }
 
     public UUID workspaceId() {

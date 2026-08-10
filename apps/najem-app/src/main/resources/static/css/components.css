@@ -1,0 +1,817 @@
+/*
+  The design system's components, once each.
+
+  Every value here was read off Canvas.dc.html (the handoff's inline-styled mockups), not
+  invented and not eyeballed. Where the handoff's README table and the mockup disagreed — chip
+  radius (see the note there) and field input padding (README: 6px 12px; Canvas: 9px 11px, used
+  below) — the mockup won, because the README was transcribed by hand and the mockup is the thing
+  that was actually drawn. Both are recorded in the task report; the first draft of that report
+  only caught the first one, which is itself the kind of thing worth re-checking rather than
+  trusting.
+
+  Selectors are BEM-ish: block, block__element, block--modifier. Task 5/6 will guess these names
+  from the pattern established here, so a new component should follow the same shape rather than
+  inventing its own.
+*/
+@layer components {
+
+  /*
+    ── screen header ──
+
+    `.screen-head` and `.screen-head__actions` were the title-and-actions row laid out inside
+    `<main>`, on the grey page. That arrangement is now the shell's page bar (`.pagebar`,
+    layout.css), so both are deleted rather than left unused — a class with no callers is the next
+    screen's wrong answer, and it looks correct right up until it is on the page.
+
+    What survives is the title's own line — the title-plus-status-pill row (unit.html's "Lokal 2A"
+    plus its market state). A different thing from the row the title sat in, and unit.html has no
+    band yet; it belongs in `.pagebar__titles` when it gets one.
+  */
+  .screen-head__title-row { display: flex; align-items: center; gap: 10px; }
+
+  /* ── card ── */
+
+  /*
+    No shadow: cards are defined by their 1px border alone (README, "Shadow"). The one shadow in
+    the whole system is the focus ring, already declared once in base.css — do not add a second.
+  */
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-card);
+  }
+  .card__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px 18px 12px;
+  }
+  .card__title { font-size: 13px; font-weight: 600; }
+  .card__meta { font-size: 11.5px; color: var(--text-label); }
+  .card__actions { margin-left: auto; display: flex; gap: 6px; }
+  .card__body { padding: 0 18px 15px; }
+  .card__foot {
+    padding: 11px 18px;
+    font-size: 11.5px;
+    color: var(--text-label);
+  }
+
+  /*
+    A card whose body scrolls with head and footer pinned. Required on the dashboard's unpaid
+    list, the units table and the Upcoming panel (README, "Scrolling") — a long list must never
+    push a card's footer out of view.
+  */
+  .card--scroll { display: flex; flex-direction: column; min-height: 0; }
+  .card--scroll .card__body { flex: 1; min-height: 0; overflow-y: auto; padding: 0; }
+  .card--scroll .card__foot { border-top: 1px solid var(--border-hairline); margin-top: auto; }
+
+  /* ── kpi ── */
+
+  /*
+    The tile itself — Canvas.dc.html's dashboard KPI row draws each card as `bg/surface` on
+    `border/default`, radius 10 (`--r-card`), padding `16px 18px`: the same surface/border/radius
+    as `.card`, plus its own padding rather than `.card`'s (a KPI has no head/body split to give it
+    `.card__body`'s `0 18px 15px`). Only `/design` renders a bare `.kpi` today, so this was the
+    gallery's own reference showing a tile with no container at all.
+  */
+  .kpi {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-card);
+    padding: 16px 18px;
+  }
+  .kpi__label { font-size: 11.5px; font-weight: 500; color: var(--text-label); }
+  .kpi__value {
+    font-size: 25px;
+    font-weight: 500;
+    letter-spacing: -.02em;
+    margin-top: 7px;
+  }
+  .kpi__value--green { color: var(--accent-green); }
+  .kpi__value--danger { color: var(--danger); }
+  .kpi__caption { font-size: 11.5px; color: var(--text-label); margin-top: 5px; }
+
+  /* ── pill ── */
+
+  /*
+    The colour is decoration, never the only signal — every pill call site supplies its own text
+    (`pill(tone, text)`; text is not an optional parameter). Roughly 8% of men cannot separate
+    red from green, so a pill whose sole account of "in arrears" was a hue would tell them nothing.
+  */
+  .pill {
+    display: inline-block;
+    border-radius: var(--r-pill);
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .pill--danger { color: var(--danger); background: var(--danger-tint); }
+  .pill--warn { color: var(--warn); background: var(--warn-tint); }
+  .pill--paid { color: var(--accent-green); background: var(--accent-green-pale); }
+  .pill--neutral { color: var(--text-muted); background: var(--neutral-pill); }
+  /*
+    An escalation of danger, not a different category — white on solid --danger rather than
+    dark-on-tint, both existing tokens. Added for report.html's BRIGHT_RED (art. 11 termination
+    counter running), which used to be visually identical to ordinary RED lateness once both were
+    mapped to pill--danger. 6.06:1 against white, the best-contrasting pill in the set.
+  */
+  .pill--critical { color: var(--bg-surface); background: var(--danger); }
+
+  /* ── chip ── */
+
+  /*
+    Two shapes appear in the mockups: the default (20px radius, "pill") on the Features group and
+    the tenancy-detail view chips, and "choice" (8px radius / --r-control) on the property-type,
+    contract-type and unit-status single-select groups (Canvas: `border-radius:8px;padding:7px
+    13px;font-size:12px`). Both shapes share one selected-state colour set — the mockups draw the
+    exact same border/background/text combination for both — so `chip--selected` needs no
+    per-shape variant; `chip--choice` only overrides geometry.
+  */
+  .chip {
+    display: inline-block;
+    border: 1px solid var(--border-control);
+    color: var(--text-secondary);
+    border-radius: var(--r-pill);
+    padding: 5px 12px;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .chip--choice {
+    border-radius: var(--r-control);
+    padding: 7px 13px;
+    font-size: 12px;
+  }
+  .chip--selected {
+    border-color: var(--accent-green);
+    background: var(--accent-green-tint-2);
+    color: var(--accent-green);
+    font-weight: 600;
+  }
+
+  /* ── btn ── */
+
+  /*
+    `.btn` styles both an <a> and a <button type="submit"> identically — the fragment picks the
+    element by whether `href` is null, and a caller must not be able to tell the difference by
+    looking. `margin:0` and `font:inherit` undo the two properties a <button> carries by default
+    that an <a> never did; every other property below is already common to both.
+  */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-control);
+    font: inherit;
+    font-weight: 600;
+    margin: 0;
+    cursor: pointer;
+  }
+  .btn--primary {
+    background: var(--accent-green);
+    color: var(--bg-surface);
+    border: 1px solid var(--accent-green);
+    padding: 7px 14px;
+    font-size: 12.5px;
+  }
+  .btn--secondary {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-control);
+    border-radius: var(--r-sm);
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: normal;
+  }
+  .btn--danger {
+    background: var(--danger);
+    color: var(--bg-surface);
+    border: 1px solid var(--danger);
+    border-radius: var(--r-sm);
+    padding: 5px 11px;
+    font-size: 11.5px;
+  }
+
+  /* ── field / selectField ── */
+
+  /*
+    The wrapper itself. Every stacked-field group in Canvas.dc.html (New property's Identity card,
+    Registry & building, New unit's Identification…) is a `flex column` with `gap:14px` around one
+    label+input group per child — never a margin the input rows carry themselves — but nothing in
+    this codebase gives `.card__body` (`padding:0 18px 15px`, no gap) that wrapper, so a bottom
+    margin on `.field` is the one-property way to get the same 14px without changing every card's
+    own layout. Neutralised inside `.lead-fields` (screens.css) so its own 16px grid gap is not
+    doubled — see that rule's own comment.
+  */
+  .field { margin-bottom: 14px; }
+
+  .field__label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .field__req { color: var(--danger); margin-left: 2px; }
+  .field__wrap { position: relative; }
+  .field__input {
+    width: 100%;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-control);
+    border-radius: var(--r-control);
+    padding: 9px 11px;
+    font-size: 12.5px;
+    font-family: inherit;
+  }
+  /* Focus is the global :focus-visible rule in base.css — nothing to add here. */
+  .field__suffix {
+    position: absolute;
+    right: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11.5px;
+    color: var(--text-placeholder);
+    pointer-events: none;
+  }
+  .field__wrap:has(.field__suffix) .field__input { padding-right: 40px; }
+  .field__help { font-size: 11px; color: var(--text-label); margin-top: 5px; }
+
+  /*
+    Not drawn in the mockups — see the fragment's comment for why this is the obvious shape
+    rather than the designed one. Border only, no fill, matching how --danger is used everywhere
+    else in the system (arrears text, the required asterisk): colour marks it, it never floods it.
+  */
+  .field--error .field__input,
+  .field--error .field__select { border-color: var(--danger); }
+  .field__error { font-size: 11px; color: var(--danger); margin-top: 5px; }
+
+  /*
+    A native <select> rather than the mockup's styled div — the handoff says outright that
+    buttons, selects and inputs are drawn as styled divs and must be substituted with real
+    controls. `appearance:none` strips the OS arrow so the drawn "▾" is the only one.
+  */
+  .field__select {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-control);
+    border-radius: var(--r-control);
+    padding: 9px 28px 9px 11px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .field__select-arrow {
+    position: absolute;
+    right: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-placeholder);
+    font-size: 11px;
+    pointer-events: none;
+  }
+
+  /* ── avatar ── */
+
+  /*
+    Four sizes appear (24 / 28 / 30 / 36px), one per screen context: dashboard table 24, sidebar
+    footer 28, owner rail 30, current-lease card 36. `--avatar-size` stays a custom property (the
+    `.avatar` rule below still expresses width/height/font-size as one formula off it) but is now
+    set by a modifier class per size rather than travelling as a raw pixel value inline — a
+    template must never carry a `style` attribute holding a design value (TemplateHygieneTest,
+    Task 8). A fifth size some future screen needs is a fifth modifier class here, not a return to
+    the inline approach.
+  */
+  .avatar {
+    width: var(--avatar-size, 28px);
+    height: var(--avatar-size, 28px);
+    border-radius: 50%;
+    background: var(--neutral-avatar);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: calc(var(--avatar-size, 28px) * 0.34);
+  }
+  .avatar--24 { --avatar-size: 24px; }
+  .avatar--28 { --avatar-size: 28px; }
+  .avatar--30 { --avatar-size: 30px; }
+  .avatar--36 { --avatar-size: 36px; }
+
+  /* ── keyvalue ── */
+
+  .keyvalue {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+  }
+  .keyvalue__label { color: var(--text-label); }
+  .keyvalue__value--danger { color: var(--danger); }
+  /*
+    The rule-separated, 600-weight last row seen closing "Owner & balances" and "Current lease"
+    (Due to owner / Monthly total). Composition, not a new fragment: the caller adds this class
+    to the one row that closes the group.
+  */
+  .keyvalue--total {
+    padding-top: 8px;
+    border-top: 1px solid var(--border-hairline);
+    font-weight: 600;
+  }
+
+  /* ── checklistItem ── */
+
+  /*
+    Three states, one shape: a 15px dot followed by its label. The dot alone must never be the
+    only signal — see the pill note above — so `state` also drives the label's own colour
+    (muted once done, full-strength while still required) rather than colouring the dot only.
+  */
+  .checklist-item { display: flex; align-items: center; gap: 9px; font-size: 12px; }
+  .checklist-item__dot {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--bg-surface);
+  }
+  .checklist-item__dot--done { background: var(--accent-green); }
+  .checklist-item__dot--required { border: 1.5px solid var(--danger-soft); }
+  .checklist-item__dot--optional { border: 1.5px solid var(--neutral-dash); }
+  .checklist-item--done .checklist-item__text { color: var(--text-body); }
+  .checklist-item--optional .checklist-item__text { color: var(--text-label); }
+
+  /* ── progressBar ── */
+
+  .progress-bar {
+    display: flex;
+    height: 12px;
+    border-radius: var(--r-bar);
+    background: var(--neutral-track);
+    overflow: hidden;
+  }
+  .progress-bar__segment { height: 100%; }
+  .progress-bar__segment--green { background: var(--accent-green); }
+  .progress-bar__segment--warn { background: var(--warn-soft); }
+  .progress-bar__segment--danger { background: var(--danger-soft); }
+
+  /* ── railItem ── */
+
+  /*
+    The rail's dot carries no meaning the adjoining text doesn't already state (a deadline, an
+    amount, a name) — `filled` and `tone` only decorate. Outlined rings for what's ahead, a
+    filled dot for what already happened today; the third grid column is date text and is simply
+    absent (auto-width, zero content) on the two screens that don't pass one.
+  */
+  .rail-item {
+    display: grid;
+    grid-template-columns: 14px 1fr auto;
+    gap: 0 10px;
+    align-items: start;
+  }
+  .rail-item__rail { display: flex; flex-direction: column; align-items: center; }
+  .rail-item__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    margin-top: 3px;
+    flex: none;
+  }
+  .rail-item__dot--green { border: 2px solid var(--accent-green); }
+  .rail-item__dot--warn { border: 2px solid var(--warn-soft); }
+  .rail-item__dot--danger { border: 2px solid var(--danger); }
+  .rail-item__dot--neutral { border: 2px solid var(--neutral-icon); }
+  .rail-item--filled .rail-item__dot--green { background: var(--accent-green); border-color: var(--accent-green); }
+  .rail-item--filled .rail-item__dot--warn { background: var(--warn-soft); border-color: var(--warn-soft); }
+  .rail-item--filled .rail-item__dot--danger { background: var(--danger-soft); border-color: var(--danger-soft); }
+  .rail-item--filled .rail-item__dot--neutral { background: var(--text-disabled); border-color: var(--text-disabled); }
+  .rail-item__connector { width: 1.5px; flex: 1; background: var(--border-hairline); min-height: 14px; }
+  .rail-item__title { font-size: 12.5px; font-weight: 500; }
+  .rail-item__subline { font-size: 11px; color: var(--text-label); }
+  .rail-item__date { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-body); }
+
+  /* ── microLabel ── */
+
+  .micro-label {
+    display: block;
+    font: 600 10px/1 var(--font-micro);
+    letter-spacing: .08em;
+    color: var(--text-table-head);
+    text-transform: uppercase;
+  }
+
+  /* ── tabs ── */
+
+  .tabs { display: flex; gap: 24px; font-size: 13px; color: var(--text-muted); }
+  .tabs__item {
+    padding-bottom: 11px;
+    border-bottom: 2px solid transparent;
+    color: inherit;
+  }
+  .tabs__item--active {
+    font-weight: 600;
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-green);
+  }
+
+  /* ── breadcrumb ── */
+
+  .breadcrumb {
+    display: flex;
+    gap: 4px;
+    font-size: 11.5px;
+    color: var(--text-label);
+  }
+
+  /* ── emptyState ── */
+
+  /*
+    Not designed — the handoff says so outright ("Empty and loading states are not designed").
+    Built as the most obvious thing consistent with the rest of the system rather than skipped;
+    flagged in the task report for design review.
+  */
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--text-faint);
+  }
+
+  /* ── warnings ── */
+
+  /*
+    Reserve()'s statutory soft warnings — a deposit over the legal cap, a term past ten years.
+    units.html and timeline.html both render `<ul class="warnings" th:if="...">` around a plain
+    `<li th:each="warning" th:text="warning">`; two callers, so promoted here rather than left in
+    screens.css. Amber, not danger (README, status/warn: "part-paid text, lease-ending dates") —
+    a soft warning never blocks anything, it only flags something worth a second look.
+
+    `.form-alert`/`.form-alert--danger` (screens.css) was considered instead of a dedicated rule
+    and rejected: it is a single tinted paragraph box with no slot for more than one line, and this
+    is always a list of independently-worded warnings. The row shape below instead follows
+    `.owner-list__row`/`.party-list__row` (screens.css) — this codebase's existing idiom for a
+    plain list of rows sitting directly on a screen rather than inside a card — hence no horizontal
+    padding of its own; `.content__body` (layout.css) already supplies the page's 26px gutter.
+  */
+  .warnings { list-style: none; margin: 0; padding: 0; }
+  .warnings li {
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border-row);
+    font-size: 12.5px;
+    color: var(--warn);
+  }
+
+  /* ── tableHead ── */
+
+  /*
+    `--cols` is read by both the head and every row, so a row's columns cannot silently drift from
+    its head's — the failure mode this exists to prevent. The value itself is not declared here:
+    each screen's table gets its own modifier class in screens.css (next to the screen that owns
+    it), applied to whatever wraps both the head and its rows, and `tableHead`'s `gridClass`
+    parameter is that class name. This rule only reads the custom property, it never sets it.
+  */
+  /*
+    The handoff's tables carry no column gap, and they do not need one: every column in the
+    mockup is left-aligned, so each cell's text starts at its own column edge with the previous
+    cell's whitespace in front of it.
+
+    This application added right-aligned numeric columns (screens.css sets `text-align: right` on
+    the amount columns of the arrears, suggestions and suspense boards), which the handoff never
+    drew. A right-aligned cell ends exactly where the next left-aligned cell begins, so with no gap
+    the two run together — "NALEŻNOŚĆ" beside "TYTUŁ PODANY" rendered as NALEŻNOŚĆTYTUŁ PODANY, and
+    an amount abutted the reference next to it. The gap is 10px, the handoff's most common, rather
+    than a new value; it belongs on the grid because the pairing, not the column, is what needs it.
+  */
+  .table__head, .table__row {
+    display: grid;
+    grid-template-columns: var(--cols);
+    column-gap: 10px;
+  }
+  .table__head {
+    padding: 0 18px 8px;
+    border-bottom: 1px solid var(--border-hairline);
+    font: 600 10px/1 var(--font-micro);
+    letter-spacing: .07em;
+    color: var(--text-table-head);
+    text-transform: uppercase;
+  }
+  .table__row {
+    align-items: center;
+    padding: 11px 18px;
+    border-bottom: 1px solid var(--border-row);
+    font-size: 12.5px;
+  }
+  .table__row:hover { background: var(--bg-subtle); }
+
+  /*
+    A table head that IS the top of the card.
+
+    Zero top is correct in exactly one arrangement — under a `.card__head`, where the title's own
+    12px `padding-bottom` is already the space. On a card with no title the head is the first thing
+    inside the border, and zero put the column labels 1px under it against the prototype's 15px.
+
+    The prototype draws both and we had copied one: its dashboard table (titled) is `0 18px 8px`,
+    its portfolio table (untitled) `14px 18px 9px`. Hence a first-child rule — 14px on `.table__head`
+    itself would open a gap under every card title that the drawing has as zero.
+
+    Two selectors because properties.html and units.html wrap head and rows in `.table-scroll` so
+    they scroll together, making the head the card's grandchild there and its child elsewhere.
+
+    Four screens: Nieruchomości, Lokale, the property picker, Zaległości.
+  */
+  .card > .table__head:first-child,
+  .card > .table-scroll:first-child > .table__head:first-child {
+    padding: 14px 18px 9px;
+  }
+
+  /* ── stepRail ── */
+
+  /*
+    The step rail (README's New property / New unit / New tenancy wizards). Written identically
+    three times — property-new.html (both its phases) and both reserve-*.html screens — before
+    being promoted here; two screens wanting a class is screens.css's trigger for "this belongs in
+    components.css", and this had three before it moved; by then the shape had stopped changing.
+    `.step-rail__content` (the pane beside the rail) stays in screens.css: its content is a
+    different set of cards per screen, so there is nothing here for it to share.
+  */
+  .step-rail {
+    width: 216px;
+    flex: none;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-card);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px;
+    align-self: flex-start;
+  }
+  .step-rail__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: var(--r-sm);
+    border-left: 2px solid transparent;
+  }
+  /*
+    `.is-active`/`.is-done`, not a second BEM modifier — see the stepRail fragment's own comment
+    (components.html) for why: two `__`-delimited class names in one th:classappend expression pair
+    up as Thymeleaf preprocessing delimiters and mangle the expression before it is ever evaluated.
+    Plain state classes have no `__` to pair.
+  */
+  .step-rail__item.is-active {
+    background: var(--accent-green-tint-3);
+    border-left-color: var(--accent-green);
+  }
+  .step-rail__num {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10.5px;
+    font-weight: 600;
+    background: var(--neutral-avatar);
+    color: var(--text-faint);
+  }
+  .step-rail__item.is-active .step-rail__num,
+  .step-rail__item.is-done .step-rail__num {
+    background: var(--accent-green);
+    color: var(--bg-surface);
+  }
+  .step-rail__text { display: flex; flex-direction: column; gap: 2px; }
+  .step-rail__title { font-size: 12.5px; font-weight: 500; }
+  .step-rail__item.is-active .step-rail__title { font-weight: 600; }
+  .step-rail__subline { font-size: 11px; color: var(--text-label); }
+
+  /*
+    The centred, out-of-shell auth pages — login.html and error/not-invited.html. Neither has a
+    resolved workspace yet, so neither renders inside layout.html's sidebar shell; both build the
+    centred panel themselves. Two screens want it, which is screens.css's stated trigger for
+    promotion, so it lives here rather than being written twice.
+  */
+  .auth-page {
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-app);
+    padding: 24px;
+  }
+  .auth-panel {
+    width: 100%;
+    max-width: 360px;
+    padding: 36px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    text-align: center;
+  }
+  .auth-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-sm);
+    background: var(--accent-green);
+    color: var(--bg-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 17px;
+    flex: none;
+  }
+  .auth-notice { font-size: 12.5px; color: var(--accent-green); }
+  .auth-error { font-size: 12.5px; color: var(--danger); }
+
+  /*
+    ── responsive ──
+
+    The component-side half of the three stops in layout.css; see that file's own responsive comment
+    for the stops themselves and for why each query sits inside a layer rather than after it. These
+    are here rather than there because card padding, the KPI row, the tab strip and a table's own
+    anatomy belong to the components, so a screen built next year inherits them without asking.
+
+    Nothing changes at or above 1024 except by omission, and two values deliberately do not change
+    at any stop:
+
+      - The type scale. The spec's matrix says "unchanged" at all three stops, so there is no
+        font-size in this block.
+      - `.kpi__value`'s 25px. Shrinking the numerals was the considered alternative and was
+        rejected outright — "the numbers are the point of the row". A future tidy-up that adds a
+        smaller KPI numeral here is undoing a decision, not adjusting a value.
+  */
+
+  /*
+    Card padding 18 → 14px, the spec's only card change and only at this stop. Every box that
+    carries the 18px edge is listed, because a card whose head tightened and whose rows did not
+    reads as a misalignment rather than as a tighter card: `.table__head` and `.table__row` supply
+    their own edge padding instead of sitting inside `.card__body` (see properties.html's note), so
+    they are part of the same edge and have to move with it.
+  */
+  @media (max-width: 1023px) {
+    .card__head { padding: 14px 14px 11px; }
+    .card__body { padding: 0 14px 14px; }
+    .card__foot { padding: 10px 14px; }
+    .kpi { padding: 14px; }
+    .table__head { padding: 0 14px 8px; }
+    .table__row { padding: 10px 14px; }
+    /* The horizontal inset follows the card's own tightening; the top does not — 14px is the gap
+       between a border and the first thing under it, and that does not get smaller with the card. */
+    .card > .table__head:first-child,
+    .card > .table-scroll:first-child > .table__head:first-child {
+      padding: 14px 14px 9px;
+    }
+  }
+
+  /*
+    ── kpi row ──
+
+    The row the KPI tiles sit in, four across. This is the component the spec's dashboard draws
+    (`repeat(4, 1fr)`, `gap: 12px`); no screen renders a KPI row yet — only /design does — so it
+    lives here rather than in screens.css precisely so the first screen that grows one inherits the
+    2×2 reflow instead of reinventing it.
+  */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+  /*
+    The wrapper a caller needs when the tiles are iterated.
+
+    `th:each` and `th:replace` must not share an element (precedence 200 vs 100 — the fragment
+    substitutes before the iteration is read, and exactly one tile renders), so a screen looping the
+    kpi fragment has to wrap it. `display: contents` removes that wrapper from layout entirely, so
+    the `.kpi` inside it is the grid item — without this the wrapper is the item, and the tiles stop
+    stretching to a common height the moment one caption wraps to two lines.
+  */
+  .kpi-row__cell { display: contents; }
+
+  /* 4 across → 2 × 2 (spec's matrix). The tiles' own padding tightens with every other card above;
+     their numerals do not. */
+  @media (max-width: 1023px) {
+    .kpi-row { grid-template-columns: 1fr 1fr; }
+  }
+
+  /*
+    ── tabs, and the select they become ──
+
+    At 768 the strip becomes one 200px native select: the tab strip and the primary button cannot
+    share a row at that width (spec, Property detail — 768). Both forms are always in the markup and
+    the breakpoint picks one, rather than a screen choosing — a screen that had to choose would get
+    it wrong on the width nobody tested.
+
+    `.tabs-switch` is the fragment's root and holds both. It carries `data-fragment="tabs"`, so
+    DesignGalleryTest still counts exactly one tabs fragment on /design.
+  */
+  .tabs-switch { display: block; }
+  .tabs__select { display: none; }
+
+  @media (max-width: 1023px) {
+    .tabs { display: none; }
+    .tabs__select {
+      display: block;
+      width: 200px;
+      border: 1px solid var(--border-control);
+      border-radius: var(--r-control);
+      background: var(--bg-surface);
+      padding: 8px 11px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+  }
+
+  /*
+    ── a table that becomes stacked cards ──
+
+    THE TABLE RULE, from the spec: the content area at 768 is 768 − 56 rail − 32 gutters = 680px,
+    and any table needing more than that becomes stacked cards at 768, two across. A horizontal
+    scroll inside a vertically scrolling page was the alternative and was rejected — "the comparison
+    it protects is worth less at 768 than at 1400, since a manager on a tablet is working through
+    the list rather than scanning a column". So this is opt-in per table, and which tables opt in is
+    measured rather than guessed: see the report for each table's natural width. Two of the six
+    exceed 680px.
+
+    `--cols` is untouched. The class sits on the same element that already carries the table's
+    `--cols` (the element wrapping BOTH the head and the rows), so nothing here can reintroduce the
+    bug where a row read its columns from a sibling instead of an ancestor — there is no new wrapper
+    and no moved class.
+  */
+  @media (max-width: 1023px) {
+    /*
+      Two across, as drawn.
+
+      No `overflow-x` here, and the absence is the fix rather than an omission. This rule used to
+      carry `overflow-x: visible` with a comment saying it undid `.table-scroll`'s axis for the two
+      stacking tables. It never did: `.table-scroll { overflow-x: auto }` is declared in the
+      `screens` layer, which base.css orders AFTER `components`, so the later layer won whatever the
+      specificity — the declaration was dead and its comment described an effect that could not
+      happen. Both stacking tables have since dropped `.table-scroll` from their markup
+      (bank.html, unit.html), which is what actually left nothing to undo.
+    */
+    .table--stacks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* The head is what the per-cell labels replace; an empty state, or anything else that is not a
+       row, spans the pair rather than sitting in the left column as if it were a card. */
+    .table--stacks .table__head { display: none; }
+    .table--stacks > :not(.table__row) { grid-column: 1 / -1; }
+
+    /*
+      `align-items: stretch` is load-bearing, not tidiness. `.table__row` sets `align-items: center`
+      to centre cells vertically while it is a grid ROW; turning it into a flex COLUMN swaps the
+      axes, so that same declaration starts centring the cells HORIZONTALLY and shrink-wrapping each
+      one to its content. The result was a card whose fields floated in a ragged block in the middle
+      instead of a label/value list down its left edge — visible in a screenshot at 768, invisible in
+      every computed-style check, since each individual property was doing exactly what it said.
+    */
+    .table--stacks .table__row {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 5px;
+      min-width: 0;
+      border: 1px solid var(--border-default);
+      border-radius: var(--r-card);
+      padding: 12px 14px;
+    }
+
+    /* The row is a card now, so the hover tint a row uses to track across columns has nothing left
+       to track and would just make one card of the pair look selected. */
+    .table--stacks .table__row:hover { background: var(--bg-surface); }
+
+    .table--stacks .table__row > * { display: block; min-width: 0; }
+
+    /*
+      Each cell gets its column's name back, taken from `data-label` on the cell. The head is gone,
+      so without this a stacked card is a column of unlabelled values — the spec's own cards label
+      every field. The type is the table head's exactly (same size, weight, tracking, colour and
+      family), because it is the same information in a different position.
+
+      Labels come from `data-label` rather than from CSS, so a table's column names live once in its
+      own template beside the `tableHead` call that already lists them — see unit.html and bank.html,
+      which pass one `th:with` list to both.
+    */
+    .table--stacks .table__row > [data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 2px;
+      font: 600 10px/1 var(--font-micro);
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--text-table-head);
+    }
+  }
+}

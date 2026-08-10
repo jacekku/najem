@@ -198,11 +198,11 @@ public class SecurityConfig {
                 // The sign-in page itself, and the static assets it needs to render. A login page
                 // that requires being logged in is a redirect loop.
                 //
-                // /theme is here because the sign-in page carries the light/dark control, and a
-                // person who cannot comfortably read a light screen meets that page before they
-                // have a session. It sets one cookie naming a colour scheme, reads nothing, and
-                // is still CSRF-protected by the browser chain.
-                .requestMatchers("/login", "/theme", "/css/**", "/vendor/**",
+                // /favicon.ico is permitted even though no such file exists: a browser requests it
+                // unprompted before any session exists, and permitting it means that probe 404s
+                // instead of bouncing the visitor into a login redirect for a resource nobody asked
+                // for. favicon.svg is the one the app actually links.
+                .requestMatchers("/login", "/css/**", "/vendor/**",
                     "/favicon.ico", "/favicon.svg").permitAll()
                 .anyRequest().authenticated())
             .oauth2Login(login -> login

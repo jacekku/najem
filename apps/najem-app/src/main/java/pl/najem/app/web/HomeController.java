@@ -16,10 +16,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class HomeController {
 
+    /**
+     * The Pulpit screen. The agency's name is real and everything else on it is not — see
+     * {@link DashboardFake}, which is where the five read sides this screen wants will land.
+     */
     @GetMapping("/")
     public String home(WebWorkspace workspace, Model model) {
         model.addAttribute("agency", workspace.name());
-        model.addAttribute("role", workspace.role().name());
+        model.addAttribute("dash", DashboardFake.VIEW);
         return "home";
     }
 }

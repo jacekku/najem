@@ -107,7 +107,7 @@ class TenancyTimelineProjectionTest {
 
         workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Kwiatowa 5, Kraków",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         var unitId = portfolio.addUnit(workspace, propertyId, "m. 3", new BigDecimal("2400"));
         portfolio.openUnitToRent(workspace, unitId, "ready to let");
 
@@ -139,7 +139,7 @@ class TenancyTimelineProjectionTest {
         // A second agency's tenancy, so the workspace boundary is asserted rather than assumed.
         var otherWorkspace = UUID.randomUUID();
         var otherProperty = portfolio.createProperty(otherWorkspace, "ul. Inna 1, Gdańsk",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         var otherUnit = portfolio.addUnit(otherWorkspace, otherProperty, "m. 1", new BigDecimal("1800"));
         otherWorkspaceTenancyId = tenancies.reserve(otherWorkspace, reserve(otherUnit, LocalDate.of(2026, 9, 1))).tenancyId();
 

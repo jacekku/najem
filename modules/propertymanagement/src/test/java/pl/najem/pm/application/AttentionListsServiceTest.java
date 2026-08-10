@@ -159,7 +159,7 @@ class AttentionListsQueryTest {
     }
 
     private static UUID unitIn(UUID workspaceId) {
-        var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners());
+        var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners()).propertyId();
         return portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
     }
 

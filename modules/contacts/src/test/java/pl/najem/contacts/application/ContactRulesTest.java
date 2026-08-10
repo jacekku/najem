@@ -3,6 +3,7 @@ package pl.najem.contacts.application;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import pl.najem.contacts.domain.ContactErased;
+import pl.najem.contacts.domain.ContactRegistered;
 import pl.najem.contacts.domain.InterestWithdrawn;
 
 import java.math.BigDecimal;
@@ -39,6 +40,7 @@ class ContactRulesTest {
     private ContactService contacts;
     private InterestService interests;
     private RetentionService retention;
+    private UnitInterestQuery interestedParties;
 
     @BeforeEach
     void setUp() {
@@ -51,6 +53,7 @@ class ContactRulesTest {
             new InMemoryErasureDue(people, holdRows), directory);
         contacts = new ContactService(store, people, interestRows, retention, directory);
         interests = new InterestService(store, interestRows, directory);
+        interestedParties = new InMemoryUnitInterests(interestRows, people);
     }
 
     private UUID anna(UUID workspaceId) {
@@ -370,5 +373,144 @@ class ContactRulesTest {
         assertThat(directory.search(AGENCY, "Kowalska")).isEmpty();
         assertThat(directory.search(AGENCY, "Nowak")).extracting(ContactMatch::contactId)
             .containsExactly(contactId);
+    }
+
+    // ---- who is interested in a unit ---------------------------------------
+
+    @Test
+    void anInterestedPartyCarriesTheNameFromThePersonTable() {
+        var unit = UUID.randomUUID();
+        var contactId = anna(AGENCY);
+        var interestId = interests.register(AGENCY, contactId, unit,
+            new BigDecimal("2900.00"), LocalDate.of(2026, 9, 1));
+
+        assertThat(interestedParties.activeForUnit(AGENCY, unit)).containsExactly(
+            new InterestedParty(interestId, contactId, "Anna", "Kowalska",
+                "anna@example.com", "+48600100200",
+                new BigDecimal("2900.00"), LocalDate.of(2026, 9, 1)));
+    }
+
+    @Test
+    void awithdrawnInterestLeavesTheUnitsList() {
+        var unit = UUID.randomUUID();
+        var contactId = anna(AGENCY);
+        var interestId = interests.register(AGENCY, contactId, unit, null, null);
+
+        interests.withdraw(AGENCY, interestId, TODAY);
+
+        assertThat(interestedParties.activeForUnit(AGENCY, unit)).isEmpty();
+    }
+
+    /**
+     * The join is an inner one, and this is the assertion that says so. Erasure deletes the person
+     * row and the interests together, so the two are normally consistent — but a double that
+     * carried its own copy of the name would keep answering after the person was gone, which is
+     * the one failure a PII lookaside exists to prevent.
+     */
+    @Test
+    void anerasedPersonIsNotAnInterestedParty() {
+        var unit = UUID.randomUUID();
+        var contactId = anna(AGENCY);
+        interests.register(AGENCY, contactId, unit, null, null);
+
+        contacts.erase(AGENCY, contactId, TODAY);
+
+        assertThat(interestedParties.activeForUnit(AGENCY, unit)).isEmpty();
+    }
+
+    @Test
+    void aninterestInanotherWorkspacesUnitIsNotVisible() {
+        var unit = UUID.randomUUID();
+        var contactId = anna(AGENCY);
+        interests.register(AGENCY, contactId, unit, null, null);
+
+        assertThat(interestedParties.activeForUnit(OTHER, unit)).isEmpty();
+    }
+
+    // ---- registering the person who phoned ---------------------------------
+
+    @Test
+    void aleadIsRegisteredUnderLegitimateInterest() {
+        var contactId = contacts.registerLead(AGENCY,
+            new ContactDetails("Piotr", "Nowak", "p.nowak@example.com", "+48500000000"), true, TODAY);
+
+        assertThat(store.load(contactId, "Contact").events()).containsExactly(
+            new ContactRegistered(AGENCY, contactId, "legitimate-interest", TODAY, null));
+    }
+
+    /**
+     * The clause is the one fact on that form which is the manager's to assert. Recording today
+     * regardless would have the application claim it was read out when nobody said so.
+     */
+    @Test
+    void anunservedInfoClauseIsRecordedAsAbsentRatherThanAsToday() {
+        var contactId = contacts.registerLead(AGENCY,
+            new ContactDetails("Piotr", "Nowak", "p.nowak@example.com", "+48500000000"), false, TODAY);
+
+        assertThat(store.load(contactId, "Contact").events()).containsExactly(
+            new ContactRegistered(AGENCY, contactId, "legitimate-interest", null, null));
+    }
+
+    @Test
+    void aleadIsFindableInTheDirectoryLikeAnyOtherPerson() {
+        var contactId = contacts.registerLead(AGENCY,
+            new ContactDetails("Piotr", "Nowak", "p.nowak@example.com", "+48500000000"), true, TODAY);
+
+        assertThat(directory.find(AGENCY, contactId))
+            .contains(new ContactDetails("Piotr", "Nowak", "p.nowak@example.com", "+48500000000"));
+    }
+
+    // ---- lawful basis, on the in-memory double itself -----------------------
+
+    /**
+     * Drives {@link InMemoryContacts#updateLawfulBasis} end to end: {@code lawfulBasisOf} must read
+     * back what the update actually wrote, not a constant and not a value re-derived some other way
+     * (rule 14).
+     */
+    @Test
+    void aLeadWhoSignsBecomesAContractPartyInTheDouble() {
+        var contactId = contacts.registerLead(AGENCY,
+            new ContactDetails("Piotr", "Nowak", "p.nowak@example.com", "+48500000000"), true, TODAY);
+
+        contacts.becameContractParty(AGENCY, contactId, TODAY);
+
+        assertThat(people.lawfulBasisOf(AGENCY, contactId)).contains("contract");
+    }
+
+    @Test
+    void aContractPartyWhoIsAlreadyOneRecordsNothingOnTheFastTier() {
+        var guarantor = contacts.registerParty(AGENCY,
+            new ContactDetails("Anna", "Zielinska", "a@example.com", "+48"), true, TODAY);
+        var before = store.load(guarantor, "Contact").events().size();
+
+        contacts.becameContractParty(AGENCY, guarantor, TODAY);
+
+        assertThat(store.load(guarantor, "Contact").events()).hasSize(before);
+    }
+
+    /** The double's own workspace scoping, not the service's — {@code mine(...)} filters like {@code find}. */
+    @Test
+    void lawfulBasisOfAForeignContactIsEmpty() {
+        var contactId = contacts.registerLead(AGENCY,
+            new ContactDetails("Piotr", "Nowak", "p.nowak@example.com", "+48500000000"), true, TODAY);
+
+        assertThat(people.lawfulBasisOf(OTHER, contactId)).isEmpty();
+    }
+
+    // ---- converting an interest, on the in-memory double itself -------------
+
+    /** No fast-tier test previously drove {@link InMemoryInterests#convert}; closed as a deferred minor. */
+    @Test
+    void convertingAnInterestClosesItAndRefusesASecondConversion() {
+        var unitId = UUID.randomUUID();
+        var contactId = anna(AGENCY);
+        var interestId = interests.register(AGENCY, contactId, unitId, new BigDecimal("2900"), TODAY);
+        var tenancyId = UUID.randomUUID();
+
+        interests.convert(AGENCY, interestId, tenancyId, TODAY);
+
+        assertThat(interests.forUnit(AGENCY, unitId)).isEmpty();
+        assertThatThrownBy(() -> interests.convert(AGENCY, interestId, UUID.randomUUID(), TODAY.plusDays(1)))
+            .isInstanceOf(InterestNotActiveException.class);
     }
 }

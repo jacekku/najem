@@ -7,21 +7,26 @@
   There is no password field on this page and there is no route behind one. Keycloak asks for the
   password; NAJEM is told a subject afterwards and nothing else.
 */-->
-<html xmlns:th="http://www.thymeleaf.org" lang="pl" th:attr="data-theme=${theme}">
+<html xmlns:th="http://www.thymeleaf.org" lang="pl">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Logowanie — NAJEM</title>
     <link rel="icon" th:href="@{/favicon.svg}" type="image/svg+xml">
-    <link rel="stylesheet" th:href="@{/css/najem.css}">
+    <link rel="stylesheet" th:href="@{/css/tokens.css}">
+    <link rel="stylesheet" th:href="@{/css/base.css}">
+    <link rel="stylesheet" th:href="@{/css/layout.css}">
+    <link rel="stylesheet" th:href="@{/css/components.css}">
+    <link rel="stylesheet" th:href="@{/css/screens.css}">
 </head>
-<body class="login">
-<main class="login__panel">
-    <h1 class="login__brand">NAJEM</h1>
-    <p class="login__lead">Zarządzanie najmem długoterminowym.</p>
+<body class="auth-page">
+<main class="auth-panel card">
+    <div class="auth-mark" aria-hidden="true">N</div>
+    <h1>NAJEM</h1>
+    <p class="muted">Zarządzanie najmem długoterminowym.</p>
 
-    <p class="login__notice" th:if="${signedOut}">Wylogowano.</p>
-    <p class="login__error" th:if="${failed}">
+    <p class="auth-notice" th:if="${signedOut}">Wylogowano.</p>
+    <p class="auth-error" th:if="${failed}">
         Logowanie nie powiodło się. Spróbuj ponownie.
     </p>
 
@@ -31,25 +36,13 @@
       a password is exactly the shape of a phishing redirect, and a person who was not told to
       expect it is right to hesitate.
     */-->
-    <a class="login__button" th:href="@{/oauth2/authorization/keycloak}">Zaloguj się</a>
-    <p class="login__hint">Przeniesiemy Cię do Keycloak, gdzie podasz hasło.</p>
+    <div th:replace="~{components :: btn(href=@{/oauth2/authorization/keycloak}, text='Zaloguj się', kind='primary')}"></div>
+    <p class="muted">Przeniesiemy Cię do Keycloak, gdzie podasz hasło.</p>
 
-    <p class="login__hint">
+    <p class="muted">
         NAJEM działa na zaproszenia. Jeśli nie masz konta, poproś o zaproszenie osobę
         zarządzającą Twoją agencją.
     </p>
-
-    <!--/*
-      The theme control is here too, not only in the masthead this page deliberately does not
-      render. Somebody who cannot comfortably read a light screen meets this page first, and a
-      preference they can only set after signing in is one they cannot reach.
-    */-->
-    <form class="login__theme" th:action="@{/theme}" method="post">
-        <input type="hidden" name="theme" th:value="${themeToOffer}">
-        <input type="hidden" name="return" th:value="${currentPath}">
-        <button type="submit"
-                th:text="${themeToOffer == 'dark'} ? 'Ciemny motyw' : 'Jasny motyw'">Ciemny motyw</button>
-    </form>
 </main>
 </body>
 </html>

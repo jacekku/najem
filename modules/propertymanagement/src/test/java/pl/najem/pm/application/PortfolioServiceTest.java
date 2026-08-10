@@ -56,7 +56,7 @@ class PortfolioServiceTest {
     @Test
     void createsPropertyAndAddsUnitWithProjectionRow() {
         var workspaceId = UUID.randomUUID();
-        var propertyId = service.createProperty(workspaceId, "Testowa 1, Kraków", owners());
+        var propertyId = service.createProperty(workspaceId, "Testowa 1, Kraków", owners()).propertyId();
         var unitId = service.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
 
         assertThat(store.load(unitId, "Unit").events()).containsExactly(
@@ -69,7 +69,7 @@ class PortfolioServiceTest {
     void createdPropertyOwnsItsWorkspaceAndUnitsInheritIt() {
         var workspaceId = UUID.randomUUID();
 
-        var propertyId = service.createProperty(workspaceId, "Testowa 1, Kraków", owners());
+        var propertyId = service.createProperty(workspaceId, "Testowa 1, Kraków", owners()).propertyId();
         var unitId = service.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
 
         assertThatCode(() -> service.requireOwnsProperty(workspaceId, propertyId))
@@ -83,10 +83,11 @@ class PortfolioServiceTest {
     void twoPropertiesInDifferentWorkspacesDoNotShareUnits() {
         var workspaceA = UUID.randomUUID();
         var workspaceB = UUID.randomUUID();
-        var unitA = service.addUnit(workspaceA, service.createProperty(workspaceA, "A 1", owners()),
-            "M1", new BigDecimal("2500"));
-        service.addUnit(workspaceB, service.createProperty(workspaceB, "B 1", owners()), "M1",
+        var unitA = service.addUnit(workspaceA,
+            service.createProperty(workspaceA, "A 1", owners()).propertyId(), "M1",
             new BigDecimal("2500"));
+        service.addUnit(workspaceB, service.createProperty(workspaceB, "B 1", owners()).propertyId(),
+            "M1", new BigDecimal("2500"));
 
         var unitsInA = jdbc.queryForList("select unit_id from pm_unit where workspace_id = ?",
             UUID.class, workspaceA);
@@ -97,7 +98,7 @@ class PortfolioServiceTest {
     @Test
     void marketStateAndListingRefTrackTheUnitStreamIntoTheProjection() {
         var workspaceId = UUID.randomUUID();
-        var propertyId = service.createProperty(workspaceId, "Testowa 1", owners());
+        var propertyId = service.createProperty(workspaceId, "Testowa 1", owners()).propertyId();
         var unitId = service.addUnit(workspaceId, propertyId, "M12", new BigDecimal("2600"));
 
         assertThat(marketStateOf(unitId)).isEqualTo("INVENTORY");
@@ -124,7 +125,7 @@ class PortfolioServiceTest {
     @Test
     void aremovedUnitReachesBothTheStreamAndTheProjection() {
         var workspaceId = UUID.randomUUID();
-        var propertyId = service.createProperty(workspaceId, "Testowa 1", owners());
+        var propertyId = service.createProperty(workspaceId, "Testowa 1", owners()).propertyId();
         var unitId = service.addUnit(workspaceId, propertyId, "M3", new BigDecimal("2500"));
         service.openUnitToRent(workspaceId, unitId, "listed");
 
@@ -143,7 +144,7 @@ class PortfolioServiceTest {
     @Test
     void aunitCanBeRemovedWhileATenancyStillOccupiesIt() {
         var workspaceId = UUID.randomUUID();
-        var propertyId = service.createProperty(workspaceId, "Testowa 1", owners());
+        var propertyId = service.createProperty(workspaceId, "Testowa 1", owners()).propertyId();
         var unitId = service.addUnit(workspaceId, propertyId, "M4", new BigDecimal("2500"));
         var unit = Unit.from(store.load(unitId, "Unit").events());
         var tenancyId = UUID.randomUUID();
@@ -161,7 +162,7 @@ class PortfolioServiceTest {
     @Test
     void baseRentChangeReachesBothTheStreamAndTheProjection() {
         var workspaceId = UUID.randomUUID();
-        var propertyId = service.createProperty(workspaceId, "Testowa 1", owners());
+        var propertyId = service.createProperty(workspaceId, "Testowa 1", owners()).propertyId();
         var unitId = service.addUnit(workspaceId, propertyId, "M12", new BigDecimal("2600"));
 
         service.setUnitBaseRent(workspaceId, unitId, new BigDecimal("2400"));
@@ -181,8 +182,9 @@ class PortfolioServiceTest {
     void anotherAgencyCannotChangeAUnitItDoesNotOwn() {
         var owner = UUID.randomUUID();
         var stranger = UUID.randomUUID();
-        var unitId = service.addUnit(owner, service.createProperty(owner, "Własna 1", owners()),
-            "M1", new BigDecimal("2500"));
+        var unitId = service.addUnit(owner,
+            service.createProperty(owner, "Własna 1", owners()).propertyId(), "M1",
+            new BigDecimal("2500"));
 
         assertThatThrownBy(() -> service.setUnitBaseRent(stranger, unitId, new BigDecimal("1")))
             .isInstanceOf(UnknownInThisWorkspaceException.class);
@@ -200,7 +202,7 @@ class PortfolioServiceTest {
     @Test
     void anotherAgencyCannotAddAUnitToAPropertyItDoesNotOwn() {
         var owner = UUID.randomUUID();
-        var propertyId = service.createProperty(owner, "Własna 1", owners());
+        var propertyId = service.createProperty(owner, "Własna 1", owners()).propertyId();
 
         assertThatThrownBy(() -> service.addUnit(UUID.randomUUID(), propertyId, "M2",
             new BigDecimal("2500"))).isInstanceOf(UnknownInThisWorkspaceException.class);
@@ -214,8 +216,9 @@ class PortfolioServiceTest {
     @Test
     void arefusedCommandWritesNeitherTheStreamNorTheProjection() {
         var owner = UUID.randomUUID();
-        var unitId = service.addUnit(owner, service.createProperty(owner, "Własna 1", owners()),
-            "M1", new BigDecimal("2500"));
+        var unitId = service.addUnit(owner,
+            service.createProperty(owner, "Własna 1", owners()).propertyId(), "M1",
+            new BigDecimal("2500"));
         long versionBefore = store.load(unitId, "Unit").version();
 
         assertThatThrownBy(() -> service.setUnitBaseRent(UUID.randomUUID(), unitId,

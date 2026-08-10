@@ -41,7 +41,7 @@ class ComplianceRulesTest {
         compliance = new ComplianceService(store, inspections, inspections);
         portfolio = new PortfolioService(store, new InMemoryPortfolioProjection());
         propertyId = portfolio.createProperty(agency, "Testowa 1, Kraków",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         inspections.addressOf(propertyId, "Testowa 1, Kraków");
     }
 

@@ -62,6 +62,14 @@ class NoAgencyScreenTest {
         assertThat(response.getContentAsString())
             .contains("Nie należysz jeszcze do żadnej agencji")
             // The denial copy must NOT be what a new user meets.
-            .doesNotContain("Brak dostępu");
+            .doesNotContain("Brak dostępu")
+            // This screen is one of three WebErrorAdvice renders through an @ExceptionHandler
+            // rather than an ordinary controller method — Spring does not run a
+            // @ControllerAdvice's @ModelAttribute methods (ActiveAgencyAdvice's currentPath among
+            // them) for that invocation, so WebErrorAdvice sets currentPath itself. Asserted here
+            // as the sidebar's own active-item class actually landing on "/" — not merely that the
+            // page renders without throwing, which a null-safe expression alone would already
+            // guarantee while leaving the highlight silently dead.
+            .contains("nav__item--active");
     }
 }

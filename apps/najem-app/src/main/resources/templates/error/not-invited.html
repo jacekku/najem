@@ -12,13 +12,19 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Konto niezaproszone — NAJEM</title>
-    <link rel="stylesheet" th:href="@{/css/najem.css}">
+    <link rel="icon" th:href="@{/favicon.svg}" type="image/svg+xml">
+    <link rel="stylesheet" th:href="@{/css/tokens.css}">
+    <link rel="stylesheet" th:href="@{/css/base.css}">
+    <link rel="stylesheet" th:href="@{/css/layout.css}">
+    <link rel="stylesheet" th:href="@{/css/components.css}">
+    <link rel="stylesheet" th:href="@{/css/screens.css}">
 </head>
-<body class="login">
-<main class="login__panel">
-    <h1 class="login__brand">NAJEM</h1>
+<body class="auth-page">
+<main class="auth-panel card">
+    <div class="auth-mark" aria-hidden="true">N</div>
+    <h1>NAJEM</h1>
     <p>Zalogowano, ale to konto nie ma jeszcze dostępu do NAJEM.</p>
-    <p class="login__hint">
+    <p class="muted">
         NAJEM działa na zaproszenia. Poproś osobę zarządzającą agencją o zaproszenie na ten
         adres — konto powstaje dopiero po jego przyjęciu.
     </p>
@@ -27,7 +33,7 @@
       somebody who signed in as the wrong person is to close the tab.
     */-->
     <form th:action="@{/logout}" method="post">
-        <button class="login__button" type="submit">Wyloguj się</button>
+        <div th:replace="~{components :: btn(href=null, text='Wyloguj się', kind='secondary')}"></div>
     </form>
 </main>
 </body>

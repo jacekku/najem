@@ -46,21 +46,37 @@ public class PortfolioService {
     /**
      * The one command with nothing to check against: a property that did not exist a moment ago has
      * no prior owner, so the caller's workspace is stamped on it rather than compared to it.
+     *
+     * <p>Returns the warnings rather than only the id. Ownership shares that do not total 100% are
+     * a soft check by decision — {@link Property}'s own comment says confirm, do not block, because
+     * a half-known share register is a thing a manager legitimately has to record. A soft check
+     * nobody can see is the same as no check, so the warning has to leave the service.
      */
-    public UUID createProperty(UUID workspaceId, String address, List<Owner> owners) {
+    public CreatedProperty createProperty(UUID workspaceId, String address, List<Owner> owners) {
         UUID propertyId = UUID.randomUUID();
-        store.append(propertyId, "Property", 0,
-            Property.create(propertyId, workspaceId, address, owners), List.of());
-        projection.propertyCreated(propertyId, workspaceId, address);
-        return propertyId;
+        var events = Property.create(propertyId, workspaceId, address, owners);
+        var property = Property.from(events);
+        store.append(propertyId, "Property", 0, events, List.of());
+        projection.propertyCreated(propertyId, workspaceId, property.address());
+        return new CreatedProperty(propertyId, property.warnings().messages());
+    }
+
+    /** A created property and the soft warnings raised against it. */
+    public record CreatedProperty(UUID propertyId, List<String> warnings) {
     }
 
     public UUID addUnit(UUID workspaceId, UUID propertyId, String name, BigDecimal baseRent) {
         propertyOwnedBy(workspaceId, propertyId);
         UUID unitId = UUID.randomUUID();
-        store.append(unitId, "Unit", 0,
-            Unit.add(unitId, workspaceId, propertyId, name, baseRent), List.of());
-        projection.unitAdded(unitId, propertyId, workspaceId, name, baseRent,
+        var events = Unit.add(unitId, workspaceId, propertyId, name, baseRent);
+        // The projection is told what the EVENT says, not what the caller typed. Unit.add strips the
+        // name, so passing `name` through here left pm_unit holding " M2 " while the stream — the
+        // record both it and reporting's own tables are derived from — said "M2". createProperty had
+        // the identical bug and this is the identical correction: rebuild once, then read the
+        // aggregate. Anything the factory normalises is normalised for every reader or for none.
+        var unit = Unit.from(events);
+        store.append(unitId, "Unit", 0, events, List.of());
+        projection.unitAdded(unitId, propertyId, workspaceId, unit.name(), unit.baseRent(),
             Unit.MarketState.INVENTORY);
         return unitId;
     }

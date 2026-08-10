@@ -69,7 +69,7 @@ class RepairServiceTest {
     @Test
     void arepairOnAPropertyInheritsTheWorkspaceOfThatProperty() {
         var workspaceId = UUID.randomUUID();
-        var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners());
+        var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners()).propertyId();
 
         var repairId = repairs.report(workspaceId, RepairScope.PROPERTY, propertyId, "roof leak", null,
             StatutoryDutyHint.LANDLORD, LocalDate.of(2026, 9, 5));
@@ -112,7 +112,7 @@ class RepairServiceTest {
     }
 
     private static UUID unitIn(UUID workspaceId) {
-        var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners());
+        var propertyId = portfolio.createProperty(workspaceId, "Testowa 1", owners()).propertyId();
         return portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
     }
 

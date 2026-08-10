@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Check every colour pair in najem.css against WCAG, in both themes.
+Check every colour pair the stylesheets actually use against WCAG.
 
-    tools/contrast            # check, print a table, exit non-zero on any failure
+    tools/contrast            # check, print a table, exit non-zero on any unrecorded failure
     tools/contrast --quiet    # exit code only
 
 Why this exists as a tool rather than as a one-off: a colour that fails contrast looks fine to
@@ -10,7 +10,7 @@ the person who chose it. That is the entire failure mode — you cannot review i
 page, because the page looks the way you expected. So it is checked the way a test is checked,
 by something that can say no.
 
-It parses najem.css rather than holding its own copy of the palette. A checker with a duplicated
+It parses tokens.css rather than holding its own copy of the palette. A checker with a duplicated
 table passes forever after somebody edits the stylesheet.
 
 Two thresholds, and which one applies is a judgement about USE, not about the colour:
@@ -18,36 +18,134 @@ Two thresholds, and which one applies is a judgement about USE, not about the co
   4.5:1  text (WCAG 1.4.3 AA)
   3.0:1  boundaries of controls you must perceive to operate, and focus indicators (1.4.11)
 
---rule is deliberately exempt. It is a decorative hairline between table rows whose content is
-already legible; 1.4.11 governs things you must see in order to operate something. If you ever
-use --rule to bound an input or a button, it becomes a control boundary and this exemption
-becomes a bug — use --rule-strong instead, which is checked.
+THE PAIRS BELOW ARE NOT A GUESS. Each one was read out of components.css / layout.css by
+matching the `color:` and `background:` declarations landing on the same selector, and each
+carries the selector that puts them together. If you add a rule that pairs two tokens no entry
+here covers, this file is out of date and the checker is quietly narrower than it looks.
+
+Three verdicts, and the difference between the last two is the point of the file:
+
+  ok        at or above threshold
+  accepted  below threshold, and a human looked at it and said ship it anyway
+  queued    below threshold, and NOBODY HAS DECIDED YET
+
+Both of the latter carry the ratio measured when they were written down, and a drift from that
+number is a hard failure. That is deliberate: a value somebody accepted at 3.88:1 turning into
+2.90:1 is an unreviewed design change wearing the previous review's approval.
 """
 import re
 import sys
 import pathlib
 
 CSS = pathlib.Path(__file__).resolve().parents[1] / \
-    "apps/najem-app/src/main/resources/static/css/najem.css"
+    "apps/najem-app/src/main/resources/static/css/tokens.css"
 
-# token -> (threshold, what it is measured against)
 TEXT = 4.5
 CONTROL = 3.0
-CHECKS = {
-    "ink":         (TEXT,    "paper"),
-    "muted":       (TEXT,    "paper"),
-    "link":        (TEXT,    "paper"),
-    "ok":          (TEXT,    "paper"),
-    "warn":        (TEXT,    "paper"),
-    "late":        (TEXT,    "paper"),
-    "critical":    (TEXT,    "paper"),
-    "golden":      (CONTROL, "paper"),   # a dot fill, never text
-    "rule-strong": (CONTROL, "paper"),
-    "focus":       (CONTROL, "paper"),
-    "btn-fill":    (CONTROL, "paper"),
-    "btn-label":   (TEXT,    "btn-fill"),
+
+# (foreground, background, threshold, the selector that pairs them)
+CHECKS = [
+    # --- body text and headings ---
+    ("text-primary",     "bg-surface",         TEXT,    "body, .card"),
+    ("text-primary",     "bg-app",             TEXT,    "body"),
+    ("text-primary",     "neutral-pill",       TEXT,    ".tabs__item--active"),
+    ("text-secondary",   "bg-surface",         TEXT,    ".field__label, .btn--secondary"),
+    ("text-body",        "bg-surface",         TEXT,    ".gallery-intro, .rail-item__date"),
+    ("text-muted",       "bg-surface",         TEXT,    ".headerbar__search, .muted"),
+    ("text-muted",       "neutral-pill",       TEXT,    ".pill--neutral"),
+    ("text-muted",       "neutral-avatar",     TEXT,    ".avatar"),
+    ("text-label",       "bg-surface",         TEXT,    ".field__help, .card__meta, .nav__icon"),
+    ("text-faint",       "bg-surface",         TEXT,    ".empty-state, .sidebar__section"),
+    ("text-faint",       "neutral-avatar",     TEXT,    ".step-rail__num"),
+    ("text-placeholder", "bg-surface",         TEXT,    ".field__suffix, .field__select-arrow"),
+    ("text-table-head",  "bg-surface",         TEXT,    ".table__head, .micro-label"),
+    ("text-disabled",    "bg-surface",         TEXT,    ".nav__item--unbuilt"),
+
+    # --- accent and status text, each on the tint it is drawn on ---
+    ("accent-green",      "bg-surface",         TEXT,   "a, .kpi__value--green"),
+    ("accent-green",      "accent-green-tint",  TEXT,   ".nav__item--active"),
+    ("accent-green",      "accent-green-tint-2", TEXT,  ".chip--selected"),
+    ("accent-green",      "accent-green-pale",  TEXT,   ".pill--paid"),
+    ("danger",            "bg-surface",         TEXT,   ".field__error, .kpi__value--danger"),
+    ("danger",            "danger-tint",        TEXT,   ".pill--danger"),
+    ("danger",            "danger-bg",          TEXT,   ".form-alert--danger"),
+    ("warn",              "bg-surface",         TEXT,   ".kpi__value--warn"),
+    ("warn",              "warn-tint",          TEXT,   ".pill--warn, .headerbar__stale"),
+
+    # --- reversed-out text on a filled surface ---
+    ("bg-surface",        "accent-green",       TEXT,   ".btn--primary, .sidebar__mark"),
+    ("bg-surface",        "danger",             TEXT,   ".btn--danger, .pill--critical"),
+
+    # --- control boundaries: 1.4.11, because you must see the edge to use the thing ---
+    ("border-control",    "bg-surface",         CONTROL, ".field__input, .field__select"),
+    ("border-default",    "bg-surface",         CONTROL, ".btn--secondary, .chip"),
+    ("border-default",    "bg-app",             CONTROL, ".card against the page"),
+
+    # --- other graphical objects ---
+    ("neutral-icon",      "bg-surface",         CONTROL, ".rail-item__dot--neutral"),
+
+    # --- focus indicator: 1.4.11 ---
+    #
+    # The INDICATOR is base.css's `outline: 2px solid var(--accent-green)`, drawn at
+    # `outline-offset: 2px` so it lands on whatever is behind the element rather than on the element's
+    # own fill. Two backgrounds, because both occur: a card, a sidebar and the header bar are
+    # --bg-surface, and the content area behind a screen's own buttons and chips is --bg-app.
+    #
+    # --focus-ring is NOT checked here and that is the honest statement, not an omission. It
+    # composites to 1.14:1 on white, so it cannot be a 1.4.11 indicator at any size — it is the
+    # handoff's soft halo on a focused input, reinforcement beside a green border and the outline, in
+    # the same category as a hover tint. It was previously listed as `queued` at 1.14:1, which was a
+    # true measurement of a pair that was then genuinely load-bearing (the outline had been deleted).
+    # Keeping it as `queued` now would ask for a ruling on a decorative fill; recording it as
+    # `accepted` would claim a ruling nobody made. Read base.css's :focus-visible before assuming this
+    # can go back — a version of that rule with no `outline` is what made the ring the sole indicator
+    # once already.
+    ("accent-green",      "bg-surface",         CONTROL, ":focus-visible outline on a card/sidebar"),
+    ("accent-green",      "bg-app",             CONTROL, ":focus-visible outline on the page"),
+]
+
+# token -> (ratio when recorded, verdict, why)
+#
+# `accepted` means a human ruled on it. `queued` means it is below threshold and the ruling has
+# not happened — it is written down here so it cannot be mistaken for a pass, and so a second
+# regression on the same pair still shows up as a drift.
+RECORDED = {
+    # The seven sub-AA text values the design review accepted as drawn. See
+    # docs/superpowers/specs/2026-08-07-design-system-adoption-design.md.
+    ("text-muted", "neutral-pill"):        (4.31, "accepted", "pill label, drawn as handed over"),
+    ("text-muted", "neutral-avatar"):      (4.07, "accepted", "avatar initials, decorative beside a name"),
+    # 3.88:1 is below AA for TEXT and above 1.4.11's 3:1 for a graphical object, which is why one
+    # entry covers two uses: help/meta text (accepted as drawn) and .nav__icon, which below 1180 is
+    # the only label a nav item has and therefore has to clear 3:1 on its own. It does, with margin.
+    # It is here rather than as a second CONTROL entry because RECORDED is keyed on the pair, so one
+    # pair cannot carry two thresholds — if the icon ever needs its own verdict, it needs its own
+    # token, not a second row.
+    ("text-label", "bg-surface"):          (3.88, "accepted", "help/meta text as drawn; also .nav__icon, which clears 1.4.11's 3:1"),
+    ("text-faint", "bg-surface"):          (3.14, "accepted", "faint notes, drawn as handed over"),
+    ("text-faint", "neutral-avatar"):      (2.65, "accepted", "step number, repeated in the step label"),
+    ("text-placeholder", "bg-surface"):    (2.24, "accepted", "suffix and arrow, never the only cue"),
+    ("text-table-head", "bg-surface"):     (2.64, "accepted", "column headings, drawn as handed over"),
+    ("text-disabled", "bg-surface"):       (1.63, "accepted", "unbuilt nav items, deliberately unreachable"),
+    ("warn", "bg-surface"):                (3.97, "accepted", "amber, drawn as handed over"),
+    ("warn", "warn-tint"):                 (3.59, "accepted", "amber on its own tint, as handed over"),
+
+    # NOT adjudicated. Surfaced with the rest of the design-review queue.
+    ("border-control", "bg-surface"):      (1.28, "queued", "input borders are 1.4.11 boundaries"),
+    ("border-default", "bg-surface"):      (1.24, "queued", "button and chip borders are 1.4.11 boundaries"),
+    ("border-default", "bg-app"):          (1.16, "queued", "card edge against the page"),
+    ("neutral-icon", "bg-surface"):        (1.91, "queued",
+                                            "timeline dot border; the rail item carries its own text, "
+                                            "so it is never the only cue - but nobody has ruled"),
 }
-EXEMPT = {"rule": "decorative hairline; never bounds a control"}
+
+# --focus-ring is a shadow with alpha, so it has no hex to look up. Composite it over a background
+# and the result is what an eye actually receives from it: 1.14:1 on white. Kept as machinery even
+# though no CHECKS entry uses it now, because `focus-ring@<bg>` is the only way to state a
+# composited pair at all and the next translucent value in this system will need it. The reason the
+# ring itself is not checked is above, beside the focus entries.
+FOCUS_RING = (31, 122, 92, 0.10)
+
+DRIFT = 0.05  # ratios are printed to 2dp; anything past this is a real change, not rounding
 
 
 def _lin(c):
@@ -55,11 +153,15 @@ def _lin(c):
     return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
 
 
-def luminance(hexv):
+def _rgb(hexv):
     h = hexv.lstrip("#")
     if len(h) == 3:
         h = "".join(x * 2 for x in h)
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def luminance(rgb):
+    r, g, b = rgb
     return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
 
 
@@ -69,52 +171,91 @@ def ratio(a, b):
     return (hi + 0.05) / (lo + 0.05)
 
 
-def blocks(css):
-    """The token blocks, as (theme-name, {token: hex})."""
-    out = []
-    # :root { ... }  and  :root:not(...) { ... }  and  :root[data-theme="dark"] { ... }
-    for m in re.finditer(r"(:root[^{]*)\{([^}]*)\}", css):
-        selector, body = m.group(1).strip(), m.group(2)
-        tokens = dict(re.findall(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;", body))
-        if tokens:
-            name = "light" if selector == ":root" else \
-                   "dark (OS)" if "not(" in selector else "dark (chosen)"
-            out.append((name, tokens))
+def over(fg, bg):
+    """Composite an (r, g, b, a) foreground onto an opaque background."""
+    r, g, b, a = fg
+    return tuple(round(a * f + (1 - a) * s) for f, s in zip((r, g, b), bg))
+
+
+def tokens(css):
+    """The hex tokens from the single :root block. Dark mode was deleted, so there is one."""
+    roots = re.findall(r":root[^{]*\{([^}]*)\}", css)
+    out = {}
+    for body in roots:
+        out.update(re.findall(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;", body))
     return out
+
+
+def resolve(name, table):
+    """A token name, or `focus-ring@<bg>` meaning the ring composited over that background."""
+    if name.startswith("focus-ring@"):
+        bg = name.split("@", 1)[1]
+        return None if bg not in table else over(FOCUS_RING, _rgb(table[bg]))
+    return None if name not in table else _rgb(table[name])
 
 
 def main():
     quiet = "--quiet" in sys.argv
     css = CSS.read_text(encoding="utf-8")
-    found = blocks(css)
-    if not found:
-        print(f"contrast: no token blocks found in {CSS}", file=sys.stderr)
+    table = tokens(css)
+    if not table:
+        print(f"contrast: no token block found in {CSS}", file=sys.stderr)
         return 2
 
-    failures = 0
-    for theme, tokens in found:
-        if not quiet:
-            print(f"\n{theme}")
-        for token, (need, against) in CHECKS.items():
-            if token not in tokens or against not in tokens:
-                continue
-            r = ratio(tokens[against], tokens[token])
-            ok = r >= need
-            failures += 0 if ok else 1
-            if not quiet or not ok:
-                stream = sys.stdout if ok else sys.stderr
-                print(f"  {'ok  ' if ok else 'FAIL'} --{token:12s} on --{against:9s} "
-                      f"{r:5.2f}:1  needs {need}", file=stream)
-        if not quiet:
-            for token, why in EXEMPT.items():
-                if token in tokens:
-                    print(f"  --   --{token:12s} exempt — {why}")
+    failures = []
+    for fg, bg, need, where in CHECKS:
+        a, b = resolve(fg, table), resolve(bg, table)
+        # A missing token is a failure, never a skip. The previous version of this file
+        # `continue`d here, which is how it went on passing after the stylesheet it read was
+        # deleted — a checker that finds nothing is indistinguishable from one that is broken.
+        if a is None or b is None:
+            missing = fg if a is None else bg
+            failures.append(f"--{missing} is checked here but not defined in tokens.css")
+            print(f"  GONE --{fg} on --{bg}: --{missing} not in tokens.css", file=sys.stderr)
+            continue
+
+        r = ratio(a, b)
+        recorded = RECORDED.get((fg, bg))
+
+        if r >= need:
+            if recorded:
+                failures.append(f"--{fg} on --{bg} now passes at {r:.2f}:1 — "
+                                f"delete its RECORDED entry")
+                print(f"  STALE --{fg:22s} on --{bg:19s} {r:5.2f}:1  passes now; "
+                      f"recorded as {recorded[1]}", file=sys.stderr)
+            elif not quiet:
+                print(f"  ok       --{fg:22s} on --{bg:19s} {r:5.2f}:1  "
+                      f"needs {need}   {where}")
+            continue
+
+        if not recorded:
+            failures.append(f"--{fg} on --{bg} is {r:.2f}:1, needs {need} ({where})")
+            print(f"  FAIL --{fg:22s} on --{bg:19s} {r:5.2f}:1  needs {need}   {where}",
+                  file=sys.stderr)
+            continue
+
+        was, verdict, why = recorded
+        if abs(r - was) > DRIFT:
+            failures.append(f"--{fg} on --{bg} was {verdict} at {was}:1 and is now {r:.2f}:1 - "
+                            f"re-adjudicate")
+            print(f"  DRIFT --{fg:22s} on --{bg:19s} {r:5.2f}:1  was {verdict} at {was}:1",
+                  file=sys.stderr)
+        elif not quiet:
+            print(f"  {verdict:8s} --{fg:22s} on --{bg:19s} {r:5.2f}:1  "
+                  f"needs {need}   {why}")
+
+    queued = sum(1 for v in RECORDED.values() if v[1] == "queued")
+    if not quiet and queued:
+        print(f"\n{queued} pair(s) below threshold with no ruling yet - "
+              f"grep this file for 'queued'.")
 
     if failures:
-        print(f"\n{failures} pair(s) below threshold.", file=sys.stderr)
+        print(f"\n{len(failures)} unrecorded problem(s):", file=sys.stderr)
+        for f in failures:
+            print(f"  - {f}", file=sys.stderr)
         return 1
     if not quiet:
-        print("\nAll pairs pass.")
+        print("\nEvery pair either passes or is written down.")
     return 0
 
 

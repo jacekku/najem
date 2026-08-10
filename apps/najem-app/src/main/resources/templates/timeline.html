@@ -1,26 +1,54 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Historia — NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Historia — NAJEM', null, ~{::main})}">
 <body>
 <main>
     <h1 th:text="'Historia — ' + ${heading}">Historia</h1>
+
+    <!--/*
+      Reserve()'s soft checks -- a deposit over the statutory cap, a breakdown that does not sum, a
+      term past ten years. Shown once, at the moment the manager made the decision, because a
+      statutory flag on a report a month later is decorative.
+    */-->
+    <ul class="warnings" th:if="${warnings != null and !warnings.isEmpty()}">
+        <li th:each="warning : ${warnings}" th:text="${warning}">—</li>
+    </ul>
 
     <!--/*
       An empty timeline is a real answer, not a failure — a tenancy signed today has nothing behind
       it yet. It is also what a stalled projector looks like, which is why the wording says the
       projection is empty rather than claiming nothing happened.
     */-->
-    <p class="empty" th:if="${entries.isEmpty()}">
-        Brak zapisów w historii dla tej pozycji.
-    </p>
+    <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+    <div th:if="${entries.isEmpty()}">
+        <div th:replace="~{components :: emptyState(text='Brak zapisów w historii dla tej pozycji.')}"></div>
+    </div>
 
-    <ol class="timeline" th:unless="${entries.isEmpty()}">
+    <!--/*
+      railItem is what this fragment was built for. `title` gets the curated summary sentence —
+      TimelineScreenController's own javadoc: "composing a sentence here would be this screen
+      inventing a second account of the same events" — and `subline` the projector's short kind
+      slug, kept rather than dropped so nothing rendered before is missing now. `filled=true`
+      throughout: every entry here already happened, which is exactly what a filled dot means
+      (components.html); there is no severity or outcome data behind a colour, so `tone` stays
+      'neutral' rather than inventing one. No gap between rows — .timeline-rail below sets none —
+      so each item's connector line meets the next item's dot rather than leaving a visible break.
+    */-->
+    <ol class="timeline-rail" th:unless="${entries.isEmpty()}">
         <li th:each="entry : ${entries}">
-            <time th:text="${entry.occurredOn()}">—</time>
-            <span class="timeline__kind" th:text="${entry.kind()}">—</span>
-            <span class="timeline__summary" th:text="${entry.summary()}">—</span>
+            <div th:replace="~{components :: railItem(title=${entry.summary()}, subline=${entry.kind()}, date=${entry.occurredOn()}, tone='neutral', filled=true)}"></div>
         </li>
     </ol>
+
+    <!--/*
+      Only ever set on the tenancy timeline, and only when the tenancy is still reserved — a unit's
+      timeline never sets it, so this form never renders there even though the template is shared.
+    */-->
+    <form th:if="${cancellableTenancyId != null}" method="post"
+          th:action="@{/tenancies/{id}/cancel(id=${cancellableTenancyId})}">
+        <div th:replace="~{components :: field(name='reason', label='Powód', value=null, type='text', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
+        <div th:replace="~{components :: btn(href=null, text='Anuluj rezerwację', kind='danger')}"></div>
+    </form>
 </main>
 </body>
 </html>

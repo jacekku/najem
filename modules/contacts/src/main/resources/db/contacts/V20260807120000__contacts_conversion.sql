@@ -1,0 +1,11 @@
+-- Timestamped, not V43, although 4x is contacts' block. The block scheme numbers modules, not time,
+-- and every database that has run this application already holds um (V50) and reporting (V60-64) --
+-- so a new V43 is out of order and Flyway refuses to start against it. Testcontainers cannot catch
+-- that: a fresh database applies every migration in one pass, in version order, and V43 lands
+-- exactly where it should. Only an existing database says otherwise, which is what running the
+-- application found. Accounting hit the same wall and answered the same way (V20260804185415).
+--
+-- A lead who signed. status was already 'active' or 'withdrawn'; 'converted' is the third answer,
+-- and recording a win as a withdrawal would make any later question about lead outcomes wrong in a
+-- way nothing could untangle.
+alter table contacts_interest add column converted_to_tenancy_id uuid;

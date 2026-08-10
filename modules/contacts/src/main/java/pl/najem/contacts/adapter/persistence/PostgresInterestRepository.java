@@ -31,10 +31,15 @@ public class PostgresInterestRepository implements InterestRepository {
     }
 
     @Override
-    public Optional<UUID> contactOf(UUID workspaceId, UUID interestId) {
-        return jdbc.queryForList(
-            "select contact_id from contacts_interest where workspace_id = ? and interest_id = ?",
-            UUID.class, workspaceId, interestId)
+    public Optional<Interest> find(UUID workspaceId, UUID interestId) {
+        return jdbc.query("""
+            select interest_id, contact_id, unit_id, willing_to_pay, desired_start, status
+            from contacts_interest where workspace_id = ? and interest_id = ?
+            """,
+            (rs, i) -> new Interest(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class),
+                rs.getObject(3, UUID.class), rs.getBigDecimal(4),
+                rs.getObject(5, LocalDate.class), rs.getString(6)),
+            workspaceId, interestId)
             .stream().findFirst();
     }
 
@@ -42,6 +47,14 @@ public class PostgresInterestRepository implements InterestRepository {
     public void withdraw(UUID workspaceId, UUID interestId) {
         jdbc.update("update contacts_interest set status = 'withdrawn' where workspace_id = ? and interest_id = ?",
             workspaceId, interestId);
+    }
+
+    @Override
+    public void convert(UUID workspaceId, UUID interestId, UUID tenancyId) {
+        jdbc.update("""
+            update contacts_interest set status = 'converted', converted_to_tenancy_id = ?
+            where workspace_id = ? and interest_id = ?
+            """, tenancyId, workspaceId, interestId);
     }
 
     @Override

@@ -1,0 +1,56 @@
+/*
+  A specimen for ResponsiveSpecTest, and nothing else. Never served, never linked.
+
+  It carries the responsive handoff's whole breakpoint matrix with exactly ONE value moved: the
+  768 page gutter reads 18px, which is the 1024 value. That is the drift chosen deliberately —
+  the plausible way this goes wrong is not somebody inventing a number, it is somebody noticing
+  that two stops "nearly" agree and tidying them into one, which is precisely how the 1024 and 768
+  gutters would merge.
+
+  Everything else here matches the real stylesheet, so the scanner must report ONE cell rather than
+  a wall of absences. A fixture whose rules were merely missing would prove only that the scan
+  notices absence, which is the easy half.
+
+  Layered like the real thing: an unlayered @media would make this file an offender for
+  StylesheetHygieneTest's other scanner as well, and a fixture should fail one test on purpose, not
+  two by accident. Deliberately contains no :focus-visible, for the same reason.
+*/
+
+@layer tokens, base, layout, components, screens;
+
+@layer layout {
+  .sidebar { width: 216px; }
+  .content__body { padding: 22px 26px; }
+  .headerbar { height: 60px; }
+
+  @media (max-width: 1179px) {
+    .sidebar { width: 56px; }
+    .content__body { padding: 18px 20px; }
+    .headerbar { height: 56px; }
+    .grid--main-330 { grid-template-columns: 1fr 300px; }
+    .grid--320-main { grid-template-columns: 300px 1fr; }
+  }
+
+  @media (max-width: 1023px) {
+    /* THE DRIFT: the spec says 16px at this stop. 18px is the stop above it. */
+    .content__body { padding: 18px; }
+
+    .grid--main-300 { grid-template-columns: 1fr; }
+    .grid--main-330 { grid-template-columns: 1fr 1fr; }
+  }
+}
+
+@layer components {
+  .kpi-row { grid-template-columns: repeat(4, 1fr); }
+  .tabs { display: flex; }
+  .tabs__select { display: none; }
+
+  @media (max-width: 1023px) {
+    .card__head { padding: 14px 14px 11px; }
+    .card__body { padding: 0 14px 14px; }
+    .kpi { padding: 14px; }
+    .kpi-row { grid-template-columns: 1fr 1fr; }
+    .tabs { display: none; }
+    .tabs__select { display: block; }
+  }
+}

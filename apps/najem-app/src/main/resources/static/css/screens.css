@@ -1,0 +1,567 @@
+/*
+  Screen- and page-level layout, owned by no single component.
+
+  This is the last layer in tokens.css's declared order, so nothing here can be out-specified by
+  components.css regardless of selector weight — and nothing here should ever need to try. What
+  belongs in this file:
+
+    - A genuine one-off: the arrangement of components on ONE screen (a grid of cards on the
+      dashboard, the two-column layout of a detail page) that no second screen shares. If a second
+      screen ever wants the same arrangement, that arrangement is a component and belongs in
+      components.css, not here.
+    - The design gallery's own scaffolding (Task 3, `design.html`): section spacing, the swatch
+      rows and grids that let several states of one fragment sit side by side for review, and any
+      class a screen needs to compose components correctly (e.g. `.gallery-table-cols` setting
+      `--cols` once for a table demo rather than a screen inlining a style attribute).
+    - Every table's column template. `tableHead`'s `gridClass` parameter (components.html) takes a
+      class name, never a raw grid string, so each screen that renders a table declares its own
+      `--cols` class here, next to the screen that owns it — e.g. `.gallery-table-cols` below.
+      Nine screens with their own grid string inlined in nine templates is exactly what this
+      indirection exists to prevent; keep the column template out of the template.
+
+  What does NOT belong here: a colour, a radius, a font, or a spacing value not already a token
+  from tokens.css; a class two screens both want (promote it to components.css instead — this is the
+  promotion rule, and it is stated only here so it cannot be cited two ways); anything
+  that changes a component's own anatomy rather than where it sits on the page.
+
+  The signal to read if this file starts growing fast: it usually means a component was missed in
+  Task 2 rather than that screens genuinely need this many one-offs. A screen reaching for a new
+  class in here every time should first ask whether the class is really page-specific.
+*/
+@layer screens {
+
+  /*
+    properties.html's portfolio table. Address is the identifying column and gets the room; the
+    five occupancy counts are equal-width numerals. fr units only — this table has no card rail
+    beside it to size against, unlike units.html's.
+
+    Alignment is column POSITION, not a class a head cell and a row cell each have to remember to
+    carry — a head label and its column's values read the same `:nth-child` selector below, so
+    they cannot drift the way two independent `text-align` declarations could (a value cell marked
+    `.num` with the label above it left unmarked, exactly the bug this rule replaces). Columns 2–6
+    (the five occupancy counts) are numeric.
+  */
+  .properties-table { --cols: 2fr .8fr .8fr .8fr .8fr .8fr; }
+  .properties-table .table__head > :nth-child(n+2),
+  .properties-table .table__row > :nth-child(n+2) { text-align: right; }
+
+  /*
+    add-picker.html — "in which property?", the step between + Dodaj and a form that needs a parent.
+
+    Four columns where the portfolio table has six: this list exists to be chosen from, so it drops
+    the two counts (Wyłączone, Nieogłoszone) that describe a property's inventory rather than help
+    pick one. The address keeps the same 2fr share as the portfolio table, and the three counts are
+    numeric and right-aligned by the same positional mechanism.
+
+    Well inside the 680px content area at 768 — fewer and narrower columns than properties-table,
+    which measures 641px and needs no stacking — so it takes neither `table-scroll` nor
+    `table--stacks`. See components.css's THE TABLE RULE for what those are for.
+  */
+  .picker-table { --cols: 2fr .8fr .8fr .8fr; }
+  .picker-table .table__head > :nth-child(n+2),
+  .picker-table .table__row > :nth-child(n+2) { text-align: right; }
+
+  /*
+    units.html's table — Property detail's units-table anatomy on this app's real four columns.
+    Najem (the tenancy-status text/links) gets the most room, matching how much a "Najem bieżący ·
+    nadchodzący" pair can run to. Only column 2 (Czynsz bazowy) is numeric — same positional
+    mechanism as properties-table above.
+  */
+  .units-table { --cols: 1fr .9fr 1fr 1.5fr; }
+  .units-table .table__head > :nth-child(2),
+  .units-table .table__row > :nth-child(2) { text-align: right; }
+
+  /* units.html's "Dodano lokal X." confirmation after adding a unit — success tone, the same
+     accent-green `.auth-notice` (below) uses for its own "signed in" state. One caller, so kept
+     screen-specific rather than promoted alongside it. */
+  .note { font-size: 12.5px; color: var(--accent-green); }
+
+  /* unit.html's "who has asked about this unit" table. The trailing column carries the
+     Rezerwuj/Wycofaj actions and no header text, so it gets no less room than a two-button pair
+     needs. Only column 3 (Gotów płacić) is numeric — same positional mechanism as above. */
+  .unit-interested-table { --cols: 1.2fr 1.6fr .9fr .9fr 1.3fr; }
+  .unit-interested-table .table__head > :nth-child(3),
+  .unit-interested-table .table__row > :nth-child(3) { text-align: right; }
+
+  /* The two action controls (a link, a form's submit button) that sit in a table row together. */
+  .table-row-actions { display: flex; align-items: center; gap: 6px; }
+
+  /* unit.html's "Dodaj zainteresowanego" card: a compact inline search bar (field__input reused
+     directly, not through the field() fragment, which always adds a label), a plain link list for
+     the search hits, and a responsive field grid for the lead form itself. */
+  .lead-search { display: flex; gap: 8px; }
+  .lead-hits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .lead-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  /* `.field`'s own bottom margin (components.css) is for stacked fields with no grid gap of their
+     own; a field placed in this grid already gets 16px from `gap` above, so its margin is reset
+     here rather than stacking with it. */
+  .lead-fields > .field { margin-bottom: 0; }
+
+  /*
+    unit.html's "somebody already exists" state of the lead form — a settled contact's name, email
+    and a change link, replacing the blank name/email/phone fields once one is picked. Not in the
+    handoff (this screen's lead-capture flow isn't drawn), so tinted like a selected chip
+    (`accent-green-tint-2`, the same token `chip--selected`/`is-active` step use) to read as "this
+    fact is settled", the same idea a selected chip signals, rather than an input still to fill in.
+  */
+  .lead-chosen {
+    background: var(--accent-green-tint-2);
+    border-radius: var(--r-control);
+    padding: 10px 12px;
+    margin-bottom: 14px;
+  }
+  /*
+    `infoClauseServed` only — property-new.html's and unit.html's checkbox for whether the info
+    clause was read out. The name says what the control decides, not just its shape, because that
+    is the whole reason the field exists (ContactService.registerLead's javadoc). It must not be
+    reused for a control that is not consent — reserve-terms.html's termKind radios and
+    componentSplit checkbox share this shape (a native input plus its text, in a row) but decide
+    nothing about consent, so they use `.choice-label` below instead.
+  */
+  .lead-consent { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+
+  /*
+    A plain labelled radio/checkbox that is not consent — same row layout as `.lead-consent`,
+    honestly named for what it actually is. reserve-terms.html's termKind radios (indefinite/
+    fixed) and componentSplit checkbox (Podział na składniki) used `.lead-consent` before this;
+    the class name claimed every one of them was a consent checkbox, which none of them are.
+  */
+  .choice-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+
+  /* reports.html's arrears board. Two columns only — the tenancy and its colour — so the tenancy
+     name gets most of the row. The class sits on the `.card` that wraps BOTH the tableHead and the
+     rows, never on the head alone: `--cols` reaches descendants, never siblings. */
+  .report-table { --cols: 2fr 1fr; }
+
+  /*
+    reports.html's tab strip. `.tabs` (components.css) carries no outer spacing of its own — it is
+    a strip, and where it sits is the screen's business — so the gap to the panel below it is set
+    here, on a wrapper, rather than by giving every future caller of the fragment the same margin.
+  */
+  .reports-tabs { margin-bottom: 18px; }
+
+  /* The colour legend above the table — a wrapping row of pills, not a bulleted list. */
+  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; list-style: none; margin: 0; padding: 0; }
+
+  /*
+    timeline.html's rail of railItem entries. No gap between <li>s and no list-style/indent —
+    railItem's own connector (components.css) is built to meet the next item's dot directly, and
+    a gap here would leave a visible break in what is supposed to read as one continuous line.
+  */
+  .timeline-rail { list-style: none; margin: 0; padding: 0; }
+  .timeline-rail li { margin: 0; padding: 0; }
+
+  .gallery-page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .gallery-intro { color: var(--text-body); font-size: 12.5px; max-width: 640px; }
+
+  .gallery-section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-hairline);
+  }
+  .gallery-section:first-of-type { border-top: none; padding-top: 0; }
+
+  .gallery-section__title { font-size: 16px; font-weight: 600; }
+  .gallery-section__note { font-size: 11.5px; color: var(--text-label); }
+
+  .gallery-subsection { display: flex; flex-direction: column; gap: 8px; }
+  .gallery-subsection__label { font-size: 11px; font-weight: 600; color: var(--text-label); }
+
+  /* A wrapping row of independent instances — pills, chips, buttons, avatars, kpis. */
+  .gallery-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+  /* A responsive grid for larger instances shown side by side — cards, field groups. */
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .gallery-caption { font-size: 11px; color: var(--text-label); max-width: 320px; }
+
+  /* The "Nie zaprojektowane" list — plain text, no card, no pill: this is an absence, not a state. */
+  .gallery-undesigned {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-body);
+    font-size: 12.5px;
+  }
+
+  /* The generic wrapper for a table demo: head and rows stacked, nothing about columns. */
+  .gallery-table { display: flex; flex-direction: column; }
+
+  /*
+    The gallery's one demo table's column template — passed as `tableHead`'s `gridClass` and also
+    applied to `.gallery-table` itself, so both the head (via its own class) and the rows (via
+    inheriting `--cols` from the shared wrapper) read the same value. `fr` units only: a demo table
+    has no fixed pixel widths to match.
+  */
+  .gallery-table-cols { --cols: 1.6fr 1fr 0.9fr 0.9fr; }
+  .gallery-table-cols .table__head > :nth-child(3),
+  .gallery-table-cols .table__row > :nth-child(3) { text-align: right; }
+
+  /*
+    A static reproduction of `:focus-visible` (base.css) for side-by-side review — composed from
+    the same tokens the real focus ring uses, never a copied value, so a retuned ring moves the
+    demo with it. Only the gallery needs to fake a pseudo-class; nothing else in the system should
+    reach for this.
+
+    All FOUR of base.css's declarations, outline included. A demo showing only the border and the
+    halo would be a gallery quietly asserting that the border and the halo are the focus treatment,
+    which is exactly the claim that let the outline be deleted once already.
+  */
+  .field-focus-demo .field__input {
+    outline: 2px solid var(--accent-green);
+    outline-offset: 2px;
+    border-color: var(--accent-green);
+    box-shadow: var(--focus-ring);
+  }
+
+  /* The scrolling content beside the rail — everything that is not the rail itself. The rail's
+     own markup (.step-rail and its children) now lives in components.css as the stepRail
+     fragment's styling; this pane is what each wizard screen still authors itself, since its
+     content differs per screen. */
+  .step-rail__content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+  /*
+    A row of submit/cancel buttons closing a form — property-new.html (both phases), unit-new.html
+    and reserve-terms.html all end this way. Not rail-specific despite three of its four callers
+    sitting inside a step rail's content pane, so named for what it is rather than where it sits.
+  */
+  .form-actions { display: flex; gap: 8px; align-items: center; }
+
+  /*
+    property-new.html's drafted-owner list (phase one) and share list (phase two) — a plain list
+    of rows, not a table: there is no header to speak of and phase two's row carries a form input
+    the tableHead/table__row anatomy has no slot for.
+  */
+  .owner-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .owner-list__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border-hairline);
+    font-size: 12.5px;
+  }
+  .owner-list__share { width: 90px; flex: none; }
+
+  /* reserve-terms.html's legal-form chip group — a wrapping row of choice chips. */
+  .choice-group { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* reserve-terms.html's already-booked periods, read before the manager types (see the
+     template's own comment on why the date text stays plain concatenation). */
+  .booked-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+
+  /*
+    reserve-parties.html's tenant/guarantor lists — a plain list of rows, same shape as
+    property-new.html's owner-list but under its own name: an owner's row carries a form input in
+    phase two, a party's row never does, and reusing one class across the two would tie their
+    layouts together for no reason beyond looking similar today.
+  */
+  .party-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .party-list__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border-hairline);
+    font-size: 12.5px;
+  }
+
+  /*
+    A validation-level banner — the overlap refusal (reserve-terms.html) and the phase-one/phase-
+    two guard messages (property-new.html). Not in the handoff as a screen element (its README
+    error/alert entries describe card backgrounds for a panel that is not designed here either),
+    built from the same --danger-bg/--danger-border/--danger tokens the README documents for
+    "danger alert card" so a real one drawn later can reuse this class rather than inventing a
+    second name for the same thing.
+  */
+  .form-alert { padding: 10px 14px; border-radius: var(--r-control); font-size: 12.5px; }
+  .form-alert--danger {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--danger);
+  }
+
+  /*
+    ── home.html: Pulpit ──
+
+    The four destination tiles that used to live here are gone; prototype v2 draws a real dashboard
+    at `/` and the rail already carries all four destinations, so the tiles were a second copy of
+    the navigation rather than a screen.
+
+    Every value below was read off "Najem Prototype v2.dc.html" with getBoundingClientRect and
+    getComputedStyle, not eyeballed from the screenshot — the same method components.css used
+    against Canvas.dc.html, and the reason each of these maps onto an existing token rather than a
+    new number. Three exceptions, each a deliberate departure recorded where it happens.
+
+    All of it is page-specific by the promotion rule at the top of this file: one screen wants it.
+    The moment a second does, it moves to components.css.
+  */
+
+  /* The agency this screen is showing, and the switcher, in the page bar. Reads as text until
+     hovered — a statement of fact first and a control second, which is the order a manager needs
+     them in. The bar itself, the stack and the trailing period are layout.css's. */
+  .dashboard__agency { font-size: 12.5px; color: var(--text-muted); }
+  .dashboard__agency:hover { color: var(--accent-green); }
+
+  /*
+    ── Wymaga decyzji ──
+
+    A 2px left edge in the row's own tone, on `--bg-subtle`, square on that edge and `--r-sm` on the
+    other three (the prototype's `0 7px 7px 0`) — so the colour reads as a marker beside the row
+    rather than as a border around it.
+
+    The tone is decoration only: every row's own words state its urgency. See the template.
+  */
+  .decisions { display: flex; flex-direction: column; gap: 11px; }
+  .decision {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    background: var(--bg-subtle);
+    border-left: 2px solid var(--neutral-icon);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  }
+  .decision--danger { border-left-color: var(--danger-soft); }
+  .decision--warn { border-left-color: var(--warn-soft); }
+  .decision__title { font-size: 12.5px; font-weight: 500; }
+  .decision__subline { font-size: 11px; color: var(--text-faint); }
+  .decision__action { margin-left: auto; flex: none; font-size: 11px; font-weight: 600; }
+
+  /*
+    ── Nieopłacone ──
+
+    Five columns in the prototype's own proportions (338 / 293 / 180 / 180 / 203 of 1193, normalised
+    to fr). Kwota and Status are right-aligned; Termin is not — the prototype left-aligns the date
+    and right-aligns the money, which is the pairing that needs an edge to line up on.
+
+    Measures ~550px of unbreakable content in the 680px available at 768, so it takes neither
+    `table-scroll` nor `table--stacks` — see THE TABLE RULE in components.css for what those are for.
+  */
+  .unpaid-table { --cols: 1.9fr 1.6fr 1fr 1fr 1.1fr; }
+  .unpaid-table .table__head > :nth-child(n+4),
+  .unpaid-table .table__row > :nth-child(n+4) { text-align: right; }
+  .unpaid__tenant { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .unpaid__unit, .unpaid__due { color: var(--text-body); }
+
+  /*
+    The footer under it: the count on the left, the three largest debts and the way out on the
+    right. `--bg-subtle` rather than the card's own white, as the prototype draws it — the footer is
+    a summary of the rows above, not another row.
+  */
+  .dash-foot { display: flex; align-items: center; gap: 14px; background: var(--bg-subtle); }
+  .dash-foot__debtors { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  .dash-foot__debtor { display: flex; align-items: center; gap: 6px; }
+  .dash-foot__name { color: var(--text-body); }
+  .dash-foot__amount { color: var(--danger); }
+  .dash-foot__link { font-weight: 600; white-space: nowrap; }
+
+  /*
+    The three names come out of the footer below 1024. Six pieces of text on one line do not fit the
+    680px content area, and what they do instead of overflowing is worse: every name and every
+    amount wraps to two lines, so "5 240 zł" is broken across a line break inside a money figure.
+
+    Nothing is lost. All three are rows in the table directly above — they are the largest three of
+    the eight — so this drops a shortcut, not a fact. The count and the way out stay, which is what
+    the footer is for.
+  */
+  @media (max-width: 1023px) {
+    .dash-foot__debtor { display: none; }
+  }
+
+  /*
+    ── Wpłaty dzisiaj ──
+
+    Close to `railItem` and deliberately not it: these are four things that already happened, with
+    no order between them and nothing ahead, so there is no rail to draw — `railItem`'s connector
+    would assert a sequence that is not there. A 6px dot, no ring, no line.
+  */
+  .paylist { display: flex; flex-direction: column; gap: 10px; }
+  .paylist__row { display: flex; align-items: flex-start; gap: 10px; }
+  .paylist__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex: none;
+    /* Aligned to the middle of the name's first line, not to the top of the row. */
+    margin-top: 5px;
+  }
+  .paylist__dot--green { background: var(--accent-green); }
+  .paylist__dot--warn { background: var(--warn); }
+  .paylist__dot--neutral { background: var(--neutral-icon); }
+  .paylist__text { min-width: 0; }
+  .paylist__name { display: block; font-size: 12.5px; font-weight: 500; }
+  .paylist__subline { display: block; font-size: 11px; color: var(--text-faint); }
+  .paylist__amount { margin-left: auto; flex: none; font-size: 12px; }
+  .paylist__total { font-size: 11.5px; color: var(--text-label); }
+
+  /*
+    ── Postęp inkasa ──
+
+    The bar itself is `progressBar`, unmodified: its 12px height, `--r-bar` radius, `--neutral-track`
+    and its three segment tones are already the prototype's values exactly. Only the legend below it
+    is new.
+
+    The swatch is 8px square at `--r-chart` (3px). The prototype draws 2px; 3px is the nearest token
+    and a new radius value for three 8px squares would be a token added by eye — the first of the
+    three departures this screen makes, and the smallest.
+  */
+  .collection__remaining { font-size: 11.5px; color: var(--text-label); }
+  .collection__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 11px 22px;
+    margin-top: 11px;
+    font-size: 11.5px;
+    color: var(--text-body);
+  }
+  .collection__key { display: flex; align-items: center; gap: 7px; }
+  .collection__swatch { width: 8px; height: 8px; border-radius: var(--r-chart); flex: none; }
+  .collection__swatch--green { background: var(--accent-green); }
+  .collection__swatch--warn { background: var(--warn-soft); }
+  .collection__swatch--danger { background: var(--danger-soft); }
+  .collection__amount { color: var(--text-primary); }
+
+  /* agencies.html's membership list — one form-per-row, the role rendered as a neutral pill. */
+  .agency-list { list-style: none; margin: 0; padding: 0; }
+  .agency-list__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--border-row);
+  }
+  .agency-list__row:last-child { border-bottom: none; }
+  /* The form only needs to hand its children over to the row's flex layout, not lay out anything
+     of its own — `display:contents` keeps the <button>+pill pair positioned by `.agency-list__row`
+     exactly as if the <form> were not there, so the POST wrapper adds no visual box. */
+  .agency-list__row form { display: contents; }
+  .agency-list__name {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+  }
+  .agency-list__name:hover { color: var(--accent-green); }
+
+  /* forbidden.html / no-agency.html — a plain card body with more than one paragraph, so the
+     paragraphs need a gap base.css's reset (h1,h2,h3,p,figure { margin:0 }) doesn't supply. */
+  .error-card__body { display: flex; flex-direction: column; gap: 10px; }
+
+  /*
+    bank.html's two boards. `.suggestions-table`'s trailing column carries the Potwierdź button
+    and no header text, same convention as unit-interested-table. Amount columns (2, 3 / 1) are
+    numeric, same positional mechanism as properties-table.
+  */
+  .suggestions-table { --cols: .7fr .9fr 1.1fr 1fr 1fr .9fr .7fr; }
+  .suggestions-table .table__head > :nth-child(2),
+  .suggestions-table .table__head > :nth-child(3),
+  .suggestions-table .table__row > :nth-child(2),
+  .suggestions-table .table__row > :nth-child(3) { text-align: right; }
+
+  .suspense-table { --cols: .8fr 1.3fr 1fr .8fr .6fr; }
+  .suspense-table .table__head > :nth-child(1),
+  .suspense-table .table__row > :nth-child(1) { text-align: right; }
+
+  /*
+     Lets a wide board scroll inside itself instead of pushing the document sideways — a page that
+     scrolls horizontally takes the sidebar and masthead off screen with it.
+
+     Three call sites, all of them tables that keep their full grid at every drawn width
+     (properties.html, units.html, bank.html's suspense board). The two tables that STACK do not
+     carry it and must not: this declaration is in the `screens` layer, which base.css orders after
+     `components`, so nothing in components.css can override it — an `overflow-x: visible` written
+     there to undo it is dead code, which is exactly what was there until this round. If a stacking
+     table ever needs a scroll undone, the class comes off the markup; it cannot be undone in CSS
+     from an earlier layer.
+  */
+  .table-scroll { overflow-x: auto; }
+
+  /*
+    ── which tables survive 768, and which stack ──
+
+    The responsive spec's rule: the content area at 768 is 768 − 56 rail − 32 gutters = 680px, and
+    any table needing more than 680px becomes stacked cards, two across. The mechanism is
+    `.table--stacks` in components.css; what belongs here is the per-table verdict, next to the
+    table's own `--cols`.
+
+    A table's requirement is not a guess. Each column's narrowest unbreakable content was measured
+    off the rendered page, then divided by that column's share of `--cols` to get the width at which
+    the tightest column starts truncating:
+
+      properties-table        644px   fits — full grid
+      units-table             445px   fits — full grid
+      suspense-table          495px   fits — full grid
+      report-table            438px   fits — full grid
+      unit-interested-table   793px   STACKS
+      suggestions-table       902px   STACKS
+
+    644px for the portfolio table independently reproduces the spec's own arithmetic for it ("Adres
+    227px and ~91px per count", so it "keeps its full grid and needs neither treatment"), which is
+    the check that this method is measuring the same thing the spec was.
+
+    Both stacking tables are driven by their trailing action column, not by their data: Rezerwuj +
+    Wycofaj needs 158px and Potwierdź 90px, in columns weighted 1.3fr and .7fr. That is worth
+    knowing before anyone tries to fix either by trimming a data column.
+
+    This replaces a first attempt that put a `min-width` on all five tables and made every one of
+    them scroll horizontally inside its card. The spec considered exactly that and rejected it — see components.css's
+    `.table--stacks` for the reason it gives. Three of those five tables never needed any treatment.
+  */
+  @media (max-width: 1023px) {
+    /* Left, not right, once the cells are stacked label-over-value: a right-aligned numeral in a
+       card has no column edge left to align to, and its `data-label` would go with it. These live
+       in the screens layer because that is where the `text-align: right` they undo lives — a
+       components-layer rule could not win against it whatever its specificity. */
+    .unit-interested-table.table--stacks .table__row > :nth-child(3) { text-align: left; }
+    .suggestions-table.table--stacks .table__row > :nth-child(2),
+    .suggestions-table.table--stacks .table__row > :nth-child(3) { text-align: left; }
+  }
+
+  /* bank.html's "Do sprawdzenia" list — a warning never blocks a posting, so each row is a
+     microLabel'd kind, its detail, and a single acknowledge action, not a table. */
+  .warning-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .warning-list__row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 18px;
+    border-bottom: 1px solid var(--border-row);
+    font-size: 12.5px;
+  }
+  .warning-list__row:last-child { border-bottom: none; }
+  .warning-list__detail { flex: 1; }
+
+  /* parties-form.html's search-then-create block, inserted into reserve-parties.html's existing
+     Najemcy/Poręczyciele cards — a plain flex column, not a second nested `.card`. */
+  .lead { display: flex; flex-direction: column; gap: 14px; }
+}

@@ -82,7 +82,7 @@ class PropertyOccupancyTest {
 
         workspace = UUID.randomUUID();
         propertyId = portfolio.createProperty(workspace, "ul. Rynek 1, Poznań",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
 
         occupiedUnit = portfolio.addUnit(workspace, propertyId, "m. 1", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, occupiedUnit, "ready");

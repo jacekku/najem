@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Brak dostępu — NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Brak dostępu — NAJEM', null, ~{::main})}">
 <body>
 <main>
     <h1>Brak dostępu</h1>
-    <p>
-        Nie masz dostępu do tej agencji.
-    </p>
+    <div class="card">
+        <div class="card__body error-card__body">
+            <p>
+                Nie masz dostępu do tej agencji.
+            </p>
+        </div>
+    </div>
 </main>
 </body>
 </html>

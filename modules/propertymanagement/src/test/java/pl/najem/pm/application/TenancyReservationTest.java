@@ -137,7 +137,7 @@ class TenancyReservationTest {
 
     private static UUID unit() {
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         return portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
     }
 }

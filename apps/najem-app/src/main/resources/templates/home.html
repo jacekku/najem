@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <!--/*
-  The agency screen, and the application's entry point.
+  Pulpit — the agency screen, and the application's entry point.
+
+  Prototype v2's dashboard, in the order it draws: what needs a decision, who has not paid, the
+  month's four figures, what arrived today, and how far through collection the month is. That order
+  is the argument of the screen — it opens on what a manager must act on rather than on the numbers,
+  which are a summary of actions already taken.
+
+  IT IS A MOCKUP. Every figure comes from DashboardFake and nothing on this page is read from any
+  module; see that class for why the numbers agree with each other and what replacing it looks like.
+  The only live things here are the four links out (Bank, Zaległości, Nieruchomości) and the agency
+  switcher, all of which go to screens that are real.
 
   "Agencja", never "przestrzeń robocza" — the second is a calque of an English implementation word
   for something our own domain model already names, and no Polish estate agent says it. The human's
@@ -8,34 +18,165 @@
   the domain uses (najem-build seq 309).
 */-->
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Agencja — NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Pulpit — NAJEM', ~{::header.pagebar__content}, ~{::main})}">
 <body>
+<!--/*
+  The title bar, which is where the prototype draws "Pulpit" and the period — its own band under the
+  top bar. This screen had them loose at the head of the content until the band existed.
+
+  The agency by NAME, and the switcher. Both were home.html's one job before this screen replaced
+  it; a screen that does not say which agency it is showing invites acting in the wrong one, and a
+  misdirected write never collides with the correct one, so nothing tells the person who made it.
+*/-->
+<header class="pagebar__content">
+    <h1>Pulpit</h1>
+    <a class="dashboard__agency" th:href="@{/agencies}" th:text="${agency}">Agencja</a>
+    <span class="pagebar__meta mono" th:text="${dash.period()}">—</span>
+</header>
 <main>
+    <!--/* ── Wymaga decyzji ── */-->
+    <section class="card">
+        <header class="card__head">
+            <h2 class="card__title">Wymaga decyzji</h2>
+            <div class="card__actions">
+                <span th:replace="~{components :: pill(tone='danger', text=${dash.urgent()})}"></span>
+            </div>
+        </header>
+        <div class="card__body">
+            <div class="decisions">
+                <!--/*
+                  The tone is the left edge and nothing else: every row states its own urgency in
+                  words ("czas na drugie wezwanie", "kończy się w 90 dni"), so a manager who cannot
+                  separate red from amber loses no information — the same rule the pill fragment
+                  carries, applied to a component that has no text of its own to colour.
+                */-->
+                <div class="decision" th:each="d : ${dash.decisions()}"
+                     th:classappend="'decision--' + ${d.tone()}">
+                    <div>
+                        <div class="decision__title" th:text="${d.title()}">—</div>
+                        <div class="decision__subline" th:text="${d.subline()}">—</div>
+                    </div>
+                    <a class="decision__action" th:href="@{${d.href()}}" th:text="${d.action()}">—</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!--/*
-      The agency by NAME. The identifier that used to sit here under "Identyfikator" was an
-      internal presented as though it were a fact about the agency; `WorkspaceAccess.Membership`
-      carries the name as of f36c1bb and this renders it.
+      ── Nieopłacone ──
+
+      Card classes applied directly rather than through components :: card, per unit.html's note:
+      tableHead and table__row already carry their own 18px horizontal padding matching the card's,
+      so routing them through card's body would double it. `--cols` is set by .unpaid-table on this
+      element, which is the ancestor of both the head and every row.
     */-->
-    <h1 th:text="${agency}">Agencja</h1>
+    <section class="card unpaid-table">
+        <header class="card__head">
+            <h2 class="card__title">Nieopłacone</h2>
+            <span th:replace="~{components :: pill(tone='danger', text=${dash.overdue()})}"></span>
+            <div class="card__actions">
+                <div th:replace="~{components :: btn(href=@{/reports}, text='Zaległości ›', kind='secondary')}"></div>
+            </div>
+        </header>
 
-    <p class="role">
-        Twoja rola: <strong th:switch="${role}">
-            <span th:case="'ADMIN'">Administrator</span>
-            <span th:case="'MANAGER'">Zarządca</span>
-            <span th:case="*" th:text="${role}">—</span>
-        </strong>
-    </p>
+        <div th:replace="~{components :: tableHead(columns=${ {'Najemca','Lokal','Termin','Kwota','Status'} }, gridClass='unpaid-table')}"></div>
 
-    <nav class="entry">
+        <div class="table__row" th:each="u : ${dash.unpaid()}">
+            <div class="unpaid__tenant">
+                <div th:replace="~{components :: avatar(initials=${u.initials()}, size=24)}"></div>
+                <span th:text="${u.name()}">—</span>
+            </div>
+            <span class="unpaid__unit" th:text="${u.unit()}">—</span>
+            <span class="mono unpaid__due" th:text="${u.due()}">—</span>
+            <span class="mono" th:text="${u.amount()}">—</span>
+            <span>
+                <span th:replace="~{components :: pill(tone=${u.tone()}, text=${u.status()})}"></span>
+            </span>
+        </div>
+
         <!--/*
-          Only what is wired is a link. A screen that offers a route to nothing is the same failure
-          as a number that came from nowhere, and it is worse in front of a person than in a test.
+          The three largest debts, named, next to the count. A total tells a manager how bad the
+          month is; a name tells them who to ring, which is the next thing they do either way.
         */-->
-        <a th:href="@{/agencies}">Zmień agencję</a>
-        <a th:href="@{/properties}">Nieruchomości</a>
-        <a th:href="@{/bank}">Bank</a>
-        <a th:href="@{/report}">Raport</a>
-    </nav>
+        <footer class="card__foot dash-foot">
+            <span th:text="${dash.unpaidCount()}">—</span>
+            <span class="dash-foot__debtors">
+                <span class="dash-foot__debtor" th:each="d : ${dash.debtors()}">
+                    <span class="dash-foot__name" th:text="${d.name()}">—</span>
+                    <span class="mono dash-foot__amount" th:text="${d.amount()}">—</span>
+                </span>
+                <a class="dash-foot__link" th:href="@{/reports}">Przejdź do zaległości ›</a>
+            </span>
+        </footer>
+    </section>
+
+    <!--/*
+      ── the month in four figures ──
+
+      th:each on a WRAPPER, th:replace on the child — never both on one element. th:replace resolves
+      at precedence 100 and th:each at 200, so the element is substituted before the iteration is
+      read and exactly one tile renders. Same trap TemplateHygieneTest's Tripwire B catches for
+      th:if, which that scanner does not look for on th:each; four tiles on the screen is the proof.
+    */-->
+    <div class="kpi-row">
+        <div class="kpi-row__cell" th:each="k : ${dash.kpis()}">
+            <div th:replace="~{components :: kpi(label=${k.label()}, value=${k.value()}, caption=${k.caption()}, tone=${k.tone()})}"></div>
+        </div>
+    </div>
+
+    <!--/*
+      ── Wpłaty dzisiaj ──
+
+      The unmatched transfer is a row like any other, deliberately: it is money that arrived and has
+      not been accounted for, which belongs in today's list rather than hidden behind a filter — its
+      neutral dot and "brak dopasowania" say what is different about it.
+    */-->
+    <section class="card">
+        <header class="card__head">
+            <h2 class="card__title">Wpłaty dzisiaj</h2>
+            <div class="card__actions">
+                <span class="mono paylist__total" th:text="${dash.paidToday()}">—</span>
+            </div>
+        </header>
+        <div class="card__body">
+            <div class="paylist">
+                <div class="paylist__row" th:each="p : ${dash.payments()}">
+                    <span class="paylist__dot" th:classappend="'paylist__dot--' + ${p.tone()}"></span>
+                    <span class="paylist__text">
+                        <span class="paylist__name" th:text="${p.name()}">—</span>
+                        <span class="paylist__subline" th:text="${p.subline()}">—</span>
+                    </span>
+                    <span class="mono paylist__amount" th:text="${p.amount()}">—</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!--/* ── Postęp inkasa ── */-->
+    <section class="card">
+        <header class="card__head">
+            <h2 class="card__title">Postęp inkasa</h2>
+            <span class="card__meta" th:text="${dash.cycle()}">—</span>
+            <div class="card__actions">
+                <span class="mono collection__remaining" th:text="${dash.remaining()}">—</span>
+            </div>
+        </header>
+        <div class="card__body">
+            <div th:replace="~{components :: progressBar(segments=${dash.segments()})}"></div>
+            <!--/*
+              The legend names every segment and its amount. The bar alone is three lengths of
+              colour: it shows a proportion and states nothing, which is the same failure the pill
+              fragment's own comment refuses.
+            */-->
+            <div class="collection__legend">
+                <span class="collection__key" th:each="l : ${dash.legend()}">
+                    <span class="collection__swatch" th:classappend="'collection__swatch--' + ${l.tone()}"></span>
+                    <span th:text="${l.label()}">—</span>
+                    <span class="mono collection__amount" th:text="${l.amount()}">—</span>
+                </span>
+            </div>
+        </div>
+    </section>
 </main>
 </body>
 </html>

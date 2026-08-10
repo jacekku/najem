@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Nowy lokal — NAJEM', null, ~{::main})}">
+<body>
+<main>
+    <nav th:replace="~{components :: breadcrumb(items=${ {'Nieruchomości', 'Lokale'} })}"></nav>
+    <h1>Nowy lokal</h1>
+
+    <p class="muted" th:if="${added != null}"
+       th:text="'Dodano lokal ' + ${added} + '. Możesz dodać kolejny.'">—</p>
+
+    <!--/*
+      A single page, not a wizard: AddUnitScreenController has one form and two submit buttons
+      distinguished by `action` alone — "save" and "another" both hit the same endpoint — so there
+      is no second step to put a rail beside. The handoff draws New unit as a 300px right rail
+      showing the property's before/after area and rent roll, but AddUnitScreenController's model
+      carries only propertyId and added: no property name, address, area or rent roll is resolved
+      here, so that rail is not built rather than filled with invented figures.
+    */-->
+    <section class="card">
+        <header class="card__head"><h2 class="card__title">Nowy lokal</h2></header>
+        <div class="card__body">
+            <form th:action="@{/properties/{p}/units(p=${propertyId})}" method="post">
+                <div th:replace="~{components :: field(name='name', label='Nazwa lokalu', value=null, type='text', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder='np. M2', autofocus=true)}"></div>
+                <div th:replace="~{components :: field(name='baseRent', label='Czynsz bazowy', value=null, type='text', required=true, help=null, suffix='zł', error=null, inputmode='decimal', placeholder='2500.00', autofocus=false)}"></div>
+
+                <div class="form-actions">
+                    <button type="submit" name="action" value="save" class="btn btn--primary">Zapisz</button>
+                    <button type="submit" name="action" value="another" class="btn btn--secondary">
+                        Zapisz i dodaj kolejny
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <p><a th:href="@{/properties/{p}/units(p=${propertyId})}">Wróć do listy lokali</a></p>
+</main>
+</body>
+</html>

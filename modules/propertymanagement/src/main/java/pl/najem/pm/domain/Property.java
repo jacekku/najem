@@ -24,7 +24,40 @@ public class Property {
 
     public static List<Object> create(UUID propertyId, UUID workspaceId, String address,
                                       List<Owner> owners) {
-        return List.of(new PropertyEvents.PropertyCreated(workspaceId, propertyId, address, owners));
+        if (address == null || address.isBlank()) {
+            throw new IllegalArgumentException("A property needs an address");
+        }
+        return List.of(new PropertyEvents.PropertyCreated(workspaceId, propertyId, address.strip(),
+            stakes(owners)));
+    }
+
+    /**
+     * A share is a number or it is nothing — checked on <em>every</em> writer of the owner list.
+     *
+     * <p>{@code required} on the input covers the browser that cooperates; this covers the one that
+     * does not — Spring binds an empty {@code share=} to a null element of the RIGHT-SIZED list, so
+     * the controller's length check passes and the null reaches {@link #warnings()}, where
+     * {@code reduce(ZERO, BigDecimal::add)} throws inside a render.
+     *
+     * <p>The guard belongs here rather than in the controller because REST reaches the same factory,
+     * and because a null stake written to the stream cannot be corrected by any screen. That last
+     * argument is what makes it one method called from two places rather than a check on
+     * {@code create}: it is equally true of {@link #changeOwnership}, which had no caller yet and so
+     * had no guard — a rule that holds only for the routes somebody remembered is refactoring rule
+     * 9's procedural invariant. Structural instead: nothing reaches a {@code PropertyCreated} or a
+     * {@code PropertyOwnershipChanged} without passing through here.
+     */
+    private static List<Owner> stakes(List<Owner> owners) {
+        if (owners == null) {
+            return List.of();
+        }
+        for (Owner owner : owners) {
+            if (owner == null || owner.sharePercent() == null
+                || owner.sharePercent().signum() < 0) {
+                throw new IllegalArgumentException("An owner needs a share of zero or more");
+            }
+        }
+        return List.copyOf(owners);
     }
 
     public List<Object> setRentTarget(BigDecimal amount) {
@@ -32,7 +65,8 @@ public class Property {
     }
 
     public List<Object> changeOwnership(List<Owner> newOwners) {
-        return List.of(new PropertyEvents.PropertyOwnershipChanged(workspaceId, id, newOwners));
+        return List.of(new PropertyEvents.PropertyOwnershipChanged(workspaceId, id,
+            stakes(newOwners)));
     }
 
     public List<Object> updateDetails(Map<String, String> details) {
@@ -59,6 +93,14 @@ public class Property {
         return Optional.ofNullable(nextDueByType.get(type));
     }
 
+    // TODO: this message reaches a manager in English, on an otherwise Polish screen — the add-
+    // property screen flashes it onto the units board after a create. It is not fixable here: the
+    // domain has no business holding Polish copy, and the web layer cannot translate it without
+    // string-matching the sentence, which is worse than the problem. The fix is a structured
+    // warning — a type carrying a kind and its values (SHARES_DO_NOT_TOTAL, actual=90) that each
+    // adapter renders in its own words — and it is not local to this method, because every
+    // `warnings.add(...)` in Warnings' callers across the module has the same shape and would have
+    // to move together. Deliberately left until somebody does all of them at once.
     public Warnings warnings() {
         var warnings = new Warnings();
         var total = owners.stream().map(Owner::sharePercent).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -102,7 +144,7 @@ public class Property {
             case PropertyEvents.PropertyRentTargetSet e -> rentTarget = e.amount();
             case PropertyEvents.PropertyOwnershipChanged e -> owners = e.owners();
             case PropertyEvents.PropertyDetailsUpdated e -> { }
-            default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
+            default -> throw new UnknownEventException(event);
         }
     }
 

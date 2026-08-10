@@ -8,78 +8,386 @@
 
   This layout holds no workspace and no data. Screens receive a workspace; they never resolve one.
 */-->
-<!--/*
-  data-theme is stamped here, on the server, or left off entirely.
-
-  Left off means "follow the operating system", which the stylesheet handles with a media query.
-  Only somebody who has used the toggle gets an attribute, and then it overrides their machine.
-  Resolving it here rather than in the browser is what keeps the first paint correct: a script
-  that fixes the theme after the document renders is a script that flashes the wrong one first.
-*/-->
-<html xmlns:th="http://www.thymeleaf.org" lang="pl" th:fragment="page(title, content)"
-      th:attr="data-theme=${theme}">
+<html xmlns:th="http://www.thymeleaf.org" lang="pl" th:fragment="page(title, bar, content)">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="${title}">NAJEM</title>
     <link rel="icon" th:href="@{/favicon.svg}" type="image/svg+xml">
     <script th:src="@{/vendor/htmx.min.js}" defer></script>
-    <link rel="stylesheet" th:href="@{/css/najem.css}">
+    <!--/*
+      The shell's own two behaviours: the ⌘K shortcut the omnibox advertises, and opening the
+      "+ Dodaj" chooser. Served from this application like htmx, never from a CDN, and `defer` so
+      it runs after the markup it binds to exists. Both features degrade to nothing without it —
+      the search field is still a field and still submits, and the button simply does not open —
+      which is why neither is the only route to anything.
+    */-->
+    <script th:src="@{/js/shell.js}" defer></script>
+    <link rel="stylesheet" th:href="@{/css/tokens.css}">
+    <link rel="stylesheet" th:href="@{/css/base.css}">
+    <link rel="stylesheet" th:href="@{/css/layout.css}">
+    <link rel="stylesheet" th:href="@{/css/components.css}">
+    <link rel="stylesheet" th:href="@{/css/screens.css}">
 </head>
 <body>
-<header class="masthead">
-    <a class="masthead__brand" th:href="@{/}">NAJEM</a>
-    <!--/*
-      Which agency this request is acting in, on every screen rather than only on the home page.
-      With a switcher, a screen that does not say invites acting in the wrong agency — and a
-      misdirected write never collides with the correct one, so it does not announce itself.
-      Handed here by the resolver; this layout still resolves nothing.
-    */-->
-    <span class="masthead__agency" th:if="${activeAgency}" th:text="${activeAgency}">—</span>
-    <!--/*
-      Boards here are eventually consistent. A stalled or lagging projector renders as a short or
-      empty list, which is indistinguishable from a correct one — so a manager who has just created
-      something and cannot see it has no way to tell "not yet" from "it didn't work". Saying so is
-      the condition najem-pm attached to accepting an eventually consistent board (seq 110).
-    */-->
-    <form class="masthead__search" th:if="${activeAgency}" th:action="@{/search}" method="get">
-        <input type="search" name="q" placeholder="Szukaj">
-    </form>
-    <span class="masthead__stale" th:if="${projectionsBehind}"
-          title="Widok nadąża za zapisami z opóźnieniem — odśwież za chwilę">aktualizacja…</span>
-    <!--/*
-      A POST, not a link: logging out changes state, and a GET that ends a session can be triggered
-      by anything that fetches a URL — a prefetch, an image tag on another site. Thymeleaf injects
-      the CSRF token, which is the same protection the agency switcher relies on.
+<div class="shell">
+    <aside class="sidebar">
+        <!--/*
+          Everything that may need to scroll internally, wrapped so the footer below it never does
+          — see .sidebar__nav's own comment (layout.css) for why the wrapper exists at all.
+        */-->
+        <div class="sidebar__nav">
+        <a class="sidebar__logo" th:href="@{/}">
+            <span class="sidebar__mark">N</span>
+            <span class="sidebar__wordmark">Najem</span>
+        </a>
 
-      Rendered only when somebody is actually signed in. Under permit-all there is no session to
-      end, and a button that cannot do anything is a bug report waiting to be filed.
-    */-->
-    <!--/*
-      Light or dark, chosen explicitly. A POST for the same reason sign-out is one: it sets a
-      cookie, and a GET that changes state can be fired by anything that fetches a URL.
+        <!--/*
+          The one primary action in the shell, from prototype v2: creating things is the manager's
+          most frequent intent and it used to be reachable only from whichever screen happened to
+          own the form — "Dodaj nieruchomość" on /properties, and nothing at all for a lokal or a
+          najem until you had navigated to the right parent.
 
-      It carries the current path so the switch keeps you on the screen you were reading rather
-      than returning you home mid-reconciliation. That field is attacker-controllable and becomes
-      a redirect target, so ThemeController validates it again rather than trusting this.
+          A <button> rather than a link because it opens the chooser below rather than going
+          anywhere; what it opens is a real <dialog>, so Esc, the backdrop and focus containment
+          are the platform's and not ours to reimplement. Rendered only with an agency, for the
+          same reason the footer is: with no workspace there is nothing any of these four could
+          create into.
 
-      Rendered on every screen including before sign-in: somebody who cannot read the login page
-      in the dark cannot get far enough to fix it afterwards.
-    */-->
-    <form class="masthead__theme" th:action="@{/theme}" method="post">
-        <input type="hidden" name="theme" th:value="${themeToOffer}">
-        <input type="hidden" name="return" th:value="${currentPath}">
-        <button type="submit"
-                th:title="${themeToOffer == 'dark'} ? 'Przełącz na ciemny motyw'
-                                                    : 'Przełącz na jasny motyw'"
-                th:text="${themeToOffer == 'dark'} ? 'Ciemny' : 'Jasny'">Ciemny</button>
-    </form>
-    <form class="masthead__signout" th:if="${signedInAs}" th:action="@{/logout}" method="post">
-        <button type="submit" th:title="'Zalogowano jako ' + ${signedInAs}">Wyloguj</button>
-    </form>
-</header>
-<main th:replace="${content}">
-    <p>Screen content renders here.</p>
-</main>
+          In the 56px rail the label clips away exactly as the nav labels do and the glyph carries
+          it, so this is a plus button there — see .sidebar__add in layout.css.
+        */-->
+        <button class="sidebar__add" type="button" th:if="${activeAgency}"
+                data-opens-dialog="dodaj" title="Dodaj">
+            <svg class="sidebar__add-icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round">
+                <path d="M7 2.6v8.8M2.6 7h8.8"></path>
+            </svg>
+            <span class="sidebar__add-label">Dodaj</span>
+        </button>
+
+        <!--/*
+          currentPath is populated on every screen that renders this layout, including
+          error/no-agency, error/forbidden and error/not-invited — those three are
+          @ExceptionHandler methods in WebErrorAdvice, and Spring does not run a
+          @ControllerAdvice's @ModelAttribute methods for the exception-handling invocation the
+          way it does for an ordinary one, so WebErrorAdvice sets it itself rather than relying on
+          ActiveAgencyAdvice. Belt and braces below regardless: #strings is Thymeleaf's own
+          null-tolerant utility object, used here rather than calling .startsWith() on the
+          attribute directly — SpringEL (Thymeleaf 3.1) neither coerces null the way OGNL did nor
+          short-circuits and/or, so a method call on a model attribute must not assume it is set,
+          even one this page is supposed to always receive. An error page throwing while trying to
+          render its OWN error is the worst failure mode this application has.
+        */-->
+        <!--/*
+          Icon geometry is the responsive handoff's 56px rail, verbatim, one glyph per item — see
+          .superpowers/sdd/2026-08-07-design-system-adoption/nav-icons.md. Two deliberate
+          departures from the handoff, both recorded there: the spec hardcodes one green on the
+          active icon and one grey on the rest, and both are dropped in favour of
+          stroke="currentColor" plus the two rules in layout.css (.nav__icon and
+          .nav__item--active .nav__icon). Colour is a state, so it belongs to one CSS rule rather
+          than to eight templates' attributes — and a hex in a template fails TemplateHygieneTest's
+          first tripwire regardless. The presentation attributes sit on the <svg> and the shapes
+          inherit them, so a change of stroke weight is one edit per icon, not one per path.
+
+          A third departure, added this round: the spec's inactive grey is 1.91:1 on white, and below
+          1180 the glyph is the item's only visible label — so .nav__icon uses --text-label (3.88:1)
+          instead. See that rule for the whole argument.
+
+          Every item is named by its own `.nav__label` text, and by nothing else. No aria-label
+          anywhere in this rail: four of the eight items are <span>s, which may not carry an
+          accessible name (see the note on the first one), and a duplicate name on the four that
+          could carry one would be the same Polish string written twice with nothing keeping the
+          copies together. layout.css clips the label rather than removing it below 1180, so the
+          name is the visible word at every width.
+        */-->
+        <nav class="sidebar__group">
+            <a class="nav__item" th:href="@{/}" title="Pulpit"
+               th:classappend="${currentPath == '/'} ? 'nav__item--active' : ''">
+                <svg class="nav__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="1.2" y="1.2" width="4.6" height="4.6" rx="1"></rect><rect x="8.2" y="1.2" width="4.6" height="4.6" rx="1"></rect><rect x="1.2" y="8.2" width="4.6" height="4.6" rx="1"></rect><rect x="8.2" y="8.2" width="4.6" height="4.6" rx="1"></rect>
+                </svg>
+                <span class="nav__label">Pulpit</span>
+            </a>
+            <a class="nav__item" th:href="@{/properties}" title="Nieruchomości"
+               th:classappend="${currentPath == '/properties' or #strings.startsWith(currentPath, '/properties/')} ? 'nav__item--active' : ''">
+                <svg class="nav__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2.2 12.6V2.5a.9.9 0 0 1 .9-.9h4.7a.9.9 0 0 1 .9.9v10.1"></path><path d="M8.7 6.2h2.3a.9.9 0 0 1 .9.9v5.5"></path><path d="M1 12.6h12"></path><path d="M4.2 4.3h2.3M4.2 6.7h2.3M4.2 9.1h2.3"></path>
+                </svg>
+                <span class="nav__label">Nieruchomości</span>
+            </a>
+            <!--/*
+              Unbuilt: shown so a manager can see the shape of the product, but not a link — a
+              <span>, never an <a href="#">, so it cannot be clicked into a route that goes nowhere.
+              That still holds in the 56px rail: the label is hidden there but the element stays a
+              <span>, so an icon a manager cannot read is also an icon they cannot click.
+
+              NO aria-label on these four. A <span> with no role has the implicit role `generic`, and
+              ARIA forbids an accessible name on a generic element — a conforming screen reader may
+              simply drop it, which below 1180 (where `.nav__label` is the only text) leaves the item
+              with no name whatsoever. The name comes from the `.nav__label` text instead, which
+              layout.css clips out of sight at that width rather than removing from the tree; see
+              `.nav__label` in the 1179 block for why that is the mechanism. `title` stays: it is a
+              tooltip, not the accessible name, and it is allowed anywhere.
+
+              The alternative considered and rejected was `role="link" aria-disabled="true"`, which
+              permits a name — but it also announces four links a manager cannot follow, and these
+              must stay non-interactive: not focusable, not clickable, exactly as they are now.
+            */-->
+            <span class="nav__item nav__item--unbuilt" title="Najmy">
+                <svg class="nav__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="4.5" cy="9.5" r="2.7"></circle><path d="M6.5 7.6 12 2.1"></path><path d="M9.5 4.6l1.6 1.6"></path>
+                </svg>
+                <span class="nav__label">Najmy</span>
+            </span>
+        </nav>
+
+        <div class="sidebar__section">KSIĘGOWOŚĆ</div>
+        <nav class="sidebar__group">
+            <span class="nav__item nav__item--unbuilt" title="Faktury">
+                <svg class="nav__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3.2 1.6h4.9l2.7 2.7v8.1H3.2z"></path><path d="M8 1.7v2.7h2.7"></path><path d="M5 7.7h3.6M5 9.9h2.7"></path>
+                </svg>
+                <span class="nav__label">Faktury</span>
+            </span>
+            <a class="nav__item" th:href="@{/bank}" title="Bank"
+               th:classappend="${currentPath == '/bank' or #strings.startsWith(currentPath, '/bank/')} ? 'nav__item--active' : ''">
+                <svg class="nav__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1.5 5.7 7 2.1l5.5 3.6"></path><path d="M3.2 6.6v4.3M7 6.6v4.3M10.8 6.6v4.3"></path><path d="M1.6 12.4h10.8"></path>
+                </svg>
+                <span class="nav__label">Bank</span>
+            </a>
+            <span class="nav__item nav__item--unbuilt" title="Księga główna">
+                <svg class="nav__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 2.7h3.5c.9 0 1.5.5 1.5 1.3v7.4c0-.7-.6-1.1-1.5-1.1H2z"></path><path d="M12 2.7H8.5C7.6 2.7 7 3.2 7 4v7.4c0-.7.6-1.1 1.5-1.1H12z"></path>
+                </svg>
+                <span class="nav__label">Księga główna</span>
+            </span>
+        </nav>
+
+        <!--/*
+          "Raporty" became the group heading it always described. It was an item inside KSIĘGOWOŚĆ
+          whose own comment had to explain that it was "the group, not the screen it opens on";
+          prototype v2 makes that literal, and the item beneath it is the report itself.
+
+          Zaległości still opens /reports, which still carries both tabs — the rail names the
+          report a manager actually goes to, and Rozliczenia właścicieli stays a tab there until it
+          is built. So this is a renamed destination, not a new route: the same screen, reached by
+          the name of the thing on it. Active for /report too, because that path survives as a
+          redirect for old links and the rail must not go blank while the browser follows it.
+        */-->
+        <div class="sidebar__section">RAPORTY</div>
+        <nav class="sidebar__group">
+            <a class="nav__item" th:href="@{/reports}" title="Zaległości"
+               th:classappend="${currentPath == '/reports' or currentPath == '/report' or #strings.startsWith(currentPath, '/reports/')} ? 'nav__item--active' : ''">
+                <svg class="nav__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12h10"></path><path d="M4.2 12V8.2M7 12V4.4M9.8 12V6.6"></path>
+                </svg>
+                <span class="nav__label">Zaległości</span>
+            </a>
+        </nav>
+        </div>
+
+        <!--/*
+          Which agency this request is acting in, on every screen rather than only on the home page.
+          With a switcher, a screen that does not say invites acting in the wrong agency — and a
+          misdirected write never collides with the correct one, so it does not announce itself.
+          Handed here by the resolver; this layout still resolves nothing.
+        */-->
+        <!--/*
+          The avatar's initials come from ActiveAgencyAdvice, not from a literal null. This call
+          used to pass `initials=null`, which made the circle blank for everybody including a
+          signed-in manager — the fragment was working exactly as asked and nobody was asking for
+          anything. Under permit-all `signedInInitials` is genuinely absent (there is no session and
+          so no name to abbreviate), so the blank circle the fragment's own comment calls legitimate
+          is still what renders there; see that method's javadoc for why a UUID subject also yields
+          absent rather than two characters of an identifier.
+
+          In the 56px rail this avatar is the whole footer — `.sidebar__identity` and the sign-out
+          form are hidden and only the 28px circle remains, still pinned by `margin-top: auto`.
+        */-->
+        <div class="sidebar__footer" th:if="${activeAgency}">
+            <div th:replace="~{components :: avatar(initials=${signedInInitials}, size=28)}"></div>
+            <div class="sidebar__identity">
+                <div class="sidebar__identity-name" th:text="${signedInAs} ?: ${activeAgency}">—</div>
+                <div class="sidebar__identity-role" th:text="${signedInRole}">—</div>
+            </div>
+            <!--/*
+              A POST, not a link: logging out changes state, and a GET that ends a session can be
+              triggered by anything that fetches a URL — a prefetch, an image tag on another site.
+              Thymeleaf injects the CSRF token, which is the same protection the agency switcher
+              relies on.
+
+              Rendered only when somebody is actually signed in. Under permit-all there is no
+              session to end, and a button that cannot do anything is a bug report waiting to be
+              filed.
+            */-->
+            <form class="sidebar__signout" th:if="${signedInAs}" th:action="@{/logout}" method="post">
+                <button type="submit" th:title="'Zalogowano jako ' + ${signedInAs}">Wyloguj</button>
+            </form>
+        </div>
+    </aside>
+
+    <div class="content">
+        <!--/*
+          Three slots, not one right-aligned group, and the grid is what makes the middle one
+          actually central. The omnibox used to sit in `.headerbar__right` beside the staleness
+          pill, so its position depended on whether that pill was rendering — a control that moves
+          when an unrelated projector falls behind. `1fr auto 1fr` fixes it to the bar's centre
+          whatever the sides contain, which is the one property the prototype's omnibox has that a
+          flex `margin: 0 auto` could not guarantee.
+
+          The leading slot is deliberately empty. Prototype v2 puts back/forward chevrons and a
+          breadcrumb there; the chevrons are the browser's own controls redrawn inside the page, and
+          a second, non-authoritative back button is a trap when it disagrees with the real one. The
+          slot exists so a breadcrumb can land in it without moving the omnibox off centre.
+        */-->
+        <header class="headerbar">
+            <div class="headerbar__lead"></div>
+            <!--/*
+                  The omnibox, from prototype v2. It was a 190px box called "Szukaj" pinned to the
+                  right edge; it is now the widest thing in the bar, centred, and it says what it
+                  searches. The change is not decoration: a manager arrives knowing a surname or a
+                  transfer title, and the old control neither invited that nor admitted it could
+                  answer it.
+
+                  The glyph is a real element rather than the ::before it used to be. At 768 the
+                  whole field collapses to a 30px icon box, and the old arrangement painted that
+                  icon with a mask on the FORM — which meant two different glyphs existed at two
+                  widths with nothing keeping them the same shape. One element now wears both
+                  forms, the way .sidebar__section does across the same breakpoint.
+
+                  The ⌘K badge is a promise, so shell.js keeps it: the shortcut focuses this field
+                  from anywhere on the page. A hint that does nothing is worse than no hint, since
+                  it teaches a shortcut and then punishes using it. It is <kbd>, which is what the
+                  element is for, and it is hidden below 1024 where there is no keyboard to speak of
+                  and no room for it.
+                */-->
+                <form class="headerbar__searchform" th:if="${activeAgency}" th:action="@{/search}" method="get">
+                    <svg class="headerbar__searchicon" viewBox="0 0 14 14" fill="none"
+                         stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+                        <circle cx="6" cy="6" r="4.2"></circle><path d="M9.3 9.3 12.6 12.6"></path>
+                    </svg>
+                    <input class="headerbar__search" type="search" name="q"
+                           placeholder="Szukaj najemcy, lokalu, faktury, przelewu…">
+                    <kbd class="headerbar__searchkey">⌘K</kbd>
+                </form>
+            <div class="headerbar__right">
+                <!--/*
+                  Boards here are eventually consistent. A stalled or lagging projector renders as a
+                  short or empty list, which is indistinguishable from a correct one — so a manager
+                  who has just created something and cannot see it has no way to tell "not yet" from
+                  "it didn't work". Saying so is the condition najem-pm attached to accepting an
+                  eventually consistent board (seq 110).
+                */-->
+                <span class="headerbar__stale" th:if="${projectionsBehind}"
+                      title="Widok nadąża za zapisami z opóźnieniem — odśwież za chwilę">aktualizacja…</span>
+            </div>
+        </header>
+        <!--/*
+          What "+ Dodaj" opens. Four things a manager creates, each saying what creating it entails
+          rather than only what it is called — prototype v2's own sublines, which are the reason the
+          chooser is worth a dialog instead of four links in a menu.
+
+          A native <dialog>: Esc, the backdrop, focus containment and inertness of the page behind
+          are the platform's, and every one of them is something a hand-rolled overlay gets wrong.
+          It lives here rather than in components.html because it is shell — the sidebar opens it
+          and no screen composes it — and putting it in the library would owe /design a gallery
+          entry for a thing that has exactly one instance and one caller.
+
+          Dokument is a <span>, not a link, and carries the same --unbuilt treatment the rail uses:
+          shown so the shape of the product is visible, impossible to click into a route that does
+          not exist. Same rule, same class, one place to change it.
+        */-->
+        <dialog class="addmenu" id="dodaj" th:if="${activeAgency}">
+            <div class="addmenu__head">
+                <p class="addmenu__title">Dodaj</p>
+                <p class="addmenu__question">Co chcesz utworzyć?</p>
+            </div>
+            <nav class="addmenu__options">
+                <a class="addmenu__option" th:href="@{/properties/new}">
+                    <svg class="addmenu__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                         stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2.2 12.6V2.5a.9.9 0 0 1 .9-.9h4.7a.9.9 0 0 1 .9.9v10.1"></path><path d="M8.7 6.2h2.3a.9.9 0 0 1 .9.9v5.5"></path><path d="M1 12.6h12"></path><path d="M4.2 4.3h2.3M4.2 6.7h2.3M4.2 9.1h2.3"></path>
+                    </svg>
+                    <span class="addmenu__text">
+                        <span class="addmenu__name">Nieruchomość</span>
+                        <span class="addmenu__sub">Adres, właściciel, siatka lokali</span>
+                    </span>
+                    <span class="addmenu__go">›</span>
+                </a>
+                <a class="addmenu__option" th:href="@{/dodaj/lokal}">
+                    <svg class="addmenu__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                         stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="1.6" y="2.4" width="10.8" height="9.2" rx="1.1"></rect><path d="M1.6 5.6h10.8M6.4 5.6v6"></path>
+                    </svg>
+                    <span class="addmenu__text">
+                        <span class="addmenu__name">Lokal</span>
+                        <span class="addmenu__sub">W wybranej nieruchomości</span>
+                    </span>
+                    <span class="addmenu__go">›</span>
+                </a>
+                <a class="addmenu__option" th:href="@{/dodaj/najem}">
+                    <svg class="addmenu__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                         stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="4.5" cy="9.5" r="2.7"></circle><path d="M6.5 7.6 12 2.1"></path><path d="M9.5 4.6l1.6 1.6"></path>
+                    </svg>
+                    <span class="addmenu__text">
+                        <span class="addmenu__name">Najem</span>
+                        <span class="addmenu__sub">Rezerwacja lokalu dla najemcy</span>
+                    </span>
+                    <span class="addmenu__go">›</span>
+                </a>
+                <span class="addmenu__option addmenu__option--unbuilt">
+                    <svg class="addmenu__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                         stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3.2 1.6h4.9l2.7 2.7v8.1H3.2z"></path><path d="M8 1.7v2.7h2.7"></path><path d="M5 7.7h3.6M5 9.9h2.7"></path>
+                    </svg>
+                    <span class="addmenu__text">
+                        <span class="addmenu__name">Dokument</span>
+                        <span class="addmenu__sub">Jeszcze nie zbudowane</span>
+                    </span>
+                </span>
+            </nav>
+        </dialog>
+
+        <!--/*
+          The page bar: the screen's title, what it contains, and its one primary action, on a white
+          band ruled off from the page below it.
+
+          It is a BAND, not a gap, and that is the whole point. The same three elements laid loose on
+          the grey page read as cramped no matter how much space is put between them, because what
+          separates a header from its content in the handoff is an edge — the same edge the omnibox
+          bar above already has. Adding space instead of the rule was tried first and did not fix it.
+
+          Outside `.content__body` on purpose. Full-bleed is what the drawing shows, and reproducing
+          that inside a padded, scrolling box means negative margins that have to track three
+          different paddings across the breakpoints. Out here it is simply a sibling of the omnibox
+          bar, and it stays put while the page scrolls under it, which is also what the prototype
+          does.
+
+          `bar` is null on every screen that has no designed band — a form's wizard, an error page —
+          and those render exactly as they did. th:if and th:replace sit on different elements, per
+          TemplateHygieneTest's Tripwire B: on one element the fragment would substitute before the
+          guard was ever read, and every screen would get an empty white band.
+        */-->
+        <div class="pagebar" th:if="${bar != null}">
+            <div th:replace="${bar}"></div>
+        </div>
+
+        <div class="content__body">
+            <main th:replace="${content}">
+                <p>Screen content renders here.</p>
+            </main>
+        </div>
+    </div>
+</div>
 </body>
 </html>

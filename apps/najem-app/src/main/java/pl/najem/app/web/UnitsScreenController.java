@@ -32,6 +32,15 @@ public class UnitsScreenController {
         this.clock = clock;
     }
 
+    // TODO: this does not check that the caller owns the property, and now that matters more than
+    // it did. Nothing leaks — UnitBoardQuery is workspace-scoped, so another agency's id renders an
+    // empty board rather than their flats — but the board now carries a "Dodaj lokal" button, so it
+    // offers an action on a building the caller cannot see, and the add-unit GET then 404s on it
+    // (AddUnitScreenController calls requireOwnsProperty, deliberately, so the form never opens for
+    // a foreign property). The honest answer is for this screen to 404 too, the same
+    // undifferentiated answer unknown and foreign get everywhere else. Left out of the add-property
+    // work because it changes an existing screen's behaviour for ids that today render an empty
+    // page, and that is a decision about this screen rather than about the new ones.
     @GetMapping("/properties/{propertyId}/units")
     public String unitsOf(@PathVariable UUID propertyId, WebWorkspace workspace, Model model) {
         model.addAttribute("propertyId", propertyId);

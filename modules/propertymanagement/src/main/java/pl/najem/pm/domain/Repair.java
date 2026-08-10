@@ -75,7 +75,7 @@ public class Repair {
                 reportedOn = e.reportedOn();
             }
             case RepairEvents.RepairCompleted e -> completedOn = e.completedOn();
-            default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
+            default -> throw new UnknownEventException(event);
         }
     }
 

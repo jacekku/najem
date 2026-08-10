@@ -1,0 +1,92 @@
+/*
+  The design system's values, and nothing else.
+
+  This file is the one reviewed against the handoff's token table
+  (.designsystem/extracted/design_handoff_najem/README.md). A colour that is not in that table
+  does not belong here, and a colour used anywhere in the application that is not here is a bug
+  TemplateHygieneTest is meant to catch.
+
+  Seven of these fail WCAG AA against --bg-surface and that is a recorded, accepted decision —
+  see docs/superpowers/specs/2026-08-07-design-system-adoption-design.md. tools/contrast will
+  report them. Do not "fix" one by eye; changing a token is a design decision, not a tidy-up.
+*/
+@layer tokens {
+  :root {
+    color-scheme: light;
+
+    /* Surfaces */
+    --bg-app: #f6f7f8;
+    --bg-surface: #ffffff;
+    --bg-subtle: #fbfcfc;
+
+    /* Borders */
+    --border-default: #e4e7ea;
+    --border-control: #e0e4e8;
+    --border-hairline: #eef0f2;
+    --border-row: #f2f4f5;
+    --border-row-quiet: #f4f6f7;
+
+    /* Text */
+    --text-primary: #16191d;
+    --text-secondary: #4b5563;
+    --text-body: #5c636d;
+    --text-muted: #6b7280;
+    --text-label: #7b828c;
+    --text-faint: #8b929b;
+    --text-placeholder: #a8aeb6;
+    --text-table-head: #98a0aa;
+    --text-disabled: #c3ccd2;
+
+    /* Accent */
+    --accent-green: #1f7a5c;
+    --accent-green-tint: #eef4f1;
+    --accent-green-tint-2: #f0f6f4;
+    --accent-green-tint-3: #f6faf8;
+    --accent-green-soft: #8fb3a6;
+    --accent-green-pale: #e9f2ee;
+
+    /* Status */
+    --danger: #b4342a;
+    --danger-soft: #d9736a;
+    --danger-tint: #fbeceb;
+    --danger-bg: #fefaf9;
+    --danger-border: #f0d6d3;
+    --warn: #a9761c;
+    --warn-soft: #e0a83a;
+    --warn-tint: #fbf3e2;
+    --warn-bg: #fffdf7;
+    --warn-border: #f2e6cd;
+
+    /*
+      Neutrals. --neutral-pill and --neutral-track are the same hex by coincidence of the
+      handoff, which notes they could collapse. They are kept apart because they mean different
+      things: one is a pill's background, the other a bar's unfilled track. Collapsing them
+      would make a later change to one silently change the other.
+    */
+    --neutral-pill: #f0f2f4;
+    --neutral-track: #eef0f2;
+    --neutral-avatar: #e8ecef;
+    --neutral-chart: #d6dde1;
+    --neutral-chart-quiet: #cdd8d4;
+    --neutral-icon: #b6bcc4;
+    --neutral-dash: #cfd6dc;
+
+    /* Type */
+    --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --font-micro: ui-monospace, Menlo, monospace;
+
+    /* Radius */
+    --r-pill: 20px;
+    --r-card: 10px;
+    --r-drop: 9px;
+    --r-control: 8px;
+    --r-sm: 7px;
+    --r-bar: 6px;
+    --r-gantt: 5px;
+    --r-chart: 3px;
+
+    /* Focus, the one shadow in the system. Cards have none — they are defined by a 1px border. */
+    --focus-ring: 0 0 0 3px rgba(31, 122, 92, .1);
+  }
+}

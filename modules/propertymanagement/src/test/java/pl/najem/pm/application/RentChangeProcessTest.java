@@ -147,7 +147,7 @@ class RentChangeProcessTest {
 
     private static UUID activeTenancy() {
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
         var tenancyId = tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitId,
             List.of(UUID.randomUUID()), List.of(), LocalDate.of(2026, 1, 1),

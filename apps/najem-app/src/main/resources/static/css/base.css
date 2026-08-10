@@ -1,0 +1,178 @@
+/*
+  Layer order, declared once for the whole application.
+
+  This is the reason a screen-level rule can never accidentally out-specify a component: later
+  layers win regardless of selector specificity, so screens.css never has to reach for
+  !important or a longer selector to beat components.css. Add a layer here, not ad hoc.
+*/
+@layer tokens, base, layout, components, screens;
+
+@layer base {
+  /*
+    Instrument Sans is a variable font: Google serves one physical file per subset covering the
+    whole 400-700 weight axis, so it is declared here as two faces (one per subset), each with a
+    `font-weight` range rather than a fixed weight. Declaring it per-weight, as if it were static,
+    would mean shipping the same bytes under several names — a page that uses both 400 and 600
+    would then download the identical file twice, once per URL, because the browser caches by URL
+    not by content.
+
+    IBM Plex Mono is a static family: Google serves a distinct file per weight, so it stays
+    declared per-weight below, six faces for three weights × two subsets. The next person adding
+    a weight to either family needs to check which kind it is before copying the other's pattern.
+
+    `format("woff2")` is used rather than `format("woff2-variations")` for the variable faces —
+    every browser that supports variable woff2 at all accepts the plain "woff2" format string, and
+    it is the safer, more widely-recognised declaration.
+  */
+  @font-face {
+    font-family: "Instrument Sans";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url("/vendor/fonts/instrument-sans-variable-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+      U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+      U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "Instrument Sans";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url("/vendor/fonts/instrument-sans-variable-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+      U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+      U+FFFD;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/vendor/fonts/ibm-plex-mono-400-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+      U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+      U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/vendor/fonts/ibm-plex-mono-400-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+      U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+      U+FFFD;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/vendor/fonts/ibm-plex-mono-500-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+      U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+      U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/vendor/fonts/ibm-plex-mono-500-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+      U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+      U+FFFD;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/vendor/fonts/ibm-plex-mono-600-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+      U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+      U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/vendor/fonts/ibm-plex-mono-600-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+      U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+      U+FFFD;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg-app);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, p, figure { margin: 0; }
+
+  /* README's "Page title" scale (19–21px / 600 / -.015em) — every screen's own <h1>, not a class,
+     so a screen never has to remember to apply one. */
+  h1 { font-size: 21px; font-weight: 600; letter-spacing: -.015em; }
+
+  a { color: var(--accent-green); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  button, input, select, textarea { font: inherit; color: inherit; }
+
+  /* Every money figure, date, id and meter reading is mono so columns align. */
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  /* A subtitle under a title, a secondary line beside a primary one — README's "Subtitles, tab
+     labels" text/muted role. Shared across screens, not any one component's own anatomy. */
+  .muted { color: var(--text-muted); font-size: 12.5px; }
+
+  /* A vacant unit's "Vacant since …" line (README, Property detail) — muted and italic. */
+  .faint-note { color: var(--text-faint); font-style: italic; }
+
+  /*
+    Visible focus, on everything. Keyboard is not an edge case here: reconciling a bank statement is
+    a two-hundred-tab job, and an invisible focus ring makes "which row am I about to confirm"
+    unanswerable. `:focus-visible` rather than `:focus`, so a mouse click does not paint rings.
+
+    THREE declarations, and only the first is the indicator.
+
+    `outline` is what satisfies WCAG 1.4.11. It is the one declaration here that works on every
+    focusable element regardless of what that element is: a link, a chip and a nav item have no
+    border to recolour and no fill to change, so a focus style built out of `border-color` and a
+    shadow is a focus style that exists on inputs and nowhere else — which is how this rule was
+    written for one round of this migration, and every link, button, chip, nav item, tab and the
+    sign-out control showed nothing at all. `--accent-green` is 5.25:1 on `--bg-surface` and 4.90:1
+    on `--bg-app`, both comfortably past 1.4.11's 3:1. `--focus-ring` composites to 1.14:1 on white
+    and cannot be the indicator on its own at any size.
+
+    `outline-offset` puts the ring in the gap outside the element rather than on its edge, so on a
+    filled control (`.btn--primary`, `.btn--danger`, `.pill--critical`) the green sits against the
+    page or the card behind it and not against the fill — which is what keeps the 3:1 measurement
+    above the one that applies.
+
+    `border-color` and `box-shadow` are the handoff's own field-focus treatment and are kept because
+    they are right where they apply: an input gets a green edge and a soft green halo, exactly as
+    drawn. They are reinforcement, never the indicator — do not delete the outline and leave these.
+
+    No `border-radius` here. `main`'s version set `border-radius: 1px` to make the outline hug a
+    square edge; every browser this application targets already follows the element's own radius, and
+    forcing 1px would square off the corners of every pill, chip and card the outline is drawn around.
+  */
+  :focus-visible {
+    outline: 2px solid var(--accent-green);
+    outline-offset: 2px;
+    border-color: var(--accent-green);
+    box-shadow: var(--focus-ring);
+  }
+}

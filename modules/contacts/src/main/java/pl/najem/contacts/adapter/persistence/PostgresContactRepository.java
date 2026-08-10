@@ -105,4 +105,17 @@ public class PostgresContactRepository implements ContactRepository {
         jdbc.update("insert into contacts_erasure_log(contact_id, workspace_id, erased_on) values (?,?,?)",
             contactId, workspaceId, erasedOn);
     }
+
+    @Override
+    public Optional<String> lawfulBasisOf(UUID workspaceId, UUID contactId) {
+        return jdbc.queryForList(
+            "select lawful_basis from contacts_person where workspace_id = ? and contact_id = ?",
+            String.class, workspaceId, contactId).stream().findFirst();
+    }
+
+    @Override
+    public void updateLawfulBasis(UUID workspaceId, UUID contactId, String lawfulBasis) {
+        jdbc.update("update contacts_person set lawful_basis = ? where workspace_id = ? and contact_id = ?",
+            lawfulBasis, workspaceId, contactId);
+    }
 }

@@ -1,0 +1,747 @@
+/*
+  The application shell: the fixed sidebar, the header bar, and the page grids every screen
+  composes its content into.
+
+  This is the layer between base.css (element defaults) and components.css (the fragments in
+  components.html) in the order base.css declares. What belongs here is the shell itself and the
+  four named page grids — nothing about an individual screen's own one-off arrangement, which is
+  screens.css's job, and nothing about a reusable component's own anatomy, which is
+  components.css's.
+*/
+@layer layout {
+
+  /*
+    Fixed to the viewport, never grown by content. `html, body { height: 100% }` (base.css) is
+    what makes `height: 100%` here resolve to the viewport rather than 0 — a percentage height on
+    the root element is the one case the CSS spec resolves against the initial containing block.
+    `min-height` was tried and rejected: it lets the shell grow to document height on a page taller
+    than the window, which is what stranded the sidebar footer below the fold (measured 941px down
+    a 500px-tall viewport). `100dvh` was also considered and rejected here — this is a desktop
+    admin app with no mobile layout (see the 1024px breakpoint below), so the dynamic-toolbar
+    problem `dvh` solves does not apply, and `height: 100%` keeps the single chain already
+    established rather than mixing units.
+  */
+  .shell {
+    display: flex;
+    height: 100%;
+  }
+
+  /* ── sidebar ── */
+
+  /*
+    Always exactly the shell's height (flex stretch, the default cross-axis alignment) and never
+    taller than it — `.sidebar__nav` below is the only part that scrolls, so the footer can never
+    be pushed past the bottom of the viewport regardless of how many nav items exist.
+  */
+  .sidebar {
+    width: 216px;
+    flex: none;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-default);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    min-height: 0;
+  }
+
+  /*
+    Everything above the footer — logo, both nav groups, the section label — wrapped so it can
+    shrink below its own content height (`min-height: 0`, needed because a flex item's automatic
+    minimum size is its content size, which would otherwise refuse to shrink and defeat this rule)
+    and scroll internally once it no longer fits. The footer sits after it as a sibling, so it is
+    never part of what scrolls out of view.
+  */
+  .sidebar__nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar__logo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 20px 22px;
+  }
+
+  .sidebar__mark {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--r-sm);
+    background: var(--accent-green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bg-surface);
+    font-weight: 700;
+    font-size: 13px;
+    flex: none;
+  }
+
+  .sidebar__wordmark {
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -.01em;
+  }
+
+  /*
+    "+ Dodaj" — the shell's only primary action, sitting under the logo where prototype v2 puts it.
+
+    192px at the 216px rail is the sidebar's own 12px gutters, so it lines up with the nav items
+    below rather than with the logo's 20px inset. A <button> gets none of the browser's button
+    chrome for free, so the font is restated: `font: inherit` would take .sidebar's 13px and lose
+    the weight.
+  */
+  .sidebar__add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 0 12px 14px;
+    height: 31px;
+    border: none;
+    border-radius: var(--r-control);
+    background: var(--accent-green);
+    color: var(--bg-surface);
+    font: 600 12.5px/1 var(--font-sans);
+    cursor: pointer;
+  }
+
+  .sidebar__add-icon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+  }
+
+  .sidebar__group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 12px;
+  }
+
+  /* The uppercase mono separator between the two nav groups ("KSIĘGOWOŚĆ"). */
+  .sidebar__section {
+    font: 600 9.5px/1 var(--font-micro);
+    letter-spacing: .1em;
+    color: var(--text-faint);
+    padding: 20px 22px 8px;
+  }
+
+  .nav__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  /*
+    `--text-label` (#7b828c, 3.88:1 on `--bg-surface`), not the handoff's own `--neutral-icon`
+    (#b6bcc4, 1.91:1).
+
+    Below 1180 the label is display:none and this glyph is the entire name of the destination — see
+    the 56px rail block at the bottom of this file. That makes it a graphical object required to
+    understand the content, so WCAG 1.4.11's 3:1 applies to it, and 1.91:1 is not a close call.
+    `--neutral-icon` is a fine value for the 216px rail, where the icon is decoration beside a
+    `--text-secondary` word at 7.56:1; it stops being fine the moment the word goes away, and there
+    is no version of this rule that is right at one width and wrong at the other without splitting
+    the icon's colour across a breakpoint for no reason a reader could reconstruct.
+
+    `--text-label` is the quietest token in tokens.css that clears 3:1 (the next ones down are
+    `--text-faint` at 3.14:1 and `--text-table-head` at 2.64:1), so it preserves the intended
+    hierarchy — icon quieter than its label — while being legible on its own. No new colour was
+    invented. `--neutral-icon` is still used by `.rail-item__dot--neutral` and is checked there in
+    tools/contrast.
+  */
+  .nav__icon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    color: var(--text-label);
+  }
+
+  /* Weight AND colour change together — colours alone must never be what carries the state. */
+  .nav__item--active {
+    background: var(--accent-green-tint);
+    color: var(--accent-green);
+    font-weight: 600;
+  }
+  .nav__item--active .nav__icon { color: currentColor; }
+
+  .nav__item--unbuilt {
+    color: var(--text-disabled);
+    cursor: default;
+  }
+  .nav__item--unbuilt .nav__icon { color: currentColor; }
+
+  .sidebar__footer {
+    margin-top: auto;
+    padding: 16px 20px 0;
+    border-top: 1px solid var(--border-hairline);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sidebar__identity-name { font-size: 12.5px; font-weight: 600; }
+  .sidebar__identity-role { font-size: 11px; color: var(--text-faint); }
+
+  .sidebar__signout {
+    margin-left: auto;
+    flex: none;
+  }
+  .sidebar__signout button {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 11px;
+    color: var(--text-label);
+    cursor: pointer;
+  }
+  .sidebar__signout button:hover { color: var(--text-secondary); }
+
+  /* ── header bar ── */
+
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /*
+    `1fr auto 1fr`, so the omnibox is centred on the BAR rather than on whatever is left over.
+
+    This was flex with `.headerbar__right { margin-left: auto }`, which centres nothing: the search
+    sat in the right-hand group and shifted left whenever the staleness pill appeared beside it. A
+    control that moves because a projector fell behind is a control a manager has to look for. The
+    two 1fr tracks are equal by construction, so the middle one's centre is the bar's centre no
+    matter what the sides hold — including nothing, which is what the lead slot holds today.
+  */
+  .headerbar {
+    height: 60px;
+    flex: none;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-default);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 16px;
+    padding: 0 26px;
+  }
+
+  /* Empty today, and load-bearing anyway: it is the left 1fr. Without it the omnibox is centred in
+     the space after the sides rather than in the bar. A breadcrumb belongs here. */
+  .headerbar__lead { min-width: 0; }
+
+  .headerbar__right {
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /*
+    The omnibox.
+
+    The FORM is the box now, not the input — it holds the glyph, the field and the ⌘K badge on one
+    baseline, and it is what carries the border and the fill. That was already true at 768, where
+    the border had to belong to the form; it is now true at every width, so there is one box that
+    changes size rather than two arrangements that have to be kept looking alike.
+
+    484px is the prototype's own measurement at 1500. `max-width: 100%` because the middle grid
+    track is `auto`: a fixed width would win over the track and push the 1fr sides negative on a
+    narrow window rather than shrinking.
+
+    `--border-control` where the prototype draws #e8ecef. The two differ by eight units of
+    lightness, invisible side by side, and #e8ecef is `neutral/avatar` in the handoff's own table —
+    a token whose documented job is an avatar fill. Borrowing it for a border would put a second
+    meaning on it, which is the failure tokens.css exists to prevent; `--border-control`'s
+    documented use is "inputs, secondary buttons, chips", which is exactly this.
+  */
+  .headerbar__searchform {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 484px;
+    max-width: 100%;
+    height: 30px;
+    padding: 0 10px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-control);
+    border-radius: var(--r-control);
+  }
+
+  /*
+    The handoff's focus treatment for an input, moved out to the box that now draws the border:
+    a green border plus the one shadow in the system. Without this the field would show no focus at
+    all, since the <input> itself no longer has a border to recolour — the exact failure
+    StylesheetHygieneTest's second scanner exists to catch, arrived at from the other direction.
+  */
+  .headerbar__searchform:focus-within {
+    border-color: var(--accent-green);
+    box-shadow: var(--focus-ring);
+  }
+
+  .headerbar__searchicon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    color: var(--text-placeholder);
+  }
+
+  .headerbar__search {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /*
+    The shortcut the omnibox advertises. `--font-micro` and the table-head colour, because it is the
+    same class of thing as a column head: a small uppercase legend for the control beside it, not
+    content. shell.js is what makes it true.
+  */
+  .headerbar__searchkey {
+    flex: none;
+    font: 600 9.5px/1 var(--font-micro);
+    letter-spacing: .06em;
+    color: var(--text-table-head);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--r-chart);
+    padding: 3px 5px;
+  }
+
+  .headerbar__stale {
+    font-size: 11px;
+    color: var(--warn);
+    background: var(--warn-tint);
+    border-radius: var(--r-pill);
+    padding: 3px 9px;
+  }
+
+  /*
+    `overflow-y: auto`, not `hidden` — content taller than the window (a long form, a report with
+    many rows) must stay reachable by scrolling here, at the page level, rather than being clipped.
+    `.card--scroll` (components.css) still gets its own internal scroll: that comes from its own
+    `min-height: 0` shrinking it to the space this box actually has available, which is a sizing
+    question flex/grid answers before `overflow` is ever consulted — this property only decides
+    what happens to content that no longer fits, not how much space a child is given.
+  */
+  .content__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 22px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /*
+    ── the page bar ──
+
+    The band under the omnibox bar carrying a screen's title, its one line of summary and its
+    primary action. What separates a header from its content here is an EDGE, not space: the same
+    three elements laid loose on the grey page still read as cramped whatever the gap, which is why
+    this is a band and not a margin.
+
+    Values are the prototype's, bar one — 26px horizontal against its 28, because `.content__body`
+    insets the page by 26 and copying 28 put the title 2px off the left edge of its own table.
+
+    Outside `.content__body` deliberately: full-bleed inside a padded, scrolling box means negative
+    margins tracking three paddings across the breakpoints. `flex: none` for the reason `.headerbar`
+    has it — the body below takes the leftover height and scrolls under this.
+
+    The screen supplies `.pagebar__content`; a screen with no designed bar passes `null` and none of
+    this renders (layout.html).
+  */
+  .pagebar {
+    flex: none;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-default);
+    padding: 18px 26px;
+  }
+  .pagebar__content { display: flex; align-items: center; gap: 14px; }
+  .pagebar__titles { min-width: 0; }
+  /* A detail screen's trail sits above its title, in the same block, so a trailing button centres
+     on the pair rather than on the trail alone. */
+  .pagebar__titles > .breadcrumb { margin-bottom: 5px; }
+  .pagebar__subtitle { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+  /* Trailing: an action group, or the dashboard's period. No screen has both, so neither needs to
+     account for the other — the day one does, that is when the rule for it gets written. */
+  .pagebar__actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+  .pagebar__meta { margin-left: auto; font-size: 11.5px; color: var(--text-faint); }
+
+  /*
+    Every screen's own stack.
+
+    `.content__body` above spaces ITS children by 18px, but it has exactly one — the screen's
+    `<main>` — so that gap never separated anything, and inside `main` there was no layout at all:
+    base.css zeroes heading margins on purpose, so an h1, a button and a card sat flush.
+
+    16px is the handoff's card-to-card gap. One rule rather than a stack class per screen — the
+    dashboard grew exactly such a class before this existed, and there are nine screens.
+  */
+  main { display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── page grids ──
+     Every screen's top-level layout is one of these four; a screen introducing a fifth belongs
+     here, not as a one-off style attribute in a template. */
+
+  .grid--main-330 { display: grid; grid-template-columns: 1fr 330px; gap: 16px; min-height: 0; }
+  .grid--main-300 { display: grid; grid-template-columns: 1fr 300px; gap: 16px; min-height: 0; }
+  .grid--320-main { display: grid; grid-template-columns: 320px 1fr; gap: 16px; min-height: 0; }
+  .grid--steprail { display: flex; }
+
+  /*
+    ── the "+ Dodaj" chooser ──
+
+    A native <dialog>. Its default UA styling is a bordered, black-on-white box centred by margin,
+    so everything below is either replacing that (border, padding, radius) or replacing the
+    centring, which `margin: auto` alone does not do vertically in every engine.
+
+    `::backdrop` is the platform's own overlay and only exists for a dialog opened with showModal().
+    Tinted from the app background rather than plain black at low alpha: the shell's surfaces are
+    warm greys and a neutral black wash reads blue against them.
+  */
+  .addmenu {
+    width: 420px;
+    max-width: calc(100% - 32px);
+    padding: 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-card);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    /* The rows run edge to edge, so without this the last one's hover fill squares off the two
+       bottom corners the radius just rounded. */
+    overflow: hidden;
+  }
+
+  .addmenu::backdrop { background: rgba(22, 25, 29, .28); }
+
+  .addmenu__head {
+    padding: 18px 18px 12px;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+
+  .addmenu__title { font-size: 15px; font-weight: 600; }
+  .addmenu__question { font-size: 11.5px; color: var(--text-faint); }
+
+  .addmenu__options { display: flex; flex-direction: column; }
+
+  /*
+    One row per thing a manager can create. The subline is the reason the row exists as more than a
+    link: it says what creating this entails, which is what makes the choice answerable without
+    opening all four.
+  */
+  .addmenu__option {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 11px 18px;
+    border-top: 1px solid var(--border-hairline);
+    color: var(--text-primary);
+  }
+  .addmenu__option:first-child { border-top: none; }
+  .addmenu__option:hover { background: var(--bg-subtle); }
+
+  /*
+    The focus ring, drawn INSIDE the row.
+
+    base.css sets `outline-offset: 2px`, which is right everywhere else and wrong here: these rows
+    are full-bleed, so a ring 2px outside one lands on — and past — the dialog's own edge, and the
+    dialog clips it. What a keyboard user saw was not a ring but two green horizontal lines with no
+    ends, which reads as a divider rather than as "you are here". Seen in a screenshot with the
+    first row focused; `getComputedStyle` reported a perfectly correct outline throughout.
+
+    Negative offset only. The colour, width and the rest of the indicator stay base.css's, so this
+    does not become a second focus style with its own opinions.
+  */
+  .addmenu__option:focus-visible { outline-offset: -3px; }
+
+  .addmenu__icon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    color: var(--text-label);
+  }
+
+  .addmenu__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .addmenu__name { font-size: 12.5px; font-weight: 600; }
+  .addmenu__sub { font-size: 11px; color: var(--text-faint); }
+  .addmenu__go { margin-left: auto; color: var(--text-disabled); }
+
+  /*
+    Same treatment the rail gives an unbuilt destination, and the same reasoning: visible so the
+    shape of the product is legible, not a link so it cannot be clicked into nothing. It is a
+    <span>, so it is already unfocusable and unclickable — this only makes that visible.
+  */
+  .addmenu__option--unbuilt { color: var(--text-disabled); cursor: default; }
+  .addmenu__option--unbuilt:hover { background: none; }
+  .addmenu__option--unbuilt .addmenu__icon { color: currentColor; }
+  .addmenu__option--unbuilt .addmenu__sub { color: currentColor; }
+
+  /*
+    ── responsive ──
+
+    Three stops, from .designsystem/extracted/responsive-spec: ≥1180 exactly as drawn, 1024–1179,
+    and 768–1023. 768 is the floor — below it is undrawn, and nothing here targets it. The design
+    widths are 1400 (dashboard) and 1180 (everything else).
+
+    Above 1400 the shell stays fluid: there is deliberately no max-width here and none is wanted,
+    because the main column is what takes the extra space (spec, "Breakpoints" footnote). Measured
+    rather than assumed — `.content` is 1184px at 1400 and 1704px at 1920, so the whole surplus
+    lands on the main column and nothing in this block is reached at either width.
+
+    Every query below sits INSIDE this layer, next to the rule it overrides. A `@media` block
+    written after this layer's closing brace would sit outside every layer and therefore beat every
+    layered rule regardless of specificity (base.css's own warning) — which is how a responsive
+    tweak silently outranks components.css. Card padding, the KPI row, the tab strip and the
+    stacked-card tables are components rather than shell, so their queries live in components.css,
+    inside the components layer, for the same reason.
+
+    Replaces a first attempt that narrowed the sidebar to 180px below 1024 and stacked the rails
+    below 1180. Both were wrong against this spec: the rail collapses at 1180, not 1024,
+    and the rails stay beside main until 768.
+  */
+
+  /*
+    ── 1024–1179: the 56px icon rail ──
+
+    Geometry is the spec's, read off its own frame: 56px wide, `padding: 18px 0`, centred column,
+    a 26×26 logo mark with 18px beneath it, 34×32 nav items at `gap: 3px`, and the group separator
+    as a 24×1px hairline. The rail collapses here rather than at 768 because that is where the main
+    table needs the 160px back — the spec's own note on this frame.
+
+    The icon becomes the only VISIBLE label. Every item still carries `title` in layout.html for the
+    tooltip, and its accessible name comes from its own `.nav__label` text, which is clipped here
+    rather than removed — see `.nav__label` below for why `display: none` was wrong and what it broke.
+    A `title` is a tooltip rather than a design value, so TemplateHygieneTest's first tripwire has
+    nothing to say about it.
+  */
+  @media (max-width: 1179px) {
+    .sidebar { width: 56px; padding: 18px 0; align-items: center; }
+
+    /*
+      `overflow-x: hidden` because `.sidebar__nav` already scrolls on the y axis; without it a
+      56px box with a 34px child and no horizontal overflow can still show a phantom x scrollbar
+      on the platforms that reserve one for `overflow-y: auto`.
+
+      `width: 100%` is what keeps that clip from eating the focus ring, and it is not cosmetic.
+      `.sidebar`'s own `align-items: center` above shrink-wraps this box to its widest child — 34px,
+      the nav item — so `overflow-x: hidden` was clipping 11px in from each edge of a 56px rail. A
+      focused nav item's outline reaches 4px past the item (2px offset + 2px width) and was cut off
+      on both sides: measured at 1024, the item spanned x 10.5–44.5 and its outline needed 6.5–48.5.
+      Stretching this box to the rail's full width leaves 11px of slack per side, and the items stay
+      exactly where they were because `align-items: center` here still centres them.
+    */
+    .sidebar__nav { align-items: center; overflow-x: hidden; width: 100%; }
+
+    .sidebar__logo { padding: 0 0 18px; gap: 0; }
+    .sidebar__wordmark { display: none; }
+    .sidebar__group { padding: 0; gap: 3px; align-items: center; }
+
+    /*
+      The group label becomes the separator. The spec draws a 24×1px hairline between the two nav
+      groups where the labelled rail writes "KSIĘGOWOŚĆ", so this is the same element wearing the
+      other form rather than a second element that exists only to be a line at one breakpoint —
+      which would render as a stray rule above 1180 unless it were hidden there too.
+
+      `font-size: 0` plus `overflow: hidden` is what collapses the word: the text stays in the
+      markup, so the labelled rail above 1180 is unaffected, and no second copy of the word exists
+      to drift from this one.
+    */
+    .sidebar__section {
+      width: 24px;
+      height: 1px;
+      padding: 0;
+      margin: 12px 0;
+      background: var(--border-hairline);
+      font-size: 0;
+      line-height: 0;
+      overflow: hidden;
+    }
+
+    .nav__item { width: 34px; height: 32px; padding: 0; gap: 0; justify-content: center; }
+
+    /*
+      The label is hidden from the EYE, never from the accessibility tree.
+
+      `display: none` was the obvious thing and it removed the item's only piece of real text, which
+      left the accessible name to be supplied by `aria-label` in layout.html — and four of the eight
+      items are `<span>`s, whose implicit role is `generic`. ARIA prohibits an accessible name on a
+      generic element, so a conforming screen reader is entitled to expose those four items with no
+      name at all: at this width, where the glyph is the whole label, that is four unnamed things in
+      a row. Clipping the text instead means the name comes from the element's own content, which
+      needs no role to be permitted and cannot drift from the visible word above 1180 because it IS
+      the visible word above 1180.
+
+      The clip technique rather than `width: 0; overflow: hidden`: taken out of flow so a 34×32 item
+      is still 34×32, and `clip-path: inset(50%)` rather than the legacy `clip` so the box is not
+      merely small but paints nothing. `white-space: nowrap` stops a two-word label ("Księga główna")
+      being read with a line break in the middle by the screen readers that honour one.
+    */
+    .nav__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    /*
+      Only the 28px avatar fits. It stays pinned to the bottom by `.sidebar__footer`'s own
+      `margin-top: auto`, which is untouched here — the footer's border-top goes because a 1px rule
+      across a 56px rail above a lone circle reads as a divider between nothing and nothing.
+    */
+    .sidebar__footer { padding: 16px 0 0; border-top: none; gap: 0; justify-content: center; }
+    .sidebar__identity, .sidebar__signout { display: none; }
+
+    /* Header bar 60 → 56px, and the omnibox SHORTENS rather than disappearing — it only becomes an
+       icon at 768 (spec, this frame's own note). The width is on the form, which is the box. */
+    .headerbar { height: 56px; padding: 0 20px; }
+    .headerbar__searchform { width: 340px; }
+
+    /*
+      The rail is 56px, so the button becomes its glyph — the same trade every nav item makes here,
+      and `align-items: center` on `.sidebar__nav` is what centres it once the margin stops doing so.
+    */
+    .sidebar__add {
+      width: 34px;
+      height: 32px;
+      margin: 0 0 14px;
+      padding: 0;
+      gap: 0;
+    }
+
+    /* Clipped, never removed — identical to `.nav__label` below, and for the identical reason: it
+       is the button's accessible name and a <button> with only an <svg> inside has none. */
+    .sidebar__add-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .content__body { padding: 18px 20px; }
+    /* The band's inset tracks the body's, so the title stays on the same left edge as the content. */
+    .pagebar { padding: 16px 20px; }
+
+    /*
+      Rails stay BESIDE main here, narrowed to 300px — the spec says "beside main, 300px", and
+      stacking them at this stop is the second thing that first attempt got wrong.
+      `.grid--main-300` is already 300px and so is absent by design, not by omission.
+    */
+    .grid--main-330 { grid-template-columns: 1fr 300px; }
+    .grid--320-main { grid-template-columns: 300px 1fr; }
+  }
+
+  /* ── 768–1023 ── */
+  @media (max-width: 1023px) {
+    .headerbar { padding: 0 16px; }
+    .content__body { padding: 16px; }
+    .pagebar { padding: 14px 16px; }
+
+    /*
+      Rails drop below main. `.grid--320-main` draws its rail FIRST, so a bare `1fr` would stack
+      that rail *above* the main column — the opposite of "drops below main". Ordering the first
+      child last is what makes the one-column form mean the same thing for all three grids.
+    */
+    .grid--main-300, .grid--320-main { grid-template-columns: 1fr; }
+    .grid--320-main > :first-child { order: 2; }
+
+    /*
+      `.grid--main-330` is the exception the spec draws rather than another one-column stack: on
+      Property detail at 768, "Owner balances and Timeline sit two-up under the units table instead
+      of in a 330px rail". So this grid becomes TWO columns here — main spans both, and the rail's
+      cards flow side by side beneath it. Two cards across the 680px content area is what the frame
+      shows; stacking them would spend a second screen height on content the spec fits in one, at
+      the width where vertical space is scarcest.
+
+      This assumes the rail's cards are SIBLINGS of the main column, not wrapped in a single
+      element: a wrapper would occupy one cell and take half the width, which is the same bug in a
+      different place. No screen uses this grid yet, so the contract is written down here instead of
+      being discovered by whoever writes that screen — it wants `<main> <card> <card>`, not
+      `<main> <aside>`. An odd number of rail cards leaves the last one half-width, which is the
+      grid behaving correctly; a screen that wants it full-width spans it explicitly.
+    */
+    .grid--main-330 { grid-template-columns: 1fr 1fr; }
+    .grid--main-330 > :first-child { grid-column: 1 / -1; }
+
+    /*
+      Search → icon (spec: "title, action; search → icon"). The box is the form's, which it now is
+      at every width, so this stop only has to change its size.
+
+      The mask that used to draw the glyph here is GONE, and its removal is the point rather than a
+      tidy-up. It painted a magnifier onto `.headerbar__searchform::before` from a data URI, which
+      meant the icon at 768 was a different object from the icon above 1024 — same drawing, two
+      sources, no way for either to notice the other changing. The omnibox now carries a real
+      `.headerbar__searchicon`, so this width shows the same element the full field shows, and the
+      only thing that varies is what sits beside it.
+
+      It still reopens to the full field on focus: an icon that cannot be typed into is not a search.
+    */
+    .headerbar__searchform {
+      position: relative;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      justify-content: center;
+    }
+
+    /* No room for it, and no keyboard to press it on. */
+    .headerbar__searchkey { display: none; }
+
+    /* Laid over the whole box so a click anywhere on the icon focuses it. The field is present and
+       reachable at rest, just not legible — it is the icon that is legible — and focus gives it
+       back below. */
+    .headerbar__search {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: transparent;
+      color: transparent;
+      padding: 0;
+    }
+
+    /*
+      The placeholder needs hiding separately. `color: transparent` above does NOT reach it: a
+      browser's default `::placeholder` colour is its own UA declaration rather than `currentColor`,
+      so "Szukaj" kept rendering under the magnifier — clipped to its first letter by the 30px box,
+      which read as a stray glyph beside the icon rather than as text. Found in a screenshot at 768,
+      not by reading the rule, which is the only way this one shows up.
+    */
+    .headerbar__search::placeholder { color: transparent; }
+
+    /* Chrome draws its own clear affordance for `type="search"` once the field has a value; inside a
+       30px box it lands on top of the glyph. */
+    .headerbar__search::-webkit-search-cancel-button { display: none; }
+
+    .headerbar__searchform:focus-within { width: 190px; padding: 0 10px; }
+    .headerbar__searchform:focus-within .headerbar__searchicon { display: none; }
+    .headerbar__searchform:focus-within .headerbar__search {
+      position: static;
+      color: var(--text-muted);
+    }
+    .headerbar__searchform:focus-within .headerbar__search::placeholder {
+      color: var(--text-placeholder);
+    }
+  }
+}

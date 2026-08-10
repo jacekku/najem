@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!--/*
+  "W której nieruchomości?" — the step between + Dodaj and a form that needs a parent.
+
+  One template for both intents. The only differences are the heading, the helper line and where a
+  row leads; everything else — the list, the counts, the empty state — is the same question asked
+  about the same portfolio, and two templates would be two copies of a list that has to keep
+  agreeing with /properties.
+
+  The occupancy counts are here on purpose rather than as decoration. Choosing where to add a lokal
+  and choosing where to open a najem are different decisions, and "how many are free" is what
+  answers the second one — a bare list of addresses would make a manager open a property to find
+  out it has nothing to let.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Wybierz nieruchomość — NAJEM', null, ~{::main})}">
+<body>
+<main>
+    <h1 th:text="${intent == 'NAJEM'} ? 'Nowy najem' : 'Nowy lokal'">Nowy lokal</h1>
+
+    <p class="muted" th:text="${intent == 'NAJEM'}
+        ? 'Wybierz nieruchomość, a potem lokal, który chcesz wynająć.'
+        : 'Wybierz nieruchomość, w której dodasz lokal.'">—</p>
+
+    <section class="card picker-table">
+        <div th:replace="~{components :: tableHead(columns=${ {'Adres','Wynajęte','Wolne','Razem'} }, gridClass='picker-table')}"></div>
+
+        <!--/*
+          th:if on the wrapper and th:replace on the child, never both on one element: Thymeleaf
+          resolves th:replace before th:if, so a guard sharing an element with a fragment call is
+          not evaluated at all and the fragment renders unconditionally. TemplateHygieneTest's
+          second tripwire scans for exactly this pair — see properties.html, where it happened.
+        */-->
+        <div th:if="${properties.isEmpty()}">
+            <div th:replace="~{components :: emptyState(text='Najpierw dodaj nieruchomość — lokal i najem zawsze należą do którejś z nich.')}"></div>
+        </div>
+
+        <div class="table__row" th:each="p : ${properties}">
+            <a th:href="${intent == 'NAJEM'}
+                   ? @{/properties/{id}/units(id=${p.propertyId()})}
+                   : @{/properties/{id}/units/new(id=${p.propertyId()})}"
+               th:text="${p.address()}">—</a>
+            <!--/*
+              `total()`, never `inventory()`. They are adjacent accessors on the same record and the
+              wrong one renders a plausible number: inventory is the "Nieogłoszone" count, so a
+              property with two units showed Razem 1 and only disagreed with /properties, which is
+              the sort of wrong a reader corrects for rather than reports. total() is the record's
+              own sum of all four states.
+            */-->
+            <span class="mono" th:text="${p.occupancy().occupied()}">—</span>
+            <span class="mono" th:text="${p.occupancy().available()}">—</span>
+            <span class="mono" th:text="${p.occupancy().total()}">—</span>
+        </div>
+    </section>
+</main>
+</body>
+</html>

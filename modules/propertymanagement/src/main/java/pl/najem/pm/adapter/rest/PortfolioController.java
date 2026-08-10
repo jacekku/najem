@@ -45,7 +45,7 @@ public class PortfolioController {
         List<Owner> owners = request.owners() == null ? List.of()
             : request.owners().stream().map(o -> new Owner(o.contactId(), o.sharePercent())).toList();
         return new PropertyCreated(portfolio.createProperty(
-            workspaceId, request.address(), owners));
+            workspaceId, request.address(), owners).propertyId());
     }
 
     @PostMapping("/properties/{propertyId}/units")

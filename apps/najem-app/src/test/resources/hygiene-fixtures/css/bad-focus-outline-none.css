@@ -1,0 +1,16 @@
+/*
+  Deliberately broken. Exists so StylesheetHygieneTest.focusVisibleDeclaresAVisibleOutline is known
+  to still bite; the scanner must report this file as having NO visible focus outline.
+
+  One violation, and it is the exact form that shipped on the design-system branch: `outline: none`
+  with the focus styling carried by border-color and a translucent box-shadow. That renders on a
+  text input, which has a border to recolour, and on nothing else — every link, button, chip, nav
+  item and tab is left with no indicator at all.
+*/
+@layer base {
+  :focus-visible {
+    outline: none;
+    border-color: #1f7a5c;
+    box-shadow: 0 0 0 3px rgba(31, 122, 92, .1);
+  }
+}

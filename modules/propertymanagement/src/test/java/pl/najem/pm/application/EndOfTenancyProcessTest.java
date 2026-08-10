@@ -270,7 +270,7 @@ class EndOfTenancyProcessTest {
 
     private static UUID openUnit() {
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
         portfolio.openUnitToRent(workspaceId, unitId, "ready");
         return unitId;

@@ -13,10 +13,12 @@ import pl.najem.pm.domain.EndTenancy;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.ReserveTenancy;
 import pl.najem.pm.domain.Tenancy;
+import pl.najem.pm.domain.TenancyPeriod;
 import pl.najem.pm.domain.Unit;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -106,6 +108,42 @@ public class TenancyService {
             Unit.from(unitStream.events()).releaseTenancyPeriod(tenancyId), List.of());
         due.disarm(TenancyStartProcess.KIND, tenancyId);
         projection.reservationCancelled(tenancyId, tenancy.workspaceId());
+    }
+
+    /**
+     * Whether the cancel button should be offered.
+     *
+     * <p>Answered from the stream and not from {@code pm_tenancy}, deliberately. PM is event-sourced:
+     * the stream is the record and the table is a derived copy written after the append, so a screen
+     * deciding from the copy would disagree with {@link #cancelReservation} — which decides from the
+     * aggregate — on a day nobody is watching. That is the one-question-two-answers failure that
+     * retired {@code WorkspaceGuard}, and {@link TenancyProjection} stays write-only because of it.
+     */
+    public boolean isReserved(UUID workspaceId, UUID tenancyId) {
+        var tenancy = Tenancy.from(store.load(tenancyId, "Tenancy").events());
+        tenancy.requireOwnedBy(workspaceId);
+        return tenancy.isReserved();
+    }
+
+    /**
+     * The slots already taken on a unit's calendar, earliest first.
+     *
+     * <p>From the unit's own stream, for the same reason {@link #isReserved} is: this is the list
+     * {@link Unit#registerTenancyPeriod} checks a candidate against, so a screen that showed
+     * anything else could offer a date the very next click refuses. {@code reporting_unit_period}
+     * holds the same facts and is written after the append, which is exactly the lag that would
+     * produce that.
+     *
+     * <p>Only live slots are here: a period released by a cancellation or an ending is removed from
+     * the aggregate, so there is no history to filter out and nothing shown that could not collide.
+     * A null {@code end} is an indefinite tenancy and means the unit does not free up at all.
+     */
+    public List<TenancyPeriod> periodsOf(UUID workspaceId, UUID unitId) {
+        var unit = Unit.from(store.load(unitId, "Unit").events());
+        unit.requireOwnedBy(workspaceId);
+        return unit.periods().stream()
+            .sorted(Comparator.comparing(TenancyPeriod::start))
+            .toList();
     }
 
     public void addTenant(UUID workspaceId, UUID tenancyId, UUID contactId) {

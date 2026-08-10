@@ -65,7 +65,7 @@ class SweepRulesTest {
 
     private UUID unit() {
         var propertyId = portfolio.createProperty(agency, "Testowa 1, Kraków",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         return portfolio.addUnit(agency, propertyId, "M" + UUID.randomUUID(), new BigDecimal("2500"));
     }
 

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!--/*
+  DELIBERATELY BROKEN FIXTURE — do not fix, do not use as a real template.
+
+  Exists only so TemplateHygieneTest.noThymeleafExpressionCarriesTwoDoubleUnderscores has something
+  it is known to have to catch, on every run, forever — proving the tripwire still bites rather
+  than merely having bitten once on the day it was written (refactoring.md rule 21). Lives under
+  src/test/resources, never under src/main/resources/templates, so Thymeleaf's template resolver
+  never sees it and nothing can accidentally render it.
+
+  Carries exactly one violation of this tripwire: two BEM '__' modifiers concatenated into a single
+  th:classappend expression. Thymeleaf treats a matched '__…__' pair as preprocessing delimiters,
+  so the second '__' pairs with the first and the whole expression is preprocessed before it is
+  parsed — the same shape that took down 24 tests from one line in components.html's stepRail
+  fragment. Isolated from Tripwires A and B on purpose — no hex colour, no style attribute, no px,
+  no th:replace or th:if/th:unless anywhere in the file — so a change to this file's outcome can
+  only ever be attributed to Tripwire C.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org" lang="pl">
+<body>
+<span th:classappend="'kpi__value--' + ${tone} + ' other__thing'">&mdash;</span>
+</body>
+</html>

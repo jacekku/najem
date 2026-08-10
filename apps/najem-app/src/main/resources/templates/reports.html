@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Raporty — NAJEM', null, ~{::main})}">
+<body>
+<main>
+    <h1>Raporty</h1>
+
+    <!--/*
+      The first real use of the tabs fragment — until now it existed only in the /design gallery,
+      and this markup follows the gallery's exactly: a list of {label, href} maps and an `active`
+      compared against each item's own label.
+
+      The hrefs are plain strings, not @{...} link expressions, because the fragment takes them as
+      SpEL values inside a map literal and a Thymeleaf link expression is not SpEL — it cannot be
+      written there. That is safe only while this application is served from the root: there is no
+      server.servlet.context-path anywhere in its configuration (checked), and if one is ever
+      added, every href in this list has to be rebuilt in the controller, where the servlet context
+      is knowable. Nothing else in this file depends on that.
+
+      `activeTab` is the label itself rather than a key, because that is what the fragment compares
+      against; the controller holds both labels as constants so the two copies cannot drift.
+    */-->
+    <div class="reports-tabs">
+        <nav th:replace="~{components :: tabs(items=${ {
+            {'label':'Zaległości','href':'/reports'},
+            {'label':'Rozliczenia właścicieli','href':'/reports?tab=wlasciciele'} } },
+            active=${activeTab})}"></nav>
+    </div>
+
+    <!--/*
+      One tab's panel per wrapper, the guard on the wrapper and never on the element carrying
+      th:replace — fragment inclusion is precedence 100 and th:if is 300, so the two on one element
+      leave the guard dead and the fragment rendering unconditionally. The wrappers carry no class:
+      they exist to hold a condition, and a class with no rule behind it fails
+      TemplateHygieneTest's fourth tripwire.
+
+      `rows` and `labels` are only in the model when the arrears tab is the one being rendered, so
+      nothing inside this first wrapper may be read when the condition is false. Thymeleaf does not
+      process the children of an element whose th:if is false, which is what makes that safe.
+    */-->
+    <div th:if="${activeTab == 'Zaległości'}">
+        <!--/*
+          GOLDEN is deliberately absent from this legend. Accounting cannot emit it yet — the rule
+          that would produce it rides an unmerged contract change — and a legend entry that can
+          never fire reads as a claim about the agency's book rather than about the software.
+          (najem-accounting seq 329, najem-pm seq 342.)
+
+          BRIGHT_RED's `title` here is genuinely additional — the art. 11 statutory reference,
+          which the pill's own text has no room for — not a second version of the pill's own words.
+          It is the same tooltip the matching row below carries.
+        */-->
+        <ul class="legend" th:unless="${rows.isEmpty()}">
+            <li><span th:replace="~{components :: arrearsPill(colour='GREEN')}"></span></li>
+            <li><span th:replace="~{components :: arrearsPill(colour='YELLOW')}"></span></li>
+            <li><span th:replace="~{components :: arrearsPill(colour='RED')}"></span></li>
+            <li title="Zaległość obejmuje cały okres płatności — biegnie termin z art. 11 ustawy o ochronie praw lokatorów">
+                <span th:replace="~{components :: arrearsPill(colour='BRIGHT_RED')}"></span>
+            </li>
+        </ul>
+
+        <!--/*
+          A plain `.card` wrapper, same reasoning as properties.html and units.html: no title/
+          actions/footer to give the card fragment, and tableHead/table__row already carry their
+          own padding. `report-table` is on the card because it defines --cols and both the head
+          and the rows have to inherit it.
+        */-->
+        <div class="card report-table">
+            <div th:replace="~{components :: tableHead(columns=${ {'Najem','Status'} }, gridClass='report-table')}"></div>
+
+            <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+            <div th:if="${rows.isEmpty()}">
+                <div th:replace="~{components :: emptyState(text='Brak najmów do pokazania.')}"></div>
+            </div>
+
+            <div class="table__row" th:each="row : ${rows}">
+                <!--/*
+                  The unit and address, not the tenancy's identifier. The board is keyed by tenancy
+                  and carries only a colour, so rendering it as given is a column of UUIDs — the
+                  same "internals presented as facts" the agency screen was told to stop doing.
+
+                  A tenancy the occupancy projection does not place falls back to its id rather
+                  than to a blank or an invented name: the row is still true, and its colour is the
+                  point.
+                */-->
+                <a th:href="@{/tenancies/{id}/timeline(id=${row.tenancyId()})}"
+                   th:text="${labels.containsKey(row.tenancyId())
+                             ? labels.get(row.tenancyId()) : row.tenancyId()}">—</a>
+                <!--/*
+                  The colour comes from accounting verbatim and is only ever handed to arrearsPill
+                  — never recomputed here, see ReportsScreenController's javadoc. The title tooltip
+                  is the one thing that still varies by row rather than by arrearsPill alone: it is
+                  additional detail (the art. 11 reference), not a second copy of the pill's own
+                  words, so it stays here rather than moving into the shared fragment.
+                */-->
+                <span th:switch="${row.colour().name()}">
+                    <span th:case="'BRIGHT_RED'"
+                          title="Zaległość obejmuje cały okres płatności — biegnie termin z art. 11">
+                        <span th:replace="~{components :: arrearsPill(colour='BRIGHT_RED')}"></span>
+                    </span>
+                    <span th:case="*"><span th:replace="~{components :: arrearsPill(colour=${row.colour().name()})}"></span></span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!--/*
+      Not built. The tab is shown rather than hidden for the same reason the unbuilt rail items
+      are: a manager can see the shape of the product, and the one thing that must not happen is a
+      link into a route that goes nowhere — this one goes somewhere and says plainly what it is.
+      No screen is invented here; the wording matches the rest of the app's unbuilt copy.
+    */-->
+    <div th:if="${activeTab == 'Rozliczenia właścicieli'}">
+        <div class="card">
+            <div th:replace="~{components :: emptyState(text='Rozliczenia właścicieli nie są jeszcze dostępne.')}"></div>
+        </div>
+    </div>
+</main>
+</body>
+</html>

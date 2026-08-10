@@ -5,6 +5,7 @@ import pl.najem.contacts.application.ContactDirectory;
 import pl.najem.contacts.application.ContactService;
 import pl.najem.contacts.application.InterestService;
 import pl.najem.contacts.application.RetentionService;
+import pl.najem.contacts.application.UnitInterestQuery;
 import pl.najem.eventstore.EventStore;
 
 /**
@@ -44,5 +45,9 @@ public final class PostgresContacts {
 
     public static InterestService interestService(EventStore store, JdbcTemplate jdbc) {
         return new InterestService(store, new PostgresInterestRepository(jdbc), directory(jdbc));
+    }
+
+    public static UnitInterestQuery unitInterestQuery(JdbcTemplate jdbc) {
+        return new PostgresUnitInterestQuery(jdbc);
     }
 }

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Nowa nieruchomość — NAJEM', null, ~{::main})}">
+<body>
+<main>
+    <nav th:replace="~{components :: breadcrumb(items=${ {'Nieruchomości'} })}"></nav>
+    <h1>Nowa nieruchomość</h1>
+
+    <p class="form-alert form-alert--danger" th:if="${error != null}" th:text="${error}">—</p>
+
+    <!--/*
+      PHASE ONE IS ONE FORM, AND THAT IS THE WHOLE POINT.
+
+      It used to be three siblings — an address form, a search form and an inline-create form — with
+      the address repeated as a hidden field on the latter two. A browser submits ONE form, not the
+      page, so those hidden copies carried the address the SERVER last knew, never what the manager
+      had just typed into the visible box. Typing an address and then searching for an owner
+      silently threw the address away; it survived only if the manager first clicked a "Zapamiętaj
+      adres" button that nothing signposted as mandatory.
+
+      One form with one visible address input has nothing to keep in sync, so the invariant is
+      structural rather than remembered (refactoring rule 9), and "Zapamiętaj adres" is gone — it
+      only ever existed to work around this.
+
+      Every action is a submit button on that one form, distinguished by formaction alone. No
+      JavaScript.
+
+      EVERY BUTTON POSTS. The four that are not "Dodaj" used to carry formmethod="get", and that
+      leaked the CSRF token: the form's own method is POST, so Thymeleaf's Spring dialect injects a
+      hidden _csrf input, and a formmethod="get" submission serialises EVERY field — that one
+      included — into the query string. Clicking Szukaj put the session's token in the address bar,
+      the history and every access log on the way. They POST to /properties/new now, which validates
+      and redirects to GET /properties/new: the token goes in the body, the URL stays clean and
+      bookmarkable, and a reload never offers to resubmit. Do not "tidy" a button back to GET.
+
+      formnovalidate on every button except "Dodaj": the inline-create fields are `required`, and
+      HTML5 validates the WHOLE form no matter which button submitted it, so without it a manager
+      could not search until they had typed a stranger's surname.
+
+      The address input is NOT `required`. An address is mandatory when the property is created, in
+      phase two, and the server says so; making the browser demand it here would stop a manager
+      drafting owners before they have the address to hand — which is a rule the server does not
+      have, on the one button that would have enforced it.
+
+      The search bar and owner picker are plain elements here, never a nested <form> — a nested
+      form is invalid HTML, and this screen's whole point is that everything is ONE form. Contrast
+      reserve-parties.html, whose picker is a SEPARATE concern (parties-form.html) with its own
+      bookmarkable GET search — this screen's search must not lose the visible address, so it
+      cannot be a sibling form.
+
+      No local same-file th:fragment here (contrast unit.html's <template>-wrapped interestedBody/
+      leadBody): a <template> wrapper makes a fragment's declaration site inert to a BROWSER's DOM,
+      but Thymeleaf still emits its literal text at BOTH the declaration site and the th:insert
+      site — a real duplicate in the raw HTTP response, invisible to a present/absent assertion and
+      caught here only because theownerPickerIsRenderedOnce and nophaseOneButtonPutsTheCsrfTokenInAUrl
+      count occurrences. card()'s CSS classes are applied directly below instead.
+    */-->
+    <form th:if="${phase == 'owners'}" th:action="@{/properties/new/owners}" method="post">
+        <input type="hidden" th:each="id : ${ownerIds}" name="owner" th:value="${id}">
+
+        <div class="grid--steprail">
+            <nav th:replace="~{components :: stepRail(
+                     steps=${ {{'title':'Właściciele','subline':'Adres i lista właścicieli'},
+                               {'title':'Udziały','subline':'Podział procentowy'}} },
+                     current=1)}"></nav>
+
+            <div class="step-rail__content">
+                <div class="grid--main-300">
+                    <section class="card">
+                        <header class="card__head"><h2 class="card__title">Adres i właściciele</h2></header>
+                        <div class="card__body">
+                            <div th:replace="~{components :: field(name='address', label='Adres', value=${address}, type='text', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder='np. Krucza 12/4, Warszawa', autofocus=true)}"></div>
+
+                            <span th:replace="~{components :: microLabel(text='WŁAŚCICIELE')}"></span>
+
+                            <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+                            <div th:if="${owners.isEmpty()}">
+                                <div th:replace="~{components :: emptyState(text='Nikt jeszcze nie jest wpisany jako właściciel.')}"></div>
+                            </div>
+
+                            <ul class="owner-list" th:unless="${owners.isEmpty()}">
+                                <li class="owner-list__row" th:each="owner : ${owners}">
+                                    <span th:text="${owner.details().givenName()} + ' ' + ${owner.details().surname()}">—</span>
+                                    <button type="submit" class="btn btn--secondary" name="remove"
+                                            th:value="${owner.contactId()}" formnovalidate
+                                            th:formaction="@{/properties/new}">Usuń</button>
+                                </li>
+                            </ul>
+
+                            <div class="lead-search">
+                                <input class="field__input" type="search" name="q" th:value="${term}"
+                                       placeholder="Nazwisko albo imię">
+                                <button type="submit" class="btn btn--secondary" formnovalidate
+                                        th:formaction="@{/properties/new}">Szukaj</button>
+                            </div>
+
+                            <!--/*
+                              "Type something" and "nobody matched" stay two messages, because a blank
+                              term and a term that matched nothing both render zero hits — the
+                              difference cannot come from the result.
+                            */-->
+                            <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+                            <div th:if="${asked and hits.isEmpty()}">
+                                <div th:replace="~{components :: emptyState(text='Nikogo takiego jeszcze nie znamy — wpisz dane poniżej.')}"></div>
+                            </div>
+
+                            <ul class="lead-hits" th:unless="${hits.isEmpty()}">
+                                <li th:each="hit : ${hits}">
+                                    <button type="submit" class="btn btn--secondary" name="owner"
+                                            th:value="${hit.contactId()}" formnovalidate
+                                            th:formaction="@{/properties/new}"
+                                            th:text="${hit.givenName()} + ' ' + ${hit.surname()} + ' — ' + ${hit.email()}">—</button>
+                                </li>
+                            </ul>
+
+                            <p class="muted">— albo nowy właściciel —</p>
+
+                            <div class="lead-fields">
+                                <div th:replace="~{components :: field(name='givenName', label='Imię', value=null, type='text', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder='Imię', autofocus=false)}"></div>
+                                <div th:replace="~{components :: field(name='surname', label='Nazwisko', value=null, type='text', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder='Nazwisko', autofocus=false)}"></div>
+                                <div th:replace="~{components :: field(name='email', label='E-mail', value=null, type='email', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder='E-mail', autofocus=false)}"></div>
+                                <div th:replace="~{components :: field(name='phone', label='Telefon', value=null, type='tel', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder='Telefon', autofocus=false)}"></div>
+                                <label class="lead-consent">
+                                    <input type="checkbox" name="infoClauseServed" value="true">
+                                    Przekazano klauzulę informacyjną
+                                </label>
+                            </div>
+
+                            <button type="submit" class="btn btn--primary">Dodaj</button>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <header class="card__head"><h2 class="card__title">Jeszcze wymagane</h2></header>
+                        <div class="card__body">
+                            <div th:replace="~{components :: checklistItem(text='Adres podany', state=${#strings.isEmpty(address)} ? 'required' : 'done')}"></div>
+                            <div th:replace="~{components :: checklistItem(text='Co najmniej jeden właściciel', state=${owners.isEmpty()} ? 'required' : 'done')}"></div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="form-actions" th:unless="${owners.isEmpty()}">
+                    <button type="submit" class="btn btn--primary" formnovalidate
+                            name="owners" value="done"
+                            th:formaction="@{/properties/new}">
+                        Dalej — udziały
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div th:if="${phase == 'shares'}">
+        <form th:action="@{/properties}" method="post">
+            <input type="hidden" name="address" th:value="${address}">
+
+            <div class="grid--steprail">
+                <nav th:replace="~{components :: stepRail(
+                         steps=${ {{'title':'Właściciele','subline':'Adres i lista właścicieli'},
+                                   {'title':'Udziały','subline':'Podział procentowy'}} },
+                         current=2)}"></nav>
+
+                <div class="step-rail__content">
+                    <section class="card">
+                        <header class="card__head">
+                            <h2 class="card__title">Udziały</h2>
+                            <span class="card__meta" th:text="'Adres: ' + ${address}">—</span>
+                        </header>
+                        <div class="card__body">
+                            <p class="muted">
+                                Udziały powinny sumować się do 100%. Jeśli nie sumują się, nieruchomość i
+                                tak zostanie zapisana — dostaniesz tylko ostrzeżenie.
+                            </p>
+
+                            <!--/*
+                              The prefilled even split is computed in the controller, not here.
+                              100.0/owners.size() rounded to 2dp gives three owners 33.33 each, so
+                              every three-owner property a manager accepted the defaults on was
+                              created with a "total 99.99" warning — a suggestion that is wrong by
+                              default. The last owner takes the remainder instead.
+                            */-->
+                            <ul class="owner-list">
+                                <li class="owner-list__row" th:each="owner : ${owners}">
+                                    <input type="hidden" name="owner" th:value="${owner.contactId()}">
+                                    <span th:text="${owner.details().givenName()} + ' ' + ${owner.details().surname()}">—</span>
+                                    <span class="field__wrap owner-list__share">
+                                        <input class="field__input" type="number" name="share" step="0.01"
+                                               min="0" max="100" required th:value="${owner.suggestedShare()}">
+                                        <span class="field__suffix">%</span>
+                                    </span>
+                                </li>
+                            </ul>
+
+                            <div class="form-actions">
+                                <div th:replace="~{components :: btn(href=null, text='Utwórz nieruchomość', kind='primary')}"></div>
+                                <div th:replace="~{components :: btn(href=@{/properties/new(address=${address}, owner=${ownerIds})}, text='Wróć', kind='secondary')}"></div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </form>
+    </div>
+</main>
+</body>
+</html>

@@ -122,6 +122,18 @@ public class InMemoryContacts implements ContactRepository {
         erased.put(contactId, workspaceId);
     }
 
+    @Override
+    public Optional<String> lawfulBasisOf(UUID workspaceId, UUID contactId) {
+        return mine(workspaceId, contactId).map(Row::lawfulBasis);
+    }
+
+    @Override
+    public void updateLawfulBasis(UUID workspaceId, UUID contactId, String lawfulBasis) {
+        mine(workspaceId, contactId).ifPresent(row ->
+            people.put(contactId, new Row(row.workspaceId(), row.details(), lawfulBasis,
+                row.infoClauseServedAt(), row.retainUntil())));
+    }
+
     /** For {@link InMemoryErasureDue}, which reads the people table the way the SQL joins to it. */
     List<UUID> retainedUntilOnOrBefore(UUID workspaceId, LocalDate asOf) {
         return people.entrySet().stream()

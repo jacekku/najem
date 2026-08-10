@@ -1,143 +1,148 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Bank — NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Bank — NAJEM', null, ~{::main})}">
 <body>
 <main>
     <h1>Bank</h1>
 
-    <section>
-        <h2>Propozycje dopasowania</h2>
+    <div class="card">
+        <header class="card__head"><h2 class="card__title">Propozycje dopasowania</h2></header>
 
-        <p class="empty" th:if="${suggestions.isEmpty()}">
-            Drabinka nie ma nic do zaproponowania.
-        </p>
+        <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+        <div th:if="${suggestions.isEmpty()}">
+            <div th:replace="~{components :: emptyState(text='Drabinka nie ma nic do zaproponowania.')}"></div>
+        </div>
 
         <!--/*
           The tier is rendered as the tier, never collapsed into a confidence of our own: a tier-1
           certainty and a tier-2 "the reference appeared somewhere in the title" must not look
-          alike, or a manager either trusts all of them or checks all of them.
+          alike, or a manager either trusts all of them or checks all of them. The explanatory
+          `title` tooltip is genuinely additional to the pill's own text, so it stays on a wrapper
+          span the pill fragment is inserted into, the same pattern reports.html uses for BRIGHT_RED.
 
           And the evidence is shown BEFORE the click, not after. quotedReference is what the payer
           typed; expectedReference is what the charge asked for. At tier 1 they are equal — at
           tier 2 the difference IS the judgement being handed over, so both are on screen.
+
+          Seven columns, and the two reference columns hold whatever a payer typed. The scroll
+          wrapper lets the table scroll inside itself instead of pushing the document sideways — a
+          page that scrolls horizontally takes the masthead, and with it the agency name, off screen.
         */-->
         <!--/*
-          Seven columns, and the two reference columns hold whatever a payer typed. The wrapper
-          lets the table scroll inside itself instead of pushing the document sideways — a page
-          that scrolls horizontally takes the masthead, and with it the agency name, off screen.
+          `table--stacks` because this is the widest table in the application: 902px against the
+          680px content area at 768, so at that width each row becomes a card, two across
+          (components.css). Seven columns is only half the reason — the trailing Potwierdź button
+          needs 90px in a .7fr column, which is what actually sets the figure.
+
+          Column names declared once and read twice, by `tableHead` and by each cell's `data-label`;
+          see unit.html's note on why, and on why the trailing action column has no label.
+
+          No `table-scroll`. A table that stacks has nothing left to scroll sideways at 768, and
+          above 768 it is inside the width it was measured against — so the class had no width left
+          to earn it at either end. It also could not have worked: `.table-scroll { overflow-x: auto }`
+          lives in the `screens` layer and `.table--stacks { overflow-x: visible }` lived in
+          `components`, so the later layer won regardless of specificity and the `visible` that was
+          supposed to undo it never applied. Removing the class here is what removed the need for
+          that declaration; see components.css's `.table--stacks`.
         */-->
-        <div class="board-scroll" th:unless="${suggestions.isEmpty()}">
-        <table class="board">
-            <thead>
-            <tr>
-                <th>Poziom</th>
-                <th class="amount">Wpłata</th>
-                <th class="amount">Należność</th>
-                <th>Tytuł podany</th>
-                <th>Tytuł oczekiwany</th>
-                <th>Wpłacający</th>
-                <th></th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="s : ${suggestions}">
-                <td>
-                    <span class="tier" th:classappend="'tier--' + ${s.tier()}"
-                          th:switch="${s.tier()}">
-                        <span th:case="1" title="Zgodny numer płatności">1 · pewne</span>
-                        <span th:case="2" title="Numer znaleziony w tytule przelewu">2 · w tytule</span>
-                        <span th:case="3" title="Rozpoznany wpłacający">3 · po wpłacającym</span>
-                        <span th:case="4" title="Wskazane ręcznie">4 · ręcznie</span>
-                        <span th:case="*" th:text="${s.tier()}">—</span>
+        <div class="suggestions-table table--stacks" th:unless="${suggestions.isEmpty()}"
+             th:with="cols=${ {'Poziom','Wpłata','Należność','Tytuł podany','Tytuł oczekiwany','Wpłacający',''} }">
+            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='suggestions-table')}"></div>
+
+            <div class="table__row" th:each="s : ${suggestions}">
+                <span th:switch="${s.tier()}" th:attr="data-label=${cols[0]}">
+                    <span th:case="1" title="Zgodny numer płatności">
+                        <span th:replace="~{components :: pill(tone='paid', text='1 · pewne')}"></span>
                     </span>
-                </td>
-                <td class="amount">
+                    <span th:case="2" title="Numer znaleziony w tytule przelewu">
+                        <span th:replace="~{components :: pill(tone='warn', text='2 · w tytule')}"></span>
+                    </span>
+                    <span th:case="3" title="Rozpoznany wpłacający">
+                        <span th:replace="~{components :: pill(tone='neutral', text='3 · po wpłacającym')}"></span>
+                    </span>
+                    <span th:case="4" title="Wskazane ręcznie">
+                        <span th:replace="~{components :: pill(tone='neutral', text='4 · ręcznie')}"></span>
+                    </span>
+                    <span th:case="*"><span th:replace="~{components :: pill(tone='neutral', text=${s.tier()})}"></span></span>
+                </span>
+                <span class="mono" th:attr="data-label=${cols[1]}">
                     <span th:text="${#numbers.formatDecimal(s.paidAmount(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
                     <!--/*
                       Part payment is accounting's answer, not a comparison done here: tiers 2 and
                       above do not constrain the amount, so a suggestion can settle a fraction of
                       the charge, and getting that wrong is a money error rather than a display one.
                     */-->
-                    <span class="part" th:if="${s.isPartPayment()}"
-                          title="Wpłata nie pokrywa całej należności">część</span>
-                </td>
-                <td class="amount">
+                    <span th:if="${s.isPartPayment()}" title="Wpłata nie pokrywa całej należności">
+                        <span th:replace="~{components :: pill(tone='warn', text='część')}"></span>
+                    </span>
+                </span>
+                <span class="mono" th:attr="data-label=${cols[2]}">
                     <span th:text="${#numbers.formatDecimal(s.chargedAmount(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                    <br>
                     <span class="muted"
                           th:text="'pozostaje ' + ${#numbers.formatDecimal(s.outstanding(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
-                </td>
-                <td><code th:text="${s.quotedReference()}">—</code></td>
-                <td><code th:text="${s.expectedReference()}">—</code></td>
-                <td th:text="${s.payerName()}">—</td>
-                <td>
+                </span>
+                <span class="mono" th:attr="data-label=${cols[3]}" th:text="${s.quotedReference()}">—</span>
+                <span class="mono" th:attr="data-label=${cols[4]}" th:text="${s.expectedReference()}">—</span>
+                <span th:attr="data-label=${cols[5]}" th:text="${s.payerName()}">—</span>
+                <span>
                     <form th:action="@{/bank/payments/{id}/confirm(id=${s.paymentId()})}" method="post">
-                        <button type="submit">Potwierdź</button>
+                        <div th:replace="~{components :: btn(href=null, text='Potwierdź', kind='primary')}"></div>
                     </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
+                </span>
+            </div>
         </div>
-    </section>
+    </div>
 
-    <section>
-        <h2>Nierozliczone wpłaty</h2>
+    <div class="card">
+        <header class="card__head"><h2 class="card__title">Nierozliczone wpłaty</h2></header>
 
-        <p class="empty" th:if="${suspense.isEmpty()}">
-            Wszystko trafiło na swoje miejsce.
-        </p>
+        <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+        <div th:if="${suspense.isEmpty()}">
+            <div th:replace="~{components :: emptyState(text='Wszystko trafiło na swoje miejsce.')}"></div>
+        </div>
 
-        <div class="board-scroll" th:unless="${suspense.isEmpty()}">
-        <table class="board">
-            <thead>
-            <tr>
-                <th class="amount">Kwota</th>
-                <th>Tytuł</th>
-                <th>Wpłacający</th>
-                <th>Zaksięgowano</th>
-                <th>Czeka</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="e : ${suspense}">
+        <div class="table-scroll suspense-table" th:unless="${suspense.isEmpty()}">
+            <div th:replace="~{components :: tableHead(columns=${ {'Kwota','Tytuł','Wpłacający','Zaksięgowano','Czeka'} }, gridClass='suspense-table')}"></div>
+
+            <div class="table__row" th:each="e : ${suspense}">
                 <!--/*
                   `amount` is what is still unresolved — for a partly allocated payment that is the
                   remainder, not the whole transfer. Showing the transfer would overstate what is
                   waiting for a decision.
                 */-->
-                <td class="amount"
-                    th:text="${#numbers.formatDecimal(e.amount(), 1, 'WHITESPACE', 2, 'COMMA')} + ' ' + ${e.currency()}">—</td>
-                <td th:text="${e.title()}">—</td>
-                <td th:text="${e.counterpartyName()}">—</td>
-                <td th:text="${e.bookingDate()}">—</td>
-                <td th:text="${e.daysWaiting()} + ' dni'">—</td>
-            </tr>
-            </tbody>
-        </table>
+                <span class="mono"
+                      th:text="${#numbers.formatDecimal(e.amount(), 1, 'WHITESPACE', 2, 'COMMA')} + ' ' + ${e.currency()}">—</span>
+                <span th:text="${e.title()}">—</span>
+                <span th:text="${e.counterpartyName()}">—</span>
+                <span class="mono" th:text="${e.bookingDate()}">—</span>
+                <span class="mono" th:text="${e.daysWaiting()} + ' dni'">—</span>
+            </div>
         </div>
-    </section>
+    </div>
 
-    <section>
-        <h2>Do sprawdzenia</h2>
+    <div class="card">
+        <header class="card__head"><h2 class="card__title">Do sprawdzenia</h2></header>
 
-        <p class="empty" th:if="${warnings.isEmpty()}">
-            Brak nowych ostrzeżeń.
-        </p>
+        <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+        <div th:if="${warnings.isEmpty()}">
+            <div th:replace="~{components :: emptyState(text='Brak nowych ostrzeżeń.')}"></div>
+        </div>
 
         <!--/*
           A warning never blocked a posting — this is an expert system, not a gate. So "seen" is
           the only action, and it must not read as approval of anything.
         */-->
-        <ul class="warnings" th:unless="${warnings.isEmpty()}">
-            <li th:each="w : ${warnings}">
-                <span class="warnings__kind" th:text="${w.kind().name()}">—</span>
-                <span th:text="${w.detail()}">—</span>
+        <ul class="warning-list" th:unless="${warnings.isEmpty()}">
+            <li class="warning-list__row" th:each="w : ${warnings}">
+                <span th:replace="~{components :: microLabel(text=${w.kind().name()})}"></span>
+                <span class="warning-list__detail" th:text="${w.detail()}">—</span>
                 <form th:action="@{/bank/warnings/{id}/seen(id=${w.warningId()})}" method="post">
-                    <button type="submit">Odnotowane</button>
+                    <div th:replace="~{components :: btn(href=null, text='Odnotowane', kind='secondary')}"></div>
                 </form>
             </li>
         </ul>
-    </section>
+    </div>
 </main>
 </body>
 </html>

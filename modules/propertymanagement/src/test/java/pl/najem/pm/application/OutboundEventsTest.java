@@ -103,7 +103,7 @@ class OutboundEventsTest {
     @Test
     void pmPublishesExactlyTheFourContractRecordsAndNothingElse() {
         var workspaceId = UUID.randomUUID();
-        var propertyId = portfolio.createProperty(workspaceId, "Pełna 1", owners());
+        var propertyId = portfolio.createProperty(workspaceId, "Pełna 1", owners()).propertyId();
         var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
 
         // Portfolio: none of this is anyone else's business.

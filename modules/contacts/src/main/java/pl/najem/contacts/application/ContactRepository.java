@@ -62,4 +62,13 @@ public interface ContactRepository {
     boolean isKnownOrErased(UUID workspaceId, UUID contactId);
 
     void logErasure(UUID workspaceId, UUID contactId, LocalDate erasedOn);
+
+    /**
+     * Why this workspace holds the person's data. Empty means the workspace does not know them —
+     * the same answer {@link #find} gives, and the reason a caller can gate on it rather than
+     * issuing a scoped update that matches nothing and fails silently.
+     */
+    Optional<String> lawfulBasisOf(UUID workspaceId, UUID contactId);
+
+    void updateLawfulBasis(UUID workspaceId, UUID contactId, String lawfulBasis);
 }

@@ -164,7 +164,7 @@ class TenancyStartProcessTest {
 
     private static UUID reserveStarting(LocalDate startDate, LegalForm legalForm) {
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         var unitId = portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
         return tenancies.reserve(workspaceId, new ReserveTenancy(null, null, unitId,
             List.of(UUID.randomUUID()), List.of(), startDate,

@@ -82,7 +82,7 @@ class UnitTimelineProjectionTest {
 
         workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Długa 7, Wrocław",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         unitId = portfolio.addUnit(workspace, propertyId, "m. 12", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, unitId, "ready to let");
         portfolio.setUnitBaseRent(workspace, unitId, new BigDecimal("2200"));

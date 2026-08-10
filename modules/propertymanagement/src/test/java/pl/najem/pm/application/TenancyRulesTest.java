@@ -15,6 +15,7 @@ import pl.najem.pm.domain.ReserveTenancy;
 import pl.najem.pm.domain.Tenancy;
 import pl.najem.pm.domain.Term;
 import pl.najem.pm.domain.Unit;
+import pl.najem.pm.domain.TenancyPeriod;
 import pl.najem.pm.domain.UnknownInThisWorkspaceException;
 
 import java.math.BigDecimal;
@@ -61,7 +62,7 @@ class TenancyRulesTest {
 
     private UUID unitIn(UUID workspaceId) {
         var propertyId = portfolio.createProperty(workspaceId, "Testowa 1, Kraków",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         return portfolio.addUnit(workspaceId, propertyId, "M1", new BigDecimal("2500"));
     }
 
@@ -180,12 +181,90 @@ class TenancyRulesTest {
     }
 
     @Test
+    void areservedTenancyIsReservedUntilItIsCancelled() {
+        var tenancyId = reserve();
+        assertThat(service.isReserved(agency, tenancyId)).isTrue();
+
+        service.cancelReservation(agency, tenancyId, "pomyłka");
+        assertThat(service.isReserved(agency, tenancyId)).isFalse();
+    }
+
+    @Test
+    void anactivatedTenancyIsNoLongerReserved() {
+        var tenancyId = activeTenancy();
+
+        assertThat(service.isReserved(agency, tenancyId)).isFalse();
+    }
+
+    @Test
     void asecondOverlappingReservationOnOneUnitIsRefused() {
         reserve();
 
         assertThatThrownBy(() -> service.reserve(agency, command(unitId, LocalDate.of(2027, 1, 1),
             new Term.FixedTerm(LocalDate.of(2027, 12, 31)))))
             .isInstanceOf(OverlappingTenancyException.class);
+    }
+
+    /**
+     * The refusal names the period that blocks, not only that something did.
+     *
+     * <p>A screen has to tell the manager when the unit frees up, and the alternatives to carrying
+     * the period are parsing the message back apart or asking the unit a second question and hoping
+     * the answer has not moved.
+     */
+    @Test
+    void arefusedReservationSaysWhichPeriodBlockedIt() {
+        var blocker = reserve();
+
+        assertThatThrownBy(() -> service.reserve(agency, command(unitId, LocalDate.of(2027, 1, 1),
+            new Term.FixedTerm(LocalDate.of(2027, 12, 31)))))
+            .isInstanceOfSatisfying(OverlappingTenancyException.class, e -> {
+                assertThat(e.blocking().tenancyId()).isEqualTo(blocker);
+                assertThat(e.blocking().start()).isEqualTo(LocalDate.of(2026, 9, 1));
+                assertThat(e.blocking().end()).isEqualTo(LocalDate.of(2027, 8, 31));
+            });
+    }
+
+    /** An indefinite blocker has a null end, which means the unit does not free up at all. */
+    @Test
+    void anindefiniteBlockerReportsNoEndDate() {
+        service.reserve(agency, command(unitId, LocalDate.of(2026, 9, 1), new Term.Indefinite()));
+
+        assertThatThrownBy(() -> service.reserve(agency, command(unitId, LocalDate.of(2030, 1, 1),
+            new Term.FixedTerm(LocalDate.of(2030, 12, 31)))))
+            .isInstanceOfSatisfying(OverlappingTenancyException.class, e ->
+                assertThat(e.blocking().end()).isNull());
+    }
+
+    @Test
+    void thebookedPeriodsOfAUnitAreListedEarliestFirst() {
+        var second = service.reserve(agency, command(unitId, LocalDate.of(2028, 1, 1),
+            new Term.FixedTerm(LocalDate.of(2028, 12, 31)))).tenancyId();
+        var first = reserve();
+
+        assertThat(service.periodsOf(agency, unitId))
+            .extracting(TenancyPeriod::tenancyId)
+            .containsExactly(first, second);
+    }
+
+    /**
+     * A cancelled reservation leaves no slot behind — which is what makes this list safe to show as
+     * "already taken" without filtering anything out of it.
+     */
+    @Test
+    void acancelledReservationLeavesNoBookedPeriod() {
+        var tenancyId = reserve();
+        service.cancelReservation(agency, tenancyId, "pomyłka");
+
+        assertThat(service.periodsOf(agency, unitId)).isEmpty();
+    }
+
+    @Test
+    void thebookedPeriodsOfAnotherAgencysUnitAreRefused() {
+        reserve();
+
+        assertThatThrownBy(() -> service.periodsOf(UUID.randomUUID(), unitId))
+            .isInstanceOf(UnknownInThisWorkspaceException.class);
     }
 
     /**

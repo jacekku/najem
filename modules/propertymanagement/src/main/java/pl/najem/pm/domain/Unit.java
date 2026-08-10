@@ -31,7 +31,14 @@ public class Unit {
 
     public static List<Object> add(UUID unitId, UUID workspaceId, UUID propertyId,
                                    String name, BigDecimal baseRent) {
-        return List.of(new UnitEvents.UnitAddedToProperty(workspaceId, unitId, propertyId, name, baseRent));
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("A unit needs a name");
+        }
+        if (baseRent == null || baseRent.signum() < 0) {
+            throw new IllegalArgumentException("A unit needs a base rent of zero or more");
+        }
+        return List.of(new UnitEvents.UnitAddedToProperty(workspaceId, unitId, propertyId,
+            name.strip(), baseRent));
     }
 
     public List<Object> setBaseRent(BigDecimal amount) {
@@ -68,7 +75,7 @@ public class Unit {
             if (existing.overlaps(candidate)) {
                 throw new OverlappingTenancyException("Tenancy period " + start + ".." + end
                     + " overlaps tenancy " + existing.tenancyId() + " (" + existing.start()
-                    + ".." + existing.end() + ") on unit " + id);
+                    + ".." + existing.end() + ") on unit " + id, existing);
             }
         }
         return List.of(new UnitEvents.TenancyPeriodRegistered(workspaceId, id, tenancyId, start, end));
@@ -131,7 +138,7 @@ public class Unit {
                 periods.add(new TenancyPeriod(e.tenancyId(), e.start(), e.end()));
             case UnitEvents.TenancyPeriodReleased e ->
                 periods.removeIf(p -> p.tenancyId().equals(e.tenancyId()));
-            default -> throw new IllegalArgumentException("Unknown event: " + event.getClass());
+            default -> throw new UnknownEventException(event);
         }
     }
 

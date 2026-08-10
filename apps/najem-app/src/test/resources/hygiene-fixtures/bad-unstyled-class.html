@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<!--/*
+  DELIBERATELY BROKEN FIXTURE — do not fix, do not use as a real template.
+
+  Exists only so TemplateHygieneTest.everyTemplateClassHasAStylesheetRule has something it is
+  known to have to catch, on every run, forever — proving the tripwire still bites rather than
+  merely having bitten once on the day it was written (refactoring.md rule 21). Lives under
+  src/test/resources, never under src/main/resources/templates, so Thymeleaf's template resolver
+  never sees it and nothing can accidentally render it.
+
+  Carries exactly one violation of this tripwire: a class with no rule anywhere under css/, so it
+  would render unstyled with no error to say so. Isolated from Tripwires A, B and C on purpose —
+  no hex colour, no style attribute, no px, no th:replace, no th:if/th:unless, no th:* expression
+  at all — so a change to this file's outcome can only ever be attributed to Tripwire D.
+*/-->
+<html lang="pl">
+<body>
+<div class="unstyled-fixture-specimen">A class with no rule in any stylesheet.</div>
+</body>
+</html>

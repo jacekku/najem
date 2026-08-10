@@ -85,7 +85,7 @@ class AnnulledTenancyTest {
 
         workspace = UUID.randomUUID();
         propertyId = portfolio.createProperty(workspace, "ul. Omyłkowa 2, Gdynia",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
 
         annulledUnit = portfolio.addUnit(workspace, propertyId, "m. 1", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, annulledUnit, "ready");

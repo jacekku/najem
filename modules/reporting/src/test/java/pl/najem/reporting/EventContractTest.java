@@ -164,7 +164,7 @@ class EventContractTest {
 
         var workspace = UUID.randomUUID();
         var propertyId = portfolio.createProperty(workspace, "ul. Testowa 1, Warszawa",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         var unitId = portfolio.addUnit(workspace, propertyId, "m. 1", new BigDecimal("2400"));
         portfolio.openUnitToRent(workspace, unitId, "ready to let");
 

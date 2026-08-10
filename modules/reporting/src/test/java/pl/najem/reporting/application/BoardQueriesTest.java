@@ -105,7 +105,7 @@ class BoardQueriesTest {
 
         // One property: a let flat, a flat on the market, and a flat never advertised.
         letProperty = portfolio.createProperty(workspace, "ul. Portfelowa 1, Gdańsk",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
 
         occupiedUnit = portfolio.addUnit(workspace, letProperty, "m. 1", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, occupiedUnit, "ready");
@@ -119,7 +119,7 @@ class BoardQueriesTest {
 
         // A property whose only tenancy ran for six months and then ended.
         pastProperty = portfolio.createProperty(workspace, "ul. Historyczna 2, Gdańsk",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         pastUnit = portfolio.addUnit(workspace, pastProperty, "m. 1", new BigDecimal("2000"));
         portfolio.openUnitToRent(workspace, pastUnit, "ready");
         endedTenancy = tenancies.reserve(workspace, reserve(pastUnit)).tenancyId();
@@ -129,12 +129,12 @@ class BoardQueriesTest {
 
         // A property with nothing in it yet.
         emptyProperty = portfolio.createProperty(workspace, "ul. Pusta 3, Gdańsk",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
 
         // Another agency's portfolio entirely. Its unit is named "m. 2" ON PURPOSE — the same name
         // as one of this workspace's units, so a search for that name has something to leak.
         otherProperty = portfolio.createProperty(otherWorkspace, "ul. Cudza 9, Sopot",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         otherUnit = portfolio.addUnit(otherWorkspace, otherProperty, "m. 2", new BigDecimal("2000"));
         portfolio.openUnitToRent(otherWorkspace, otherUnit, "ready");
 
@@ -286,6 +286,47 @@ class BoardQueriesTest {
     @Test
     void theUnitBoardTellsAnotherWorkspaceNothing() {
         assertThat(units.forProperty(otherWorkspace, letProperty, LocalDate.of(2026, 3, 1))).isEmpty();
+    }
+
+    /**
+     * forUnit and forProperty are one predicate in two queries, which is exactly the pair that
+     * drifted before (see this class's header). Asserting agreement rather than asserting forUnit
+     * alone is what makes the second copy safe to have.
+     */
+    @Test
+    void forUnitAgreesWithTheRowForPropertyReturnsForTheSameUnit() {
+        var asOf = LocalDate.of(2026, 3, 1);
+        var fromList = units.forProperty(workspace, letProperty, asOf);
+
+        assertThat(fromList).hasSize(3);
+        for (var row : fromList) {
+            assertThat(units.forUnit(workspace, row.unitId(), asOf)).contains(row);
+        }
+    }
+
+    /**
+     * The fixture's other agency owns a unit named "m. 2" on purpose, so this cannot pass by the
+     * id simply not existing.
+     */
+    @Test
+    void forUnitIsEmptyForAUnitInAnotherWorkspace() {
+        var asOf = LocalDate.of(2026, 3, 1);
+
+        assertThat(units.forUnit(workspace, otherUnit, asOf)).isEmpty();
+        assertThat(units.forUnit(otherWorkspace, otherUnit, asOf)).isPresent();
+    }
+
+    /**
+     * 2026-03-01 is inside the let tenancy and after the ended one, which is the date the rest of
+     * this class uses; asserting occupancy here too means forUnit is checked against the same
+     * period predicate the list is, not merely against the same columns.
+     */
+    @Test
+    void forUnitResolvesTheCurrentTenancyLikeTheListDoes() {
+        var row = units.forUnit(workspace, occupiedUnit, LocalDate.of(2026, 3, 1));
+
+        assertThat(row).isPresent();
+        assertThat(row.get().currentTenancyId()).isEqualTo(currentTenancy);
     }
 
     // ------------------------------------------------------------------------------------------

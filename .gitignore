@@ -8,3 +8,11 @@ out/
 # fork() emulation fails; they are a Windows toolchain artefact, never a build output, and one
 # reached a commit before this line existed.
 *.stackdump
+.playwright-mcp/
+
+# Design handoff bundle from Claude Design. A reference to read, not a source to build — the
+# prototypes ship a design-tool runtime that must never enter this repository.
+.designsystem/
+
+# Subagent-driven-development scratch: ledgers, briefs, review packages. Git history is the record.
+.superpowers/

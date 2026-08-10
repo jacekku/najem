@@ -12,6 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import pl.najem.contacts.ContactsEventTypes;
+import pl.najem.contacts.adapter.persistence.PostgresContactRepository;
 import pl.najem.contacts.adapter.persistence.PostgresContacts;
 import pl.najem.contacts.domain.ContactRegistered;
 import pl.najem.eventstore.EventTypeRegistry;
@@ -21,6 +22,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
 @Tag("integration")
@@ -30,10 +32,12 @@ class ContactServiceTest {
     static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
     static final UUID AGENCY = UUID.randomUUID();
+    static final UUID OTHER_AGENCY = UUID.randomUUID();
 
     static JdbcTemplate jdbc;
     static JdbcEventStore store;
     static ContactService service;
+    static ContactRepository repository;
 
     @BeforeAll
     static void setUp() {
@@ -45,6 +49,7 @@ class ContactServiceTest {
         ContactsEventTypes.register(registry);
         store = new JdbcEventStore(jdbc, new ObjectMapper().registerModule(new JavaTimeModule()), registry);
         service = PostgresContacts.contactService(store, jdbc);
+        repository = new PostgresContactRepository(jdbc);
     }
 
     @Test
@@ -78,5 +83,35 @@ class ContactServiceTest {
         assertThat(payloads).isNotEmpty();
         assertThat(payloads).noneSatisfy(payload ->
             assertThat(payload).containsAnyOf("Piotr", "Nowak", "piotr@example.com", "+48600300400"));
+    }
+
+    @Test
+    void aLeadWhoSignsBecomesAContractParty() {
+        UUID lead = service.registerLead(AGENCY,
+            new ContactDetails("Piotr", "Nowak", "p@example.com", "+48"), true, LocalDate.of(2026, 8, 1));
+
+        service.becameContractParty(AGENCY, lead, LocalDate.of(2026, 8, 7));
+
+        assertThat(repository.lawfulBasisOf(AGENCY, lead)).contains("contract");
+    }
+
+    @Test
+    void aContractPartyWhoIsAlreadyOneRecordsNothing() {
+        UUID guarantor = service.registerParty(AGENCY,
+            new ContactDetails("Anna", "Zielińska", "a@example.com", "+48"), true, LocalDate.of(2026, 8, 7));
+        int before = store.load(guarantor, "Contact").events().size();
+
+        service.becameContractParty(AGENCY, guarantor, LocalDate.of(2026, 8, 7));
+
+        assertThat(store.load(guarantor, "Contact").events()).hasSize(before);
+    }
+
+    @Test
+    void aForeignContactCannotBeMadeAContractParty() {
+        UUID lead = service.registerLead(AGENCY,
+            new ContactDetails("Piotr", "Nowak", "p@example.com", "+48"), false, LocalDate.of(2026, 8, 1));
+
+        assertThatThrownBy(() -> service.becameContractParty(OTHER_AGENCY, lead, LocalDate.of(2026, 8, 7)))
+            .isInstanceOf(NoSuchContactException.class);
     }
 }

@@ -1,46 +1,74 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Nieruchomości — NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Nieruchomości — NAJEM', ~{::header.pagebar__content}, ~{::main})}">
 <body>
+<!--/*
+  Title, what the portfolio contains, and the one action, on the shell's page bar — the handoff's
+  arrangement. The button used to sit on its own line directly under the h1 with nothing between it
+  and the table.
+
+  Outside <main>, deliberately: the layout selects this element by class and renders it in the band,
+  and `~{::main}` below does not match it, so it appears once, up there.
+
+  The subtitle counts only what this page already shows — the rows, and the Razem column added up.
+  The handoff also draws a potential-rent figure here; no query on this screen returns rent, and a
+  number invented for a header is worse on a real screen than an absent one.
+*/-->
+<header class="pagebar__content">
+    <div class="pagebar__titles">
+        <h1>Nieruchomości</h1>
+        <p class="pagebar__subtitle" th:text="${portfolio}">—</p>
+    </div>
+    <div class="pagebar__actions">
+        <div th:replace="~{components :: btn(href=@{/properties/new}, text='Dodaj nieruchomość', kind='primary')}"></div>
+    </div>
+</header>
 <main>
-    <h1>Nieruchomości</h1>
 
-    <p class="empty" th:if="${properties.isEmpty()}">
-        Ta agencja nie ma jeszcze żadnych nieruchomości.
-    </p>
+    <!--/*
+      A plain `.card` wrapper, not the `card` fragment: there is no title, actions or footer here
+      (the h1 above already names the page), and tableHead/table__row already carry their own
+      18px horizontal padding matching the card's — routing them through card's title-less body
+      would only double that padding for no benefit. gridClass is applied to THIS wrapper, per
+      tableHead's own contract, so both the head and every row below read the same --cols.
+    */-->
+    <div class="card properties-table">
+        <!--/*
+          Head and every row scroll together, not just the rows — a wide board that scrolled its
+          body but not its header would misalign the two, so the wrapper covers both (bank.html's
+          own table-scroll usage does the same). `--cols` still comes from `.properties-table` on
+          the `.card` above, which is this wrapper's own ancestor, so nothing extra is needed here.
+        */-->
+        <div class="table-scroll">
+        <div th:replace="~{components :: tableHead(columns=${ {'Adres','Wynajęte','Wolne','Wyłączone','Nieogłoszone','Razem'} }, gridClass='properties-table')}"></div>
 
-    <div class="board-scroll" th:unless="${properties.isEmpty()}">
-    <table class="board">
-        <thead>
-        <tr>
-            <th>Adres</th>
-            <th class="amount">Wynajęte</th>
-            <th class="amount">Wolne</th>
-            <th class="amount">Wyłączone</th>
-            <th class="amount">Nieogłoszone</th>
-            <th class="amount">Razem</th>
-        </tr>
-        </thead>
-        <tbody>
+        <!--/*
+          th:if and th:replace on the SAME element never fire together: Thymeleaf resolves
+          th:replace at precedence 100 and th:if at 300, so the fragment substitutes the element
+          before the guard is ever evaluated — this emptyState rendered unconditionally,
+          including above populated rows. Fixed with a wrapper: th:if on an outer element,
+          th:replace on an inner one that carries no condition of its own. Same pattern
+          components.html's own card() fragment already uses for actions/footer.
+        */-->
+        <div th:if="${properties.isEmpty()}">
+            <div th:replace="~{components :: emptyState(text='Ta agencja nie ma jeszcze żadnych nieruchomości.')}"></div>
+        </div>
+
         <!--/*
           A property with no units shows zeros rather than being left out — a manager created it,
           and a list that silently drops it looks like the write failed. The counts come from
           Reporting in the same query as the row; nothing here adds anything up except the total,
           which the record computes itself.
         */-->
-        <tr th:each="p : ${properties}">
-            <td>
-                <a th:href="@{/properties/{id}/units(id=${p.propertyId()})}"
-                   th:text="${p.address()}">—</a>
-            </td>
-            <td class="amount" th:text="${p.occupancy().occupied()}">—</td>
-            <td class="amount" th:text="${p.occupancy().available()}">—</td>
-            <td class="amount" th:text="${p.occupancy().unavailable()}">—</td>
-            <td class="amount" th:text="${p.occupancy().inventory()}">—</td>
-            <td class="amount" th:text="${p.occupancy().total()}">—</td>
-        </tr>
-        </tbody>
-    </table>
+        <div class="table__row" th:each="p : ${properties}">
+            <a th:href="@{/properties/{id}/units(id=${p.propertyId()})}" th:text="${p.address()}">—</a>
+            <span class="mono" th:text="${p.occupancy().occupied()}">—</span>
+            <span class="mono" th:text="${p.occupancy().available()}">—</span>
+            <span class="mono" th:text="${p.occupancy().unavailable()}">—</span>
+            <span class="mono" th:text="${p.occupancy().inventory()}">—</span>
+            <span class="mono" th:text="${p.occupancy().total()}">—</span>
+        </div>
+        </div>
     </div>
 </main>
 </body>

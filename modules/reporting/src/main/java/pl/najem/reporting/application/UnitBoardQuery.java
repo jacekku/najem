@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -69,6 +70,45 @@ public class UnitBoardQuery {
                 uuidOrNull(rs.getString("current_tenancy_id")),
                 uuidOrNull(rs.getString("next_tenancy_id"))),
             asOf, asOf, asOf, workspaceId, propertyId);
+    }
+
+    /**
+     * One unit, for the screen that shows one unit.
+     *
+     * <p>The warning above is about a board calling a per-unit primitive N times, and it stands. This
+     * is the other case: a single-unit screen calling it once. Reaching for {@link #forProperty} and
+     * filtering would read a property's worth of rows to render one of them, and would need the
+     * property id the caller does not have.
+     *
+     * <p>Empty rather than an exception for unknown or foreign, matching every other read here: a
+     * caller cannot distinguish "no such unit" from "not yours", which is the point.
+     */
+    public Optional<Row> forUnit(UUID workspaceId, UUID unitId, LocalDate asOf) {
+        return jdbc.query("""
+            select u.unit_id, u.property_id, u.name, u.base_rent, u.market_state,
+              (select p.tenancy_id from reporting_unit_period p
+                 where p.workspace_id = u.workspace_id and p.unit_id = u.unit_id
+                   and not p.annulled and (not p.released or p.ended_on is not null)
+                   and p.starts_on <= ? and (p.ends_on is null or p.ends_on > ?)
+                 order by p.starts_on limit 1) as current_tenancy_id,
+              (select p.tenancy_id from reporting_unit_period p
+                 where p.workspace_id = u.workspace_id and p.unit_id = u.unit_id
+                   and not p.annulled and (not p.released or p.ended_on is not null)
+                   and p.starts_on > ?
+                 order by p.starts_on limit 1) as next_tenancy_id
+            from reporting_unit_state u
+            where u.workspace_id = ? and u.unit_id = ? and not u.removed
+            """,
+            (rs, i) -> new Row(
+                UUID.fromString(rs.getString("unit_id")),
+                UUID.fromString(rs.getString("property_id")),
+                rs.getString("name"),
+                rs.getBigDecimal("base_rent"),
+                rs.getString("market_state"),
+                uuidOrNull(rs.getString("current_tenancy_id")),
+                uuidOrNull(rs.getString("next_tenancy_id"))),
+            asOf, asOf, asOf, workspaceId, unitId)
+            .stream().findFirst();
     }
 
     private static UUID uuidOrNull(String value) {

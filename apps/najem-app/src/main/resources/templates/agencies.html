@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Wybierz agencję — NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Wybierz agencję — NAJEM', null, ~{::main})}">
 <body>
 <main>
     <h1>Wybierz agencję</h1>
@@ -13,18 +13,20 @@
       A POST per choice, not a link. Choosing decides which agency every later request acts in,
       and a state change reachable by a GET is reachable by a prefetch or a restored tab.
     */-->
-    <ul class="agencies">
-        <li th:each="m : ${memberships}">
-            <form th:action="@{/agencies/{id}(id=${m.workspaceId()})}" method="post">
-                <button type="submit" th:text="${m.name()}">—</button>
-                <span class="agencies__role" th:switch="${m.role().name()}">
-                    <span th:case="'ADMIN'">Administrator</span>
-                    <span th:case="'MANAGER'">Zarządca</span>
-                    <span th:case="*" th:text="${m.role().name()}">—</span>
-                </span>
-            </form>
-        </li>
-    </ul>
+    <div class="card">
+        <ul class="agency-list">
+            <li class="agency-list__row" th:each="m : ${memberships}">
+                <form th:action="@{/agencies/{id}(id=${m.workspaceId()})}" method="post">
+                    <button type="submit" class="agency-list__name" th:text="${m.name()}">—</button>
+                    <span th:switch="${m.role().name()}">
+                        <span th:case="'ADMIN'"><span th:replace="~{components :: pill(tone='neutral', text='Administrator')}"></span></span>
+                        <span th:case="'MANAGER'"><span th:replace="~{components :: pill(tone='neutral', text='Zarządca')}"></span></span>
+                        <span th:case="*"><span th:replace="~{components :: pill(tone='neutral', text=${m.role().name()})}"></span></span>
+                    </span>
+                </form>
+            </li>
+        </ul>
+    </div>
 </main>
 </body>
 </html>

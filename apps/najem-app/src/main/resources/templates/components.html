@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<!--/*
+  Every component in the design system, once.
+
+  A screen composes these; it does not copy them. That is the whole point — the card's anatomy
+  and the 42px table row exist in exactly one place, so screen 30 cannot drift from screen 3 by
+  reimplementing them slightly differently.
+
+  Nothing here resolves data or reaches a service. A fragment receives what it renders.
+  Every state a fragment supports must appear in design.html, or it is untested.
+
+  Every fragment carries data-fragment="<name>" on its own root element, so a caller — or
+  Task 3's gallery — never has to add the marker itself at the call site.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!--/*
+  A card. Title, meta and actions live in one optional header; footer is independently optional.
+  `body` is required — its fragment supplies the whole `.card__body`, replacing this element
+  entirely, so a caller's body fragment must carry that class itself if it wants it.
+
+  `actions` and `footer` may each be null, and a null `th:replace` throws at render — not compile
+  — time. th:replace runs BEFORE th:if in Thymeleaf's attribute precedence, so guarding with both
+  on the same element does not work: th:replace would already have tried to resolve the null
+  fragment before th:if got a chance to suppress it. The fix is a wrapping element that carries
+  the guard, with th:replace pushed onto a plain child no th:if ever touches.
+*/-->
+<section th:fragment="card(title, meta, actions, body, footer)" class="card" data-fragment="card">
+    <header class="card__head" th:if="${title}">
+        <h2 class="card__title" th:text="${title}">—</h2>
+        <span class="card__meta" th:if="${meta}" th:text="${meta}">—</span>
+        <div class="card__actions" th:if="${actions != null}"><div th:replace="${actions}"></div></div>
+    </header>
+    <div class="card__body" th:replace="${body}"></div>
+    <footer class="card__foot" th:if="${footer != null}"><div th:replace="${footer}"></div></footer>
+</section>
+
+<!--/* A KPI. tone colours only the value — the label and caption stay neutral. tone is `'' |
+       'green' | 'danger'`; the empty string must test as absent, not truthy — Thymeleaf treats
+       `''` as truthy, so a bare `${tone} ? …` here previously emitted `class="kpi__value--"` for
+       every "no tone" caller. */-->
+<div th:fragment="kpi(label, value, caption, tone)" class="kpi" data-fragment="kpi">
+    <div class="kpi__label" th:text="${label}">—</div>
+    <div class="kpi__value mono" th:classappend="${tone != null and tone != ''} ? 'kpi__value--' + ${tone} : ''"
+         th:text="${value}">—</div>
+    <div class="kpi__caption" th:if="${caption}" th:text="${caption}">—</div>
+</div>
+
+<!--/* A status pill. The text is not optional: the colours only differ, they never decide. */-->
+<span th:fragment="pill(tone, text)" class="pill" th:classappend="'pill--' + ${tone}"
+      th:text="${text}" data-fragment="pill">—</span>
+
+<!--/*
+  An arrears colour, rendered as its one pill. Promoted here from reports.html, where it started as
+  a same-file `<template>`-wrapped local fragment — a pattern that turned out NOT to prevent
+  Thymeleaf emitting the fragment's own text at both its declaration site and every th:insert/
+  th:replace site (proven live on this exact fragment: with `colour` null at the declaration site,
+  the switch fell through to its `*` case and left a stray `<span class="pill pill--neutral"
+  data-fragment="pill">` in the raw response, inert to a browser but not absent from a test
+  counting `data-fragment="pill"` occurrences). A real fragment in the shared file has no
+  declaration-site rendering to leak from.
+
+  One word list, not two: this is the ONLY place a colour's tone and text are decided, so a legend
+  and a table row calling it cannot drift the way they previously did (YELLOW and BRIGHT_RED each
+  had a longer legend phrase that quietly diverged from the row's own words). GOLDEN uses `paid`,
+  the same tone GREEN uses — deliberate, not an oversight: it is the user's call, not a colour a
+  pill tone was invented to avoid clashing. BRIGHT_RED uses `critical` (white on solid --danger),
+  not `danger` — the escalation a whole unpaid billing period and a running art. 11 counter is, and
+  previously indistinguishable from ordinary RED lateness once both shared one tone.
+*/-->
+<span th:fragment="arrearsPill(colour)" data-fragment="arrearsPill">
+    <span th:switch="${colour}">
+        <span th:case="'GOLDEN'"><span th:replace="~{components :: pill(tone='paid', text='Zapłacone do końca najmu')}"></span></span>
+        <span th:case="'GREEN'"><span th:replace="~{components :: pill(tone='paid', text='Nic nie zalega')}"></span></span>
+        <span th:case="'YELLOW'"><span th:replace="~{components :: pill(tone='warn', text='Termin jeszcze nie minął')}"></span></span>
+        <span th:case="'RED'"><span th:replace="~{components :: pill(tone='danger', text='Po terminie')}"></span></span>
+        <span th:case="'BRIGHT_RED'"><span th:replace="~{components :: pill(tone='critical', text='Cały okres bez zapłaty')}"></span></span>
+        <span th:case="*"><span th:replace="~{components :: pill(tone='neutral', text=${colour})}"></span></span>
+    </span>
+</span>
+
+<!--/*
+  A selectable chip. The mockups draw two shapes under this idea — a 20px-radius toggle tag
+  (Features, the tenancy-detail view chips: `shape="pill"`, the default) and an 8px-radius
+  single-select choice group (property type, contract type, unit status: `shape="choice"`). Both
+  shapes share the same selected-state colours (border/background/text all `--accent-green`), so
+  `chip--selected` is one class serving both — only geometry (`chip--choice`) differs.
+*/-->
+<span th:fragment="chip(text, selected, shape)" class="chip"
+      th:classappend="(${selected} ? 'chip--selected ' : '') + (${shape == 'choice'} ? 'chip--choice' : '')"
+      th:text="${text}" data-fragment="chip">—</span>
+
+<!--/*
+  A button. `href` present renders a real link; `href` null renders a submit button instead of a
+  link with an empty, self-reloading `href=""` — most call sites needing `href=null` are form
+  submits (New property/unit/tenancy), which need an actual <button type="submit">, not a link.
+  th:block is not itself an element (nothing renders for it), so each branch below is its own
+  fragment root and carries data-fragment itself; exactly one of the two ever renders.
+*/-->
+<th:block th:fragment="btn(href, text, kind)">
+    <a th:if="${href} != null" class="btn" th:classappend="'btn--' + ${kind}"
+       th:href="${href}" th:text="${text}" data-fragment="btn">—</a>
+    <button th:unless="${href} != null" type="submit" class="btn" th:classappend="'btn--' + ${kind}"
+            th:text="${text}" data-fragment="btn">—</button>
+</th:block>
+
+<!--/*
+  A form field. `required` renders the asterisk in --danger that the "Still required" checklist
+  mirrors; the two must never disagree, so both read the same flag.
+  `suffix` is the unit rendered inside the field (zł / mo, m²), not beside it.
+
+  `error` is not in the handoff — the overlap-check error is the only validation state the
+  designs draw, and it's a panel, not a field. Built as the obvious thing consistent with the
+  system: a --danger border, no fill, and the message in --danger below the input at the same
+  size as `field__help` (it replaces help while present, rather than stacking under it, so the
+  two never appear together). Needs design review. `_` is Thymeleaf's no-operation token — it
+  means "leave this attribute untouched" rather than "set it to null", which is what actually
+  omits aria-invalid/aria-describedby when there is no error, instead of the `href=""` outcome
+  th:href gives you on a bare null (see `btn`).
+
+  `inputmode` is trailing and usually null: the mobile-keyboard hint (e.g. `decimal` for a money
+  field), same `_` no-op omission as the aria attributes above rather than an empty
+  `inputmode=""`. Every existing caller was updated to pass it explicitly — Thymeleaf's named-
+  parameter fragment calls require a value for every declared parameter — because a silently
+  absent one here is cheap to add now and disruptive once Task 6b and 7 add many more callers.
+
+  `placeholder` and `autofocus` were added later, appended rather than inserted, so every
+  existing named-parameter call keeps working unchanged (an omitted trailing named parameter
+  arrives null/falsy). `placeholder` restores the example text the reskin had silently dropped
+  (e.g. "np. Krucza 12/4, Warszawa") — the same `_` no-op omission when absent, not an empty
+  `placeholder=""`. `autofocus` is a plain boolean; `th:attr` only emits the attribute when true.
+*/-->
+<div th:fragment="field(name, label, value, type, required, help, suffix, error, inputmode, placeholder, autofocus)" class="field"
+     th:classappend="${error} ? 'field--error' : ''" data-fragment="field">
+    <label class="field__label" th:for="${name}">
+        <span th:text="${label}">—</span><span class="field__req" th:if="${required}">*</span>
+    </label>
+    <div class="field__wrap">
+        <input class="field__input" th:id="${name}" th:name="${name}" th:value="${value}"
+               th:type="${type} ?: 'text'" th:required="${required}"
+               th:attr="aria-invalid=${error} ? 'true' : _, aria-describedby=${error} ? (${name} + '-error') : _, inputmode=${inputmode} ?: _, placeholder=${placeholder} ?: _, autofocus=${autofocus} ? 'autofocus' : _">
+        <span class="field__suffix" th:if="${suffix}" th:text="${suffix}">—</span>
+    </div>
+    <p class="field__help" th:if="${help != null and error == null}" th:text="${help}">—</p>
+    <p class="field__error" th:if="${error}" th:id="${name} + '-error'" th:text="${error}">—</p>
+</div>
+
+<!--/*
+  A select field. The handoff draws every input, select and button as a styled div — "substitute
+  real controls" is explicit in the README's Fidelity section — so this is a native <select> with
+  its OS arrow stripped (`appearance:none`) and the drawn "▾" put back as a decorative sibling.
+
+  `error` mirrors `field`'s: same shape, same reasoning, same "needs design review" status — a
+  select can fail validation exactly the way a text input can (e.g. "Select a deposit rule"), and
+  giving it a different shape here would just make callers guess which fields support it.
+*/-->
+<div th:fragment="selectField(name, label, options, selected, required, help, error)" class="field"
+     th:classappend="${error} ? 'field--error' : ''" data-fragment="selectField">
+    <label class="field__label" th:for="${name}">
+        <span th:text="${label}">—</span><span class="field__req" th:if="${required}">*</span>
+    </label>
+    <div class="field__wrap">
+        <select class="field__select" th:id="${name}" th:name="${name}" th:required="${required}"
+                th:attr="aria-invalid=${error} ? 'true' : _, aria-describedby=${error} ? (${name} + '-error') : _">
+            <option th:each="option : ${options}" th:value="${option}" th:text="${option}"
+                    th:selected="${option == selected}">—</option>
+        </select>
+        <span class="field__select-arrow" aria-hidden="true">▾</span>
+    </div>
+    <p class="field__help" th:if="${help != null and error == null}" th:text="${help}">—</p>
+    <p class="field__error" th:if="${error}" th:id="${name} + '-error'" th:text="${error}">—</p>
+</div>
+
+<!--/* An avatar. Initials may be blank (the sidebar footer and the owner rail draw a bare filled
+       circle). Four sizes appear across the mockups — dashboard table 24, sidebar footer 28,
+       owner rail 30, current-lease card 36 — a bounded set, so `size` selects a modifier class
+       (`avatar--24` / `--28` / `--30` / `--36`) rather than travelling as a raw pixel value in a
+       template's own `style` attribute (TemplateHygieneTest, Task 8, forbids that regardless of
+       source). A fifth size some future screen needs is a new modifier class in components.css,
+       not a new mechanism here. */-->
+<div th:fragment="avatar(initials, size)" class="avatar" th:classappend="'avatar--' + ${size}"
+     th:text="${initials} ?: ''" data-fragment="avatar">—</div>
+
+<!--/* One row of a key/value list. `tone` colours the value (`danger` for money owed) or, as
+       `total`, marks the row that closes the group with a rule above and 600 weight — composition
+       by the caller, not a second fragment, for the "Due to owner" / "Monthly total" rows. */-->
+<div th:fragment="keyvalue(label, value, tone, mono)" class="keyvalue"
+     th:classappend="${tone == 'total'} ? 'keyvalue--total' : ''" data-fragment="keyvalue">
+    <span class="keyvalue__label" th:text="${label}">—</span>
+    <span class="keyvalue__value"
+          th:classappend="(${mono} ? 'mono' : '') + ' ' + (${tone == 'danger'} ? 'keyvalue__value--danger' : '')"
+          th:text="${value}">—</span>
+</div>
+
+<!--/* One row of a "Still required" checklist. `state` drives both the dot and the label's own
+       colour — never the dot alone — so the state still reads if colour doesn't. */-->
+<div th:fragment="checklistItem(text, state)" class="checklist-item"
+     th:classappend="'checklist-item--' + ${state}" data-fragment="checklistItem">
+    <span class="checklist-item__dot" th:classappend="'checklist-item__dot--' + ${state}"
+          th:text="${state == 'done'} ? '✓' : ''">—</span>
+    <span class="checklist-item__text" th:text="${text}">—</span>
+</div>
+
+<!--/* The stacked collection-progress bar: proportional coloured segments on a neutral track.
+       `segments` is a list of {pct, tone}; the caller supplies percentages that sum to <=100. */-->
+<div th:fragment="progressBar(segments)" class="progress-bar" data-fragment="progressBar">
+    <div th:each="segment : ${segments}" class="progress-bar__segment"
+         th:classappend="'progress-bar__segment--' + ${segment.tone}"
+         th:style="'width:' + ${segment.pct} + '%'"></div>
+</div>
+
+<!--/* One entry in a timeline rail (property timeline, Upcoming panels). `filled` distinguishes
+       what already happened (a filled dot) from what's ahead (an outlined ring) — the mockups use
+       this for "TODAY" vs "UPCOMING" bands. `date` is optional: the property-timeline bands don't
+       show one, the unit-detail Upcoming panel does, and an absent third grid column just
+       collapses to zero width rather than needing a second layout. */-->
+<div th:fragment="railItem(title, subline, date, tone, filled)" class="rail-item"
+     th:classappend="${filled} ? 'rail-item--filled' : ''" data-fragment="railItem">
+    <div class="rail-item__rail">
+        <span class="rail-item__dot" th:classappend="'rail-item__dot--' + ${tone}"></span>
+        <span class="rail-item__connector"></span>
+    </div>
+    <div>
+        <div class="rail-item__title" th:text="${title}">—</div>
+        <div class="rail-item__subline" th:if="${subline}" th:text="${subline}">—</div>
+    </div>
+    <div class="rail-item__date mono" th:if="${date}" th:text="${date}">—</div>
+</div>
+
+<!--/* An uppercase mono section head — "IDENTIFICATION", "ACCOUNTING", "UPCOMING". */-->
+<span th:fragment="microLabel(text)" class="micro-label" th:text="${text}" data-fragment="microLabel">—</span>
+
+<!--/* A tab strip. `items` is a list of {label, href}; `active` is compared against each item's
+       label. Not prototyped as interactive in the mockups — the README says tab strips are
+       in-page routes — so each tab is a real link.
+
+       Two forms, one source of items. The responsive spec turns the strip into a single 200px
+       native select at 768, because the strip and a screen's primary button cannot share a row at
+       that width. Both are rendered from the same `items` list and the breakpoint shows exactly one
+       (components.css) — the alternative, letting a screen pass a flag saying which it wants, puts
+       the choice on whoever is least likely to have opened a 768px window.
+
+       The root moved from the <nav> to a wrapper so the select can be its sibling, and
+       `data-fragment="tabs"` moved with it: callers use th:replace, which substitutes their whole
+       element, so the root's tag name was never something a caller depended on. */-->
+<div th:fragment="tabs(items, active)" class="tabs-switch" data-fragment="tabs">
+    <nav class="tabs">
+        <a th:each="item : ${items}" class="tabs__item"
+           th:classappend="${item.label == active} ? 'tabs__item--active' : ''"
+           th:href="${item.href}" th:text="${item.label}">—</a>
+    </nav>
+
+    <!--/* The option's value is the tab's own href, so the select navigates to exactly where the
+           matching link points and the two cannot drift. `aria-label` because the visible label at
+           this width is the selected option itself, which names the current tab rather than the
+           control. */-->
+    <select class="tabs__select" aria-label="Wybierz zakładkę">
+        <option th:each="item : ${items}" th:value="${item.href}"
+                th:selected="${item.label == active}" th:text="${item.label}">—</option>
+    </select>
+
+    <!--/*
+      A native select does not navigate on its own. Delegated on the document rather than bound to
+      this element, and guarded by a window flag, because this fragment may be included more than
+      once on a page and two listeners would fire two navigations for one change.
+
+      NAVIGATING ON `change` ALONE TRAPPED THE KEYBOARD. A closed <select> fires `change` on the
+      FIRST ArrowDown — that is what the arrow keys do to a closed select on every desktop browser —
+      so the first keypress navigated and there was no second one. A keyboard user could reach the
+      control, could not browse past the option next to the current one, and was thrown off the page
+      for trying. Mouse users never saw it, because a click commits and browsing is what the open
+      dropdown does for them.
+
+      So `change` is no longer the commit; it is only the point at which we learn what is selected.
+      What commits depends on how the change arrived:
+
+        pointer / open dropdown   `change` with no preceding keydown → navigate at once, as before.
+                                  A click, a tap, and Enter inside an OPEN native popup all land
+                                  here: the popup is the platform's own window and does not dispatch
+                                  keydown to the page, so its Enter is indistinguishable from a click
+                                  and means the same thing.
+        closed select + arrows    keydown marks the element, the `change` it causes is swallowed, and
+                                  nothing happens until the user says so.
+        Enter                     commits whatever is selected now.
+        leaving the control       commits too (focusout) — Tab away after choosing is a deliberate
+                                  choice, not an abandoned one, and silently discarding it would be
+                                  its own trap.
+
+      Both deliberate commits compare against the value the control had when it was focused, so Enter
+      or Tab on an untouched select reloads nothing.
+
+      No progressive-enhancement fallback is claimed here: with scripting off the select is inert
+      and the strip is hidden by the breakpoint, so at 768 the tabs stop working. That is acceptable
+      only because htmx is already a hard requirement of every screen in this application (see
+      layout.html) — if that ever stops being true, this needs the <form>-with-submit form instead.
+      Follows reserve-terms.html's `th:inline="none"` IIFE, the one other inline script here.
+    */-->
+    <script th:inline="none">
+        (function () {
+            if (window.__tabsSelectBound) {
+                return;
+            }
+            window.__tabsSelectBound = true;
+
+            function tabsSelect(node) {
+                return node && node.classList && node.classList.contains('tabs__select') ? node : null;
+            }
+
+            var navigating = false;
+
+            function commit(select) {
+                if (navigating || !select.value) {
+                    return;
+                }
+                navigating = true;
+                window.location.assign(select.value);
+            }
+
+            /* Only if it differs from what was selected when the control was focused: Enter or Tab on
+               a select nobody touched must not reload the page it is already on. */
+            function commitIfChanged(select) {
+                if (select.__tabsValueOnFocus !== undefined
+                    && select.value === select.__tabsValueOnFocus) {
+                    return;
+                }
+                commit(select);
+            }
+
+            document.addEventListener('focusin', function (event) {
+                var select = tabsSelect(event.target);
+                if (select) {
+                    select.__tabsValueOnFocus = select.value;
+                    select.__tabsBrowsedByKeyboard = false;
+                }
+            });
+
+            /* The keys that move a CLOSED select's selection, and therefore the ones whose `change`
+               has to be swallowed: the arrows, the jump keys, and any single printable character
+               (typing "r" walks to the next option starting with r). Deliberately a list rather than
+               "every key that is not Enter" — Shift, Tab and Escape provoke no change, and marking
+               the element on one of them would swallow the NEXT change instead, which is a mouse
+               click a moment later. */
+            var BROWSES = {
+                ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1,
+                Home: 1, End: 1, PageUp: 1, PageDown: 1
+            };
+
+            document.addEventListener('keydown', function (event) {
+                var select = tabsSelect(event.target);
+                if (!select) {
+                    return;
+                }
+                if (event.key === 'Enter') {
+                    commitIfChanged(select);
+                    return;
+                }
+                /* A modified arrow is how every platform OPENS the dropdown (Alt+Down, and F4 on
+                   Windows, which is not a single character and so is not in BROWSES either). Once the
+                   popup is open it is the platform's own window: its Enter never reaches this page, so
+                   the `change` it fires must be treated as a deliberate commit, exactly like a click.
+                   Marking the element here would swallow it and strand the user on the same tab. */
+                if (event.altKey || event.ctrlKey || event.metaKey) {
+                    return;
+                }
+                if (BROWSES[event.key] || event.key.length === 1) {
+                    select.__tabsBrowsedByKeyboard = true;
+                }
+            });
+
+            document.addEventListener('change', function (event) {
+                var select = tabsSelect(event.target);
+                if (!select) {
+                    return;
+                }
+                if (select.__tabsBrowsedByKeyboard) {
+                    select.__tabsBrowsedByKeyboard = false;
+                    return;
+                }
+                commit(select);
+            });
+
+            document.addEventListener('focusout', function (event) {
+                var select = tabsSelect(event.target);
+                if (select) {
+                    commitIfChanged(select);
+                }
+            });
+        })();
+    </script>
+</div>
+
+<!--/* A breadcrumb. `items` is a list of plain segment names; each renders as "Name /", matching
+       the mockups' "Properties / Warszawa /" — including the trailing slash on a single segment
+       ("Properties /"). Not linked in the mockups (plain muted text), so this fragment isn't
+       either; wiring real navigation onto it is a Task 5/6 concern.
+
+       Items carry no class of their own: `.breadcrumb` already sets the only style any of them
+       need (font-size, colour, the flex gap between them), so a `breadcrumb__item` class with no
+       rule attached to it would be dead weight — a name for something nothing reads. */-->
+<nav th:fragment="breadcrumb(items)" class="breadcrumb" data-fragment="breadcrumb">
+    <span th:each="item : ${items}" th:text="${item} + ' /'">—</span>
+</nav>
+
+<!--/*
+  Not designed. The handoff says outright: "Empty and loading states are not designed." Built as
+  the most obvious thing consistent with everything else here — centered, muted, one line of
+  caller-supplied Polish text — rather than skipped or invented elaborately. Needs design review
+  before it's trusted anywhere real.
+*/-->
+<div th:fragment="emptyState(text)" class="empty-state" th:text="${text}" data-fragment="emptyState">—</div>
+
+<!--/* A table's head row. `gridClass` is a CSS class defining `--cols` (the grid-template-columns
+       value) — not a raw grid string, which would put a design value in every caller's template
+       and let Tasks 6/7 scatter column definitions across nine templates. The class lives in
+       screens.css, next to the screen that owns the table, and must be applied to whatever
+       element wraps BOTH the head and its rows (not only to this fragment's own root) — a custom
+       property set on one sibling never reaches another, only descendants of where it is set. */-->
+<div th:fragment="tableHead(columns, gridClass)" class="table__head" th:classappend="${gridClass}"
+     data-fragment="tableHead">
+    <div th:each="column : ${columns}" th:text="${column}">—</div>
+</div>
+
+<!--/*
+  A wizard's step rail (README's New property / New unit / New tenancy). Was written literally
+  three times — property-new.html's two phases and both reserve-*.html screens — before being
+  promoted here; three callers of the identical markup is screens.css's own trigger for "this
+  belongs in components.css".
+
+  `steps` is a list of `{title, subline}` maps (SpEL's map-literal syntax, e.g.
+  `${ {{'title':'Właściciele','subline':'Adres i lista właścicieli'}} }`) rather than two parallel
+  lists, so a step's title and subline cannot drift apart the way two same-length lists indexed by
+  position could. `current` is the 1-based index of the step the manager is on: every step before
+  it renders `--done` (a ✓ in place of its number), that one renders `--active`, and every step
+  after it renders neither — plain, upcoming.
+
+  Only the `<nav>` itself is this fragment's concern. The pane beside it (`.step-rail__content`,
+  screens.css) holds a different set of cards per screen and stays authored there.
+
+  th:classappend below uses `is-active`/`is-done`, not `step-rail__item--active`/`--done`: Thymeleaf
+  treats a `__` pair as PREPROCESSING delimiters, and everything between a matched pair gets
+  evaluated and substituted into the expression BEFORE the expression itself is parsed. One `__` in
+  an expression is harmless (nothing to pair with), which is why every other BEM modifier in this
+  codebase's th:classappend/th:text calls is safe — each contains exactly one. This conditional
+  needs TWO class names (`--active` and `--done`), and two BEM-style `__`s in one expression pair up
+  and get preprocessed, mangling the expression into nonsense with no `__` anywhere in the visible
+  error. Plain `is-active`/`is-done` state classes have no `__` to pair, so they can't hit this.
+*/-->
+<nav th:fragment="stepRail(steps, current)" class="step-rail" data-fragment="stepRail">
+    <div class="step-rail__item" th:each="step, iter : ${steps}"
+         th:classappend="${iter.count == current ? 'is-active' : (iter.count < current ? 'is-done' : '')}">
+        <span class="step-rail__num" th:text="${iter.count < current ? '✓' : iter.count}">—</span>
+        <span class="step-rail__text">
+            <span class="step-rail__title" th:text="${step.title}">—</span>
+            <span class="step-rail__subline" th:text="${step.subline}">—</span>
+        </span>
+    </div>
+</nav>
+
+</body>
+</html>

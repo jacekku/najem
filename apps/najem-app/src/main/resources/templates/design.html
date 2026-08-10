@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<!--/*
+  Every component in the design system, on one page.
+
+  Renders standalone rather than through layout.html: Task 5 is about to rewrite that shell, and
+  this page needs to stay viewable across that change. Every value below is a literal — the
+  controller resolves nothing and reaches no service, so this route is safe to leave open.
+
+  No design value is authored here. A colour, a radius or a spacing value belongs in a token or a
+  class from components.css; this file only ever names a class or hands a fragment its data.
+*/-->
+<html xmlns:th="http://www.thymeleaf.org" lang="pl">
+<head>
+    <meta charset="UTF-8"/>
+    <title>System projektowy — NAJEM</title>
+    <link rel="icon" th:href="@{/favicon.svg}" type="image/svg+xml">
+    <link rel="stylesheet" th:href="@{/css/tokens.css}"/>
+    <link rel="stylesheet" th:href="@{/css/base.css}"/>
+    <link rel="stylesheet" th:href="@{/css/components.css}"/>
+    <link rel="stylesheet" th:href="@{/css/screens.css}"/>
+</head>
+<body>
+<main class="gallery-page">
+    <h1>System projektowy</h1>
+    <p class="gallery-intro">
+        Każdy komponent biblioteki, w każdym stanie, jaki może przyjąć — łącznie ze stanami, których
+        makiety nie rysują (puste, błąd walidacji). Ekran nie odczytuje żadnych danych najemcy.
+    </p>
+
+    <!-- ═══════════════════════════ card ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Karta (card)</h2>
+        <div class="gallery-grid">
+
+            <!--/*
+              A same-file th:fragment renders its content twice -- once at the declaration site
+              and once at the th:replace call site -- regardless of whether the declaration sits
+              inside a <template> element: <template> is inert to a browser's DOM but carries no
+              meaning to the Thymeleaf engine, which still walks into it and emits its text in the
+              raw HTTP response (the bug unit.html and reports.html found and fixed). This is the
+              only place in the app that still calls components :: card(...) directly -- every
+              screen composes card's own CSS classes by hand instead (see unit.html's own note),
+              precisely to dodge this -- but the gallery's one job is to exercise every fragment
+              components.html declares, card included, so bypassing the fragment here would stop
+              testing it at all. cardBody1/cardActions1/cardFooter1/cardBody2 are gallery-only
+              demo content, not reusable across screens, so promoting them into components.html
+              (the fix used for reports.html's arrearsPill, which multiple screens call) would add
+              a component only this page ever uses. Fixed instead by wrapping each declaration in
+              a th:remove="all" element: unlike <template>, th:remove IS a Thymeleaf directive, so
+              the wrapper and everything in it is dropped from THIS template's own top-to-bottom
+              render pass. The th:replace fragment lookup below resolves ~{::cardBody1} etc.
+              against the template's parsed (unprocessed) source, not against this render pass's
+              output, so it still finds each fragment -- but the wrapper's removal means the
+              fragment's own literal text no longer also appears, orphaned, at its declaration
+              site. Proven by DesignGalleryTest's data-fragment="card" occurrence count.
+            */-->
+            <div th:remove="all">
+                <div th:fragment="cardBody1" class="card__body">
+                    <div th:replace="~{components :: keyvalue(label='Czynsz najmu', value='4 200 zł', tone=null, mono=true)}"></div>
+                    <div th:replace="~{components :: keyvalue(label='Zaległość', value='1 850 zł', tone='danger', mono=true)}"></div>
+                </div>
+                <div th:fragment="cardActions1">
+                    <div th:replace="~{components :: btn(href='#', text='Edytuj', kind='secondary')}"></div>
+                </div>
+                <div th:fragment="cardFooter1">Zaktualizowano 05.08.2026</div>
+            </div>
+            <div th:replace="~{components :: card(
+                title='Willa Ogrodowa 12',
+                meta='Warszawa, ul. Ogrodowa 12',
+                actions=~{::cardActions1},
+                body=~{::cardBody1},
+                footer=~{::cardFooter1})}"></div>
+
+            <!-- No header, no footer — the title-less / action-less / footer-less shape. -->
+            <div th:remove="all">
+                <div th:fragment="cardBody2" class="card__body">
+                    <div th:replace="~{components :: checklistItem(text='Dane najemcy uzupełnione', state='done')}"></div>
+                    <div th:replace="~{components :: checklistItem(text='Skan dowodu osobistego', state='required')}"></div>
+                </div>
+            </div>
+            <div th:replace="~{components :: card(title=null, meta=null, actions=null, body=~{::cardBody2}, footer=null)}"></div>
+
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ kpi ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Wskaźnik (kpi)</h2>
+        <!--/*
+          `kpi-row`, not the gallery's own `gallery-row`: the KPI row is a component with a
+          responsive rule of its own (four across, 2 × 2 at 768 — components.css), and a flex row of
+          loose tiles would demonstrate neither. No screen renders a KPI row yet, so this gallery is
+          the only place that reflow can be seen at all — four tiles rather than three because the
+          row is four across, and three would leave the fourth column empty, which reads as a bug in
+          the component rather than as a gallery with one fewer example.
+        */-->
+        <div class="kpi-row">
+            <div th:replace="~{components :: kpi(label='Zaległości łącznie', value='12 400 zł', caption='8 najemców', tone='danger')}"></div>
+            <div th:replace="~{components :: kpi(label='Wpłaty w tym miesiącu', value='48 900 zł', caption='+6% m/m', tone='green')}"></div>
+            <div th:replace="~{components :: kpi(label='Lokale w portfelu', value='34', caption='Warszawa i Kraków', tone=null)}"></div>
+            <div th:replace="~{components :: kpi(label='Zajętość', value='94,4%', caption='68 z 72 lokali', tone=null)}"></div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ pill ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Znacznik statusu (pill)</h2>
+        <div class="gallery-row">
+            <span th:replace="~{components :: pill(tone='danger', text='Zaległość')}"></span>
+            <span th:replace="~{components :: pill(tone='warn', text='Kończy się wkrótce')}"></span>
+            <span th:replace="~{components :: pill(tone='paid', text='Opłacone')}"></span>
+            <span th:replace="~{components :: pill(tone='neutral', text='Rezerwacja')}"></span>
+            <!-- An escalation of danger, not a fifth category — white on solid --danger. reports.html's
+                 only caller: BRIGHT_RED, a whole billing period unpaid with the art. 11 termination
+                 counter running. -->
+            <span th:replace="~{components :: pill(tone='critical', text='Cały okres bez zapłaty')}"></span>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ arrearsPill ═══════════════════════════ -->
+    <!--
+      The 19th fragment in the library, and until this round the only one absent from this page —
+      which meant nothing rendered it except the Raporty screen, and the gallery's own claim that
+      "a fragment that is not on this page is covered by nothing" was true of the one fragment whose
+      output carries a statutory consequence.
+
+      All five ArrearsColour values, passed as the enum's own names. This is the ONLY place in the
+      application that decides which tone and which words a colour gets (see the fragment's comment
+      for why a legend and a table row must not each decide), so this row is the whole mapping, side
+      by side, in one place a designer can read: GOLDEN and GREEN share `paid` by the user's own
+      decision, and BRIGHT_RED is `critical` rather than `danger` — a whole rent period unpaid with
+      the art. 11 termination counter running is not the same event as being a few days late, and
+      once shared a tone with it.
+
+      A colour is never recomputed here or anywhere else in a template; the string is passed in.
+    -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Znacznik zaległości (arrearsPill)</h2>
+        <div class="gallery-row">
+            <span th:replace="~{components :: arrearsPill(colour='GOLDEN')}"></span>
+            <span th:replace="~{components :: arrearsPill(colour='GREEN')}"></span>
+            <span th:replace="~{components :: arrearsPill(colour='YELLOW')}"></span>
+            <span th:replace="~{components :: arrearsPill(colour='RED')}"></span>
+            <span th:replace="~{components :: arrearsPill(colour='BRIGHT_RED')}"></span>
+        </div>
+        <p class="gallery-caption">
+            Kolor przychodzi z modułu księgowego i nigdy nie jest wyliczany w szablonie.
+            BRIGHT_RED oznacza cały okres rozliczeniowy bez zapłaty i biegnący termin z art. 11.
+        </p>
+    </section>
+
+    <!-- ═══════════════════════════ chip ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Chip (chip)</h2>
+        <div class="gallery-subsection">
+            <span class="gallery-subsection__label">Kształt „pill” — Funkcje, atrybuty lokalu</span>
+            <div class="gallery-row">
+                <span th:replace="~{components :: chip(text='Internet', selected=false, shape='pill')}"></span>
+                <span th:replace="~{components :: chip(text='Balkon', selected=true, shape='pill')}"></span>
+            </div>
+        </div>
+        <div class="gallery-subsection">
+            <span class="gallery-subsection__label">Kształt „choice” — wybór jednokrotny</span>
+            <div class="gallery-row">
+                <span th:replace="~{components :: chip(text='Mieszkanie', selected=true, shape='choice')}"></span>
+                <span th:replace="~{components :: chip(text='Lokal użytkowy', selected=false, shape='choice')}"></span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ btn ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Przycisk (btn)</h2>
+        <div class="gallery-row">
+            <div th:replace="~{components :: btn(href='#', text='Zapisz', kind='primary')}"></div>
+            <div th:replace="~{components :: btn(href='#', text='Podgląd', kind='secondary')}"></div>
+            <div th:replace="~{components :: btn(href='#', text='Usuń', kind='danger')}"></div>
+            <!-- href=null: a real <button type="submit">, the shape used by New property/unit/tenancy forms. -->
+            <div th:replace="~{components :: btn(href=null, text='Dodaj lokal', kind='primary')}"></div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ field / selectField ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Pole formularza (field, selectField)</h2>
+
+        <div class="gallery-grid">
+            <div th:replace="~{components :: field(name='najemca', label='Najemca', value='Jan Kowalski', type='text', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
+            <div th:replace="~{components :: field(name='email', label='E-mail', value='', type='email', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
+            <div th:replace="~{components :: field(name='pesel', label='PESEL', value='', type='text', required=false, help='Opcjonalnie, do umowy najmu okazjonalnego', suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
+            <!-- inputmode='decimal': the mobile-keyboard hint a money field wants, demonstrated here
+                 since this is a state the fragment supports and design.html's own charter is that
+                 every such state appears here. -->
+            <div th:replace="~{components :: field(name='czynsz', label='Czynsz bazowy', value='4200', type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+            <div th:replace="~{components :: field(name='kaucja', label='Kaucja', value='abc', type='text', required=true, help=null, suffix='zł', error='Kaucja musi być liczbą', inputmode=null, placeholder=null, autofocus=false)}"></div>
+        </div>
+
+        <!--/*
+          Not in the handoff — base.css's :focus-visible rule is the real thing; this pair exists so
+          a reviewer can compare the two directly. Left field: a static reproduction, composed from
+          the same --focus-ring / --accent-green tokens (see screens.css), not a copied value. Right
+          field: undecorated — tab into it to see the genuine focus ring next to its imitation.
+        */-->
+        <div class="gallery-subsection">
+            <span class="gallery-subsection__label">
+                Fokus — po lewej: statyczne odwzorowanie :focus-visible; po prawej: prawdziwy fokus (Tab)
+            </span>
+            <div class="gallery-row">
+                <div class="field-focus-demo">
+                    <div th:replace="~{components :: field(name='demoFokus', label='Kwota czynszu', value='4200', type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+                </div>
+                <div th:replace="~{components :: field(name='demoTab', label='Kwota czynszu', value='4200', type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+            </div>
+        </div>
+
+        <div class="gallery-grid">
+            <div th:replace="~{components :: selectField(name='typUmowy', label='Typ umowy', options=${ {'Najem okazjonalny','Najem zwykły','Podnajem'} }, selected='Najem okazjonalny', required=false, help=null, error=null)}"></div>
+            <div th:replace="~{components :: selectField(name='rodzajLokalu', label='Rodzaj lokalu', options=${ {'Mieszkanie','Lokal użytkowy','Miejsce postojowe'} }, selected=null, required=true, help=null, error=null)}"></div>
+            <div th:replace="~{components :: selectField(name='zasadaKaucji', label='Zasada zwrotu kaucji', options=${ {'Pełny zwrot','Potrącenie zaległości','Indywidualnie'} }, selected='Pełny zwrot', required=false, help='Widoczne tylko dla administratora', error=null)}"></div>
+            <div th:replace="~{components :: selectField(name='statusLokalu', label='Status lokalu', options=${ {'Wolny','Zarezerwowany','Wynajęty'} }, selected=null, required=true, help=null, error='Wybierz status lokalu')}"></div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ avatar ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Awatar (avatar)</h2>
+        <div class="gallery-row">
+            <div th:replace="~{components :: avatar(initials='JK', size=24)}"></div>
+            <div th:replace="~{components :: avatar(initials='AN', size=28)}"></div>
+            <div th:replace="~{components :: avatar(initials='MP', size=30)}"></div>
+            <!-- Blank initials — the sidebar footer / owner rail's bare filled circle. -->
+            <div th:replace="~{components :: avatar(initials=null, size=36)}"></div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ keyvalue ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Wiersz klucz/wartość (keyvalue)</h2>
+        <div class="gallery-subsection">
+            <div th:replace="~{components :: keyvalue(label='Czynsz najmu', value='4 200 zł', tone=null, mono=true)}"></div>
+            <div th:replace="~{components :: keyvalue(label='Zaległość', value='1 850 zł', tone='danger', mono=true)}"></div>
+            <div th:replace="~{components :: keyvalue(label='Należne właścicielowi', value='6 050 zł', tone='total', mono=true)}"></div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ checklistItem ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Pozycja listy „Jeszcze wymagane” (checklistItem)</h2>
+        <div class="gallery-subsection">
+            <div th:replace="~{components :: checklistItem(text='Dane najemcy uzupełnione', state='done')}"></div>
+            <div th:replace="~{components :: checklistItem(text='Skan dowodu osobistego', state='required')}"></div>
+            <div th:replace="~{components :: checklistItem(text='Numer telefonu poręczyciela', state='optional')}"></div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ progressBar ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Pasek postępu (progressBar)</h2>
+        <div th:replace="~{components :: progressBar(segments=${ {
+            {'pct':55,'tone':'green'},
+            {'pct':20,'tone':'warn'},
+            {'pct':10,'tone':'danger'} } })}"></div>
+        <p class="gallery-caption">Przykład: 55% opłacone, 20% w trakcie, 10% zaległe, reszta nierozliczona.</p>
+    </section>
+
+    <!-- ═══════════════════════════ railItem ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Pozycja osi czasu (railItem)</h2>
+        <div class="gallery-subsection">
+            <div th:replace="~{components :: railItem(title='Podpisanie umowy', subline='Jan Kowalski', date='01.08.2026', tone='green', filled=true)}"></div>
+            <div th:replace="~{components :: railItem(title='Płatność czynszu', subline='4 200 zł', date='10.08.2026', tone='warn', filled=false)}"></div>
+            <!-- No subline, no date — the columns simply collapse to zero width. -->
+            <div th:replace="~{components :: railItem(title='Koniec najmu', subline=null, date=null, tone='neutral', filled=false)}"></div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ microLabel ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Nagłówek mikro (microLabel)</h2>
+        <div class="gallery-row">
+            <span th:replace="~{components :: microLabel(text='IDENTYFIKACJA')}"></span>
+            <span th:replace="~{components :: microLabel(text='ROZLICZENIA')}"></span>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ tabs ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Zakładki (tabs)</h2>
+        <nav th:replace="~{components :: tabs(items=${ {
+            {'label':'Podsumowanie','href':'#'},
+            {'label':'Rozliczenia','href':'#'},
+            {'label':'Historia','href':'#'} } }, active='Podsumowanie')}"></nav>
+    </section>
+
+    <!-- ═══════════════════════════ breadcrumb ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Ścieżka nawigacji (breadcrumb)</h2>
+        <nav th:replace="~{components :: breadcrumb(items=${ {'Nieruchomości','Warszawa, ul. Polna 4','Lokal 12'} })}"></nav>
+    </section>
+
+    <!-- ═══════════════════════════ emptyState ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Stan pusty (emptyState)</h2>
+        <div th:replace="~{components :: emptyState(text='Brak zaległości w tym miesiącu')}"></div>
+    </section>
+
+    <!-- ═══════════════════════════ tableHead ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Tabela (tableHead)</h2>
+
+        <div class="gallery-subsection">
+            <span class="gallery-subsection__label">Z wierszami</span>
+            <div class="gallery-table gallery-table-cols">
+                <div th:replace="~{components :: tableHead(columns=${ {'Najemca','Lokal','Czynsz','Status'} }, gridClass='gallery-table-cols')}"></div>
+                <div class="table__row">
+                    <span>Jan Kowalski</span>
+                    <span>Ogrodowa 12 / 3</span>
+                    <span class="mono">4 200 zł</span>
+                    <span th:replace="~{components :: pill(tone='paid', text='Opłacone')}"></span>
+                </div>
+                <div class="table__row">
+                    <span>Anna Nowak</span>
+                    <span>Polna 4 / 1</span>
+                    <span class="mono">3 100 zł</span>
+                    <span th:replace="~{components :: pill(tone='danger', text='Zaległość')}"></span>
+                </div>
+                <div class="table__row">
+                    <span>Marek Pawlak</span>
+                    <span>Słoneczna 8 / 5</span>
+                    <span class="mono">2 750 zł</span>
+                    <span th:replace="~{components :: pill(tone='warn', text='Kończy się wkrótce')}"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="gallery-subsection">
+            <span class="gallery-subsection__label">Pusta — brak wierszy</span>
+            <div class="gallery-table gallery-table-cols">
+                <div th:replace="~{components :: tableHead(columns=${ {'Najemca','Lokal','Czynsz','Status'} }, gridClass='gallery-table-cols')}"></div>
+                <div th:replace="~{components :: emptyState(text='Brak najemców do wyświetlenia')}"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ stepRail ═══════════════════════════ -->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Oś kroków (stepRail)</h2>
+        <div class="gallery-row">
+            <div class="gallery-subsection">
+                <span class="gallery-subsection__label">Pierwszy krok aktywny</span>
+                <nav th:replace="~{components :: stepRail(
+                         steps=${ {{'title':'Strony umowy','subline':'Najemcy i poręczyciele'},
+                                   {'title':'Warunki','subline':'Forma, okres, czynsz'}} },
+                         current=1)}"></nav>
+            </div>
+            <div class="gallery-subsection">
+                <span class="gallery-subsection__label">Drugi krok aktywny, pierwszy ukończony</span>
+                <nav th:replace="~{components :: stepRail(
+                         steps=${ {{'title':'Strony umowy','subline':'Najemcy i poręczyciele'},
+                                   {'title':'Warunki','subline':'Forma, okres, czynsz'}} },
+                         current=2)}"></nav>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════ nie zaprojektowane ═══════════════════════════ -->
+    <!--/*
+      What the handoff names but does not draw, and this gallery therefore does not show. Listed
+      explicitly so a reader looking for a loading state or the overlap-check panel finds out here
+      that it does not exist, rather than concluding the gallery is incomplete or improvising one
+      per screen. Do not build any of these from this note — they stay undesigned until the
+      handoff draws them.
+    */-->
+    <section class="gallery-section">
+        <h2 class="gallery-section__title">Nie zaprojektowane</h2>
+        <ul class="gallery-undesigned">
+            <li>Stan ładowania (loading) — żaden ekran makiety go nie pokazuje.</li>
+            <li>Blokujący panel błędu nakładania się terminów (overlap) — makieta go nazywa, ale nie rysuje; to nie jest to samo co błąd pojedynczego pola powyżej.</li>
+            <li>Zachowanie responsywne poniżej szerokości 768px. 768 to podłoga makiety; trzy zakresy powyżej niej są narysowane i wdrożone.</li>
+        </ul>
+    </section>
+
+</main>
+</body>
+</html>

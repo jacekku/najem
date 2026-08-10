@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Rezerwacja — NAJEM', null, ~{::main})}">
+<body>
+<main>
+    <!--/*
+      Not the breadcrumb fragment: this screen has one real, working link back to the unit
+      (the original screen's "← Lokal"), and the fragment's own contract is deliberately
+      unlinked plain text (components.html, "wiring real navigation onto it is a Task 5/6
+      concern") — dropping the working link to stay literally inside the fragment call would be
+      a navigation regression nothing tests but everybody would notice (unit.html's own note).
+      Reuses the breadcrumb's CSS class rather than inventing a new one.
+    */-->
+    <nav class="breadcrumb">
+        <a th:href="@{/units/{id}(id=${unit.unitId()})}">← Lokal</a>
+    </nav>
+    <h1 th:text="'Rezerwacja: ' + ${unit.name()}">—</h1>
+
+    <!--/*
+      A genuine two-step flow — this screen, then reserve-terms.html — unlike property-new.html and
+      unit-new.html, which this app does not implement as wizards at all. The rail itself is
+      components :: stepRail — promoted there once property-new.html's two phases and both
+      reserve-*.html screens made it three identical copies (screens.css's own "a second screen
+      wants this" rule, tripped for the third time).
+    */-->
+    <div class="grid--steprail">
+        <nav th:replace="~{components :: stepRail(
+                 steps=${ {{'title':'Strony umowy','subline':'Najemcy i poręczyciele'},
+                           {'title':'Warunki','subline':'Forma, okres, czynsz'}} },
+                 current=1)}"></nav>
+
+        <div class="step-rail__content">
+            <section class="card">
+                <header class="card__head"><h2 class="card__title">Najemcy</h2></header>
+                <div class="card__body">
+                    <ul class="party-list">
+                        <li class="party-list__row">
+                            <span th:text="${lead.fullName()}">—</span>
+                            <span class="muted">(zgłoszenie — nie można usunąć)</span>
+                        </li>
+                        <!--/*
+                          party.others() is this role's list with this party removed, built in the
+                          controller. Doing it here as ${tenantIds.?[#this != party.contactId()]}
+                          does not work: a SpringEL selection rebinds the root to each element, so
+                          `party` resolved against a UUID and the whole screen threw as soon as
+                          anybody was in the list.
+                        */-->
+                        <li class="party-list__row" th:each="party : ${tenants}">
+                            <span th:text="${party.details().givenName()} + ' ' + ${party.details().surname()}">—</span>
+                            <a th:href="@{/units/{u}/reserve(u=${unit.unitId()}, interestId=${interestId},
+                                         tenant=${party.others()}, guarantor=${guarantorIds},
+                                         role=${role})}">Usuń</a>
+                        </li>
+                    </ul>
+
+                    <p class="muted" th:if="${role != 'tenant'}">
+                        <a th:href="@{/units/{u}/reserve(u=${unit.unitId()}, interestId=${interestId},
+                                     tenant=${tenantIds}, guarantor=${guarantorIds}, role='tenant')}">Dodaj kolejnego najemcę</a>
+                    </p>
+
+                    <!--/*
+                      The search-then-create block appears once, under whichever role the manager is
+                      currently adding to. It comes from parties-form.html rather than a fragment
+                      declared in this file: an inline fragment is part of this document and renders
+                      where it sits as well as where it is inserted, which put a second, unlabelled
+                      copy of the picker below the Dalej button.
+                    */-->
+                    <div th:if="${role == 'tenant'}" th:insert="~{parties-form :: partiesForm}"></div>
+                </div>
+            </section>
+
+            <section class="card">
+                <header class="card__head"><h2 class="card__title">Poręczyciele</h2></header>
+                <div class="card__body">
+                    <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+                    <div th:if="${guarantors.isEmpty()}">
+                        <div th:replace="~{components :: emptyState(text='Nikt jeszcze nie poręcza tej umowy.')}"></div>
+                    </div>
+
+                    <ul class="party-list" th:unless="${guarantors.isEmpty()}">
+                        <li class="party-list__row" th:each="party : ${guarantors}">
+                            <span th:text="${party.details().givenName()} + ' ' + ${party.details().surname()}">—</span>
+                            <a th:href="@{/units/{u}/reserve(u=${unit.unitId()}, interestId=${interestId},
+                                         tenant=${tenantIds}, guarantor=${party.others()},
+                                         role=${role})}">Usuń</a>
+                        </li>
+                    </ul>
+
+                    <p class="muted" th:if="${role != 'guarantor'}">
+                        <a th:href="@{/units/{u}/reserve(u=${unit.unitId()}, interestId=${interestId},
+                                     tenant=${tenantIds}, guarantor=${guarantorIds}, role='guarantor')}">Dodaj poręczyciela</a>
+                    </p>
+
+                    <div th:if="${role == 'guarantor'}" th:insert="~{parties-form :: partiesForm}"></div>
+                </div>
+            </section>
+
+            <div class="form-actions">
+                <div th:replace="~{components :: btn(href=@{/units/{u}/reserve(u=${unit.unitId()}, interestId=${interestId},
+                             tenant=${tenantIds}, guarantor=${guarantorIds}, role=${role})} + '&parties=done', text='Dalej', kind='primary')}"></div>
+            </div>
+        </div>
+    </div>
+</main>
+</body>
+</html>

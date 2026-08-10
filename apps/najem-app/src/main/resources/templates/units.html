@@ -1,26 +1,53 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Lokale — NAJEM', ~{::main})}">
+      th:replace="~{layout :: page('Lokale — NAJEM', ~{::header.pagebar__content}, ~{::main})}">
 <body>
+<!--/*
+  Property detail's header block, bounded: no address/area/build-year subtitle, no photo
+  placeholder and no tab strip, because none of that data — or those routes — exist here.
+  UnitsScreenController's own TODO notes this screen doesn't yet confirm the caller owns the
+  property, so a real property name is not even safe to trust; the breadcrumb names the
+  section, not this specific building.
+
+  The breadcrumb moves into the band with the title it belongs to, above it rather than beside it —
+  the handoff draws a detail screen's trail as part of its header, and left in <main> it would sit
+  on the grey page above a white band that starts with the title it introduces.
+*/-->
+<header class="pagebar__content">
+    <div class="pagebar__titles">
+        <nav th:replace="~{components :: breadcrumb(items=${ {'Nieruchomości'} })}"></nav>
+        <h1>Lokale</h1>
+    </div>
+    <div class="pagebar__actions">
+        <div th:replace="~{components :: btn(href=@{/properties/{p}/units/new(p=${propertyId})}, text='Dodaj lokal', kind='primary')}"></div>
+    </div>
+</header>
 <main>
-    <h1>Lokale</h1>
 
-    <p class="empty" th:if="${units.isEmpty()}">
-        Ta nieruchomość nie ma jeszcze żadnych lokali.
-    </p>
+    <p class="note" th:if="${added != null}" th:text="'Dodano lokal ' + ${added} + '.'">—</p>
 
-    <table class="board" th:unless="${units.isEmpty()}">
-        <thead>
-        <tr>
-            <th>Lokal</th>
-            <th class="amount">Czynsz bazowy</th>
-            <th>Ogłoszenie</th>
-            <th>Najem</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr th:each="unit : ${units}">
-            <td th:text="${unit.name()}">—</td>
+    <ul class="warnings" th:if="${warnings != null and !warnings.isEmpty()}">
+        <li th:each="warning : ${warnings}" th:text="${warning}">—</li>
+    </ul>
+
+    <!--/*
+      Units-table anatomy from Property detail, on this app's real four columns (Unit/Area/
+      Tenant/Lease ends/Rent/Status don't exist here — Lokal/Czynsz bazowy/Ogłoszenie/Najem do).
+      A plain `.card` wrapper for the same reason as properties.html: no title/actions/footer to
+      give the card fragment, and tableHead/table__row already carry their own edge padding.
+    */-->
+    <div class="card units-table">
+        <!--/* Head and rows scroll together — see properties.html's own note on why. */-->
+        <div class="table-scroll">
+        <div th:replace="~{components :: tableHead(columns=${ {'Lokal','Czynsz bazowy','Ogłoszenie','Najem'} }, gridClass='units-table')}"></div>
+
+        <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
+        <div th:if="${units.isEmpty()}">
+            <div th:replace="~{components :: emptyState(text='Ta nieruchomość nie ma jeszcze żadnych lokali.')}"></div>
+        </div>
+
+        <div class="table__row" th:each="unit : ${units}">
+            <a th:href="@{/units/{id}(id=${unit.unitId()})}" th:text="${unit.name()}">—</a>
             <!--/*
               The format is STATED, not inherited. Thymeleaf's default takes grouping and the
               decimal separator from the server's locale, so the same code renders 2,500.00 on one
@@ -28,8 +55,8 @@
               the locale (@najem-fakebank, najem-build seq 347). That is the systemDefaultZone()
               defect wearing a template's clothes. Polish convention, matching the bank UI.
             */-->
-            <td class="amount"
-                th:text="${#numbers.formatDecimal(unit.baseRent(), 1, 'WHITESPACE', 2, 'COMMA')}">—</td>
+            <span class="mono"
+                  th:text="${#numbers.formatDecimal(unit.baseRent(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
             <!--/*
               This column is about MARKETING, not occupancy, and the two must not be merged
               (najem-pm's ruling, carried into RUNNING.md at d006c90): a let unit is legitimately
@@ -38,27 +65,29 @@
               invites exactly the reading that a let flat is standing empty.
 
               Still three states, not two: never advertised is not the same as deliberately
-              withdrawn. The projection decides which; this only labels it.
+              withdrawn. The projection decides which; this only labels it. Colour tone is
+              decoration only — every branch below still carries its own Polish word.
+
+              Nested one level deeper than a bare th:case + th:replace: components.html's own
+              card-fragment comment records that th:replace resolves before th:if/th:switch/
+              th:case get a chance to guard it, so the guard and the replace cannot share a tag.
             */-->
-            <td>
-                <span class="state" th:classappend="'state--' + ${unit.marketState()}"
-                      th:switch="${unit.marketState()}">
-                    <span th:case="'open'">Ogłoszony</span>
-                    <span th:case="'closed'">Wycofany z oferty</span>
-                    <span th:case="'inventory'">Nieogłoszony</span>
-                    <span th:case="*" th:text="${unit.marketState()}">—</span>
-                </span>
-            </td>
-            <td>
+            <span th:switch="${unit.marketState()}">
+                <span th:case="'open'"><span th:replace="~{components :: pill(tone='paid', text='Ogłoszony')}"></span></span>
+                <span th:case="'closed'"><span th:replace="~{components :: pill(tone='neutral', text='Wycofany z oferty')}"></span></span>
+                <span th:case="'inventory'"><span th:replace="~{components :: pill(tone='neutral', text='Nieogłoszony')}"></span></span>
+                <span th:case="*"><span th:replace="~{components :: pill(tone='neutral', text=${unit.marketState()})}"></span></span>
+            </span>
+            <span>
                 <a th:if="${unit.currentTenancyId() != null}"
                    th:href="@{/tenancies/{id}/timeline(id=${unit.currentTenancyId()})}">Najem bieżący</a>
-                <span th:if="${unit.currentTenancyId() == null}" class="vacant">Pustostan</span>
-                <a th:if="${unit.nextTenancyId() != null}" class="upcoming"
+                <span th:if="${unit.currentTenancyId() == null}" class="faint-note">Pustostan</span>
+                <a th:if="${unit.nextTenancyId() != null}"
                    th:href="@{/tenancies/{id}/timeline(id=${unit.nextTenancyId()})}">· nadchodzący</a>
-            </td>
-        </tr>
-        </tbody>
-    </table>
+            </span>
+        </div>
+        </div>
+    </div>
 </main>
 </body>
 </html>

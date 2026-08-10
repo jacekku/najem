@@ -1,0 +1,19 @@
+/*
+  Deliberately broken. Exists so StylesheetHygieneTest.noMediaQuerySitsOutsideALayer is known to
+  still bite; a clean real tree proves nothing on its own (refactoring.md rule 20).
+
+  One violation: the @media below sits outside every @layer, so its declaration outranks
+  @layer components at any specificity. The layered block above it is correct and is here so the
+  scanner has to distinguish the two rather than flagging any file containing @media at all.
+*/
+@layer components {
+  .fixture-card { padding: 18px; }
+
+  @media (max-width: 1023px) {
+    .fixture-card { padding: 14px; }
+  }
+}
+
+@media (max-width: 767px) {
+  .fixture-card { padding: 10px; }
+}

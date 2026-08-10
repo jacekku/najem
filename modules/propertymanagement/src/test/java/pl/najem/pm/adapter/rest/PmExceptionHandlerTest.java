@@ -2,6 +2,10 @@ package pl.najem.pm.adapter.rest;
 
 import org.junit.jupiter.api.Test;
 import pl.najem.pm.domain.OverlappingTenancyException;
+import pl.najem.pm.domain.TenancyPeriod;
+
+import java.time.LocalDate;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,7 +19,10 @@ class PmExceptionHandlerTest {
      */
     @Test
     void overlappingReservationIsAConflictNotAServerError() {
-        var response = handler.handle(new OverlappingTenancyException("overlaps tenancy X"));
+        // The blocking period is not optional on this exception: nothing can overlap nothing, and a
+        // message-only constructor would let blocking() return null for a caller to trip over.
+        var response = handler.handle(new OverlappingTenancyException("overlaps tenancy X",
+            new TenancyPeriod(UUID.randomUUID(), LocalDate.of(2026, 9, 1), LocalDate.of(2027, 8, 31))));
 
         assertThat(response.getStatusCode().value()).isEqualTo(409);
         assertThat(response.getBody()).containsEntry("error", "overlaps tenancy X");

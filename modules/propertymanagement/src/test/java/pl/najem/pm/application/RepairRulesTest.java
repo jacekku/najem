@@ -38,7 +38,7 @@ class RepairRulesTest {
         portfolio = new PortfolioService(store, new InMemoryPortfolioProjection());
         service = new RepairService(store, repairs, portfolio);
         propertyId = portfolio.createProperty(agency, "Testowa 1, Kraków",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         unitId = portfolio.addUnit(agency, propertyId, "M1", new BigDecimal("2500"));
     }
 
@@ -134,7 +134,7 @@ class RepairRulesTest {
     void oneAgencysOpenRepairsAreNotAnothers() {
         reportOnUnit();
         var theirProperty = portfolio.createProperty(stranger, "Cudza 9",
-            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100"))));
+            List.of(new Owner(UUID.randomUUID(), new BigDecimal("100")))).propertyId();
         service.report(stranger, RepairScope.PROPERTY, theirProperty, "their roof", null,
             StatutoryDutyHint.TENANT, LocalDate.of(2026, 8, 1));
 
