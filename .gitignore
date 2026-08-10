@@ -16,3 +16,7 @@ out/
 
 # Subagent-driven-development scratch: ledgers, briefs, review packages. Git history is the record.
 .superpowers/
+
+# macOS Finder metadata. Written into any directory the Finder merely looks at, so it appears
+# without anyone touching the repository and shows up as untracked noise in every status.
+.DS_Store
