@@ -1,6 +1,7 @@
 package pl.najem.pm.application;
 
 import pl.najem.pm.domain.EndReason;
+import pl.najem.pm.domain.LegalForm;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.PartyRole;
 import pl.najem.pm.domain.ReserveTenancy;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 
 /**
  * {@link TenancyProjection}, {@link AttentionListsProjection} and {@link TenancyBoardProjection}
@@ -36,8 +38,12 @@ import java.util.function.UnaryOperator;
 public class InMemoryTenancies
     implements TenancyProjection, AttentionListsProjection, TenancyBoardProjection {
 
+    /** Column for column with pm_tenancy, and in its order — {@code legal_form} sits between the
+     *  dates and the amount there, so it does here. A fake missing a column the table has cannot
+     *  fail a read of it (rule 13), which is what carrying the whole row prevents. */
     public record Row(UUID tenancyId, UUID workspaceId, UUID unitId, LocalDate startDate,
-                      LocalDate endDate, BigDecimal monthlyTotal, MonthlyAmount.Breakdown breakdown,
+                      LocalDate endDate, LegalForm legalForm, BigDecimal monthlyTotal,
+                      MonthlyAmount.Breakdown breakdown,
                       boolean componentSplit, Integer rentDay, BigDecimal depositAmount,
                       String paymentReference, Tenancy.State state, LocalDate activatedOn,
                       LocalDate insuranceValidTo, EndReason endReason) {}
@@ -57,7 +63,7 @@ public class InMemoryTenancies
     @Override
     public void tenancyReserved(ReserveTenancy c) {
         var row = new Row(c.tenancyId(), c.workspaceId(), c.unitId(), c.startDate(),
-            c.term().endDate(), c.monthly().total(), c.monthly().breakdown(),
+            c.term().endDate(), c.legalForm(), c.monthly().total(), c.monthly().breakdown(),
             c.monthly().componentSplitInContract(), c.rentDay(), c.depositAmount(),
             c.paymentReference(), Tenancy.State.RESERVED, null, null, null);
         if (rows.putIfAbsent(c.tenancyId(), row) != null) {
@@ -100,7 +106,7 @@ public class InMemoryTenancies
     @Override
     public void ended(UUID tenancyId, UUID workspaceId, EndReason reason) {
         update(tenancyId, workspaceId, row -> new Row(row.tenancyId(), row.workspaceId(),
-            row.unitId(), row.startDate(), row.endDate(), row.monthlyTotal(), row.breakdown(),
+            row.unitId(), row.startDate(), row.endDate(), row.legalForm(), row.monthlyTotal(), row.breakdown(),
             row.componentSplit(), row.rentDay(), row.depositAmount(), row.paymentReference(),
             Tenancy.State.ENDED, row.activatedOn(), row.insuranceValidTo(), reason));
     }
@@ -108,7 +114,7 @@ public class InMemoryTenancies
     @Override
     public void activated(UUID tenancyId, UUID workspaceId, LocalDate on) {
         update(tenancyId, workspaceId, row -> new Row(row.tenancyId(), row.workspaceId(),
-            row.unitId(), row.startDate(), row.endDate(), row.monthlyTotal(), row.breakdown(),
+            row.unitId(), row.startDate(), row.endDate(), row.legalForm(), row.monthlyTotal(), row.breakdown(),
             row.componentSplit(), row.rentDay(), row.depositAmount(), row.paymentReference(),
             Tenancy.State.ACTIVE, on, row.insuranceValidTo(), row.endReason()));
     }
@@ -116,7 +122,7 @@ public class InMemoryTenancies
     @Override
     public void rentChanged(UUID tenancyId, UUID workspaceId, MonthlyAmount monthly) {
         update(tenancyId, workspaceId, row -> new Row(row.tenancyId(), row.workspaceId(),
-            row.unitId(), row.startDate(), row.endDate(), monthly.total(), monthly.breakdown(),
+            row.unitId(), row.startDate(), row.endDate(), row.legalForm(), monthly.total(), monthly.breakdown(),
             monthly.componentSplitInContract(), row.rentDay(), row.depositAmount(),
             row.paymentReference(), row.state(), row.activatedOn(), row.insuranceValidTo(),
             row.endReason()));
@@ -126,7 +132,7 @@ public class InMemoryTenancies
     public void detailsCorrected(UUID tenancyId, UUID workspaceId, String paymentReference,
                                  Integer rentDay, LocalDate startDate, BigDecimal monthlyTotal) {
         update(tenancyId, workspaceId, row -> new Row(row.tenancyId(), row.workspaceId(),
-            row.unitId(), startDate, row.endDate(), monthlyTotal, row.breakdown(),
+            row.unitId(), startDate, row.endDate(), row.legalForm(), monthlyTotal, row.breakdown(),
             row.componentSplit(), rentDay, row.depositAmount(), paymentReference, row.state(),
             row.activatedOn(), row.insuranceValidTo(), row.endReason()));
     }
@@ -134,7 +140,7 @@ public class InMemoryTenancies
     @Override
     public void insuranceExpirySet(UUID tenancyId, UUID workspaceId, LocalDate validTo) {
         update(tenancyId, workspaceId, row -> new Row(row.tenancyId(), row.workspaceId(),
-            row.unitId(), row.startDate(), row.endDate(), row.monthlyTotal(), row.breakdown(),
+            row.unitId(), row.startDate(), row.endDate(), row.legalForm(), row.monthlyTotal(), row.breakdown(),
             row.componentSplit(), row.rentDay(), row.depositAmount(), row.paymentReference(),
             row.state(), row.activatedOn(), validTo, row.endReason()));
     }
@@ -168,22 +174,78 @@ public class InMemoryTenancies
      */
     @Override
     public List<TenancyBoardRow> forWorkspace(UUID workspaceId) {
-        return rows.values().stream()
-            .filter(row -> row.workspaceId().equals(workspaceId))
-            .filter(row -> row.state() != Tenancy.State.CANCELLED)
-            .filter(row -> row.endReason() != EndReason.ERROR_ANNULLED)
-            .sorted(Comparator.comparing(Row::startDate, Comparator.reverseOrder()))
+        return register(workspaceId)
+            .sorted(Comparator.comparing(TenancyBoardRow::startDate, Comparator.reverseOrder()))
+            .toList();
+    }
+
+    /**
+     * One tenancy, found the way the statement finds it: the SAME predicate set as the register,
+     * plus an equality on the id.
+     *
+     * <p>Written through the shared {@link #scope} stream rather than as its own set of filters,
+     * because the mechanism being modelled is the adapter's shared {@code SCOPE} — the two reads
+     * there select different columns but share that tail verbatim, so two independent filter chains
+     * here could agree with each other today and drift the moment an exclusion is added to one of
+     * them. That drift is exactly what a fake is unable to catch once it has restated the outcome
+     * rather than the mechanism (refactoring rule 14).
+     *
+     * <p>So a CANCELLED or ERROR_ANNULLED tenancy is empty here, not present-but-marked, and a
+     * tenancy in another workspace is empty rather than found — the undifferentiated answer the
+     * port's javadoc requires.
+     */
+    @Override
+    public Optional<TenancyDetailRow> forTenancy(UUID workspaceId, UUID tenancyId) {
+        return scope(workspaceId)
+            .filter(row -> row.tenancyId().equals(tenancyId))
+            .flatMap(row -> portfolio.unit(row.unitId()).stream()
+                .flatMap(unit -> portfolio.property(unit.propertyId()).stream()
+                    .map(property -> new TenancyDetailRow(row.tenancyId(), row.unitId(),
+                        unit.name(), property.address(), row.state(), row.startDate(),
+                        row.endDate(), row.legalForm(), row.monthlyTotal(),
+                        row.breakdown() == null ? null : row.breakdown().rent(),
+                        row.breakdown() == null ? null : row.breakdown().adminFee(),
+                        row.breakdown() == null ? null : row.breakdown().mediaAdvance(),
+                        row.componentSplit(), row.rentDay(), row.depositAmount(),
+                        row.paymentReference(), partiesOf(row.tenancyId(), PartyRole.TENANT),
+                        partiesOf(row.tenancyId(), PartyRole.GUARANTOR)))))
+            .findFirst();
+    }
+
+    /**
+     * The register's rows, unordered: same INNER join onto pm_unit and pm_property the attention
+     * lists use, so a tenancy whose unit row is missing is absent here too — and the same two
+     * exclusions the statement carries: a called-off reservation (CANCELLED) and a tenancy that
+     * should never have existed (ERROR_ANNULLED) both drop out, while every genuine ending stays.
+     *
+     * <p>The tenant ids come out sorted, because the SQL aggregates them
+     * {@code order by pa.contact_id}. An unordered fake would let a caller depend on insertion
+     * order and pass here while the database handed it something else.
+     */
+    private Stream<TenancyBoardRow> register(UUID workspaceId) {
+        return scope(workspaceId)
             .flatMap(row -> portfolio.unit(row.unitId()).stream()
                 .flatMap(unit -> portfolio.property(unit.propertyId()).stream()
                     .map(property -> new TenancyBoardRow(row.tenancyId(), row.unitId(), unit.name(),
                         property.address(), row.state(), row.startDate(), row.endDate(),
-                        row.monthlyTotal(), tenantsOf(row.tenancyId())))))
-            .toList();
+                        row.monthlyTotal(), partiesOf(row.tenancyId(), PartyRole.TENANT)))));
     }
 
-    private List<UUID> tenantsOf(UUID tenancyId) {
+    /**
+     * The adapter's {@code SCOPE}: this workspace, minus the two exclusions. Both board reads start
+     * here and neither restates it — see {@link #forTenancy} for why that matters.
+     */
+    private Stream<Row> scope(UUID workspaceId) {
+        return rows.values().stream()
+            .filter(row -> row.workspaceId().equals(workspaceId))
+            .filter(row -> row.state() != Tenancy.State.CANCELLED)
+            .filter(row -> row.endReason() != EndReason.ERROR_ANNULLED);
+    }
+
+    /** {@code array_agg(pa.contact_id order by pa.contact_id) … where pa.role = ?}, in Java. */
+    private List<UUID> partiesOf(UUID tenancyId, PartyRole role) {
         return parties.keySet().stream()
-            .filter(key -> key.tenancyId().equals(tenancyId) && key.role() == PartyRole.TENANT)
+            .filter(key -> key.tenancyId().equals(tenancyId) && key.role() == role)
             .map(PartyKey::contactId)
             .sorted()
             .toList();
@@ -210,7 +272,8 @@ public class InMemoryTenancies
 
     private static Row withState(Row row, Tenancy.State state) {
         return new Row(row.tenancyId(), row.workspaceId(), row.unitId(), row.startDate(),
-            row.endDate(), row.monthlyTotal(), row.breakdown(), row.componentSplit(), row.rentDay(),
+            row.endDate(), row.legalForm(), row.monthlyTotal(), row.breakdown(),
+            row.componentSplit(), row.rentDay(),
             row.depositAmount(), row.paymentReference(), state, row.activatedOn(),
             row.insuranceValidTo(), row.endReason());
     }

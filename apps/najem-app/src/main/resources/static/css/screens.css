@@ -598,4 +598,333 @@
   /* parties-form.html's search-then-create block, inserted into reserve-parties.html's existing
      Najemcy/Poręczyciele cards — a plain flex column, not a second nested `.card`. */
   .lead { display: flex; flex-direction: column; gap: 14px; }
+
+  /* ──────────────────────────────────────────────────────────────────────────────────────────
+     unit.html — the five-tab unit detail.
+
+     Everything from here down belongs to one screen, which is what this file is for. Two things
+     were promoted OUT of here on the way and are worth knowing about: `.btn--unbuilt` went to
+     components.css because it changes a button's anatomy rather than where one sits, and the tab
+     strip itself was already a component (`.tabs`) before this screen existed.
+     ────────────────────────────────────────────────────────────────────────────────────────── */
+
+  /* One tab's worth of content. The strip is a sibling above it, so the gap here is what separates
+     the strip from the first card as well as the cards from each other. */
+  .unit-tab { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+
+  /*
+    "dane poglądowe" — this card's contents come from UnitDetailFake and are invented.
+
+    It exists because real and invented sit side by side on this screen and a reader cannot tell
+    them apart by looking. The Konto card is the case that forced it: its header saldo is
+    accounting's real figure and the lines beneath it are made up, so the two openly contradict
+    each other. Without the flag that reads as an arithmetic bug in the ledger; with it, it reads
+    as what it is.
+
+    Deliberately quiet — a dotted outline and muted text, not a warning colour. It marks
+    provenance, not a problem, and a card of red badges would make the screen look broken when it
+    is only unfinished. Every one of these disappears with the widget's read side.
+  */
+  .demo-flag {
+    border: 1px dashed var(--border-control);
+    border-radius: var(--r-pill);
+    padding: 1px 8px;
+    font-size: 10px;
+    color: var(--text-placeholder);
+    white-space: nowrap;
+  }
+
+  /* The Oś czasu chips. The chip fragment is a <span> — a shape, not a control — so navigation is
+     the wrapping link's job, and this only has to stop the anchor from underlining the chip. */
+  .chip-link { text-decoration: none; }
+
+  /*
+    The occupancy band: who lived here, as a proportion of the drawn period.
+
+    Widths come from the template as a runtime percentage (the one thing a th:style may carry), so
+    this sets everything except width. `min-width: 0` on the spans is what lets a 4% gap shrink
+    below its label instead of pushing the band past 100%.
+  */
+  .occupancy-band { display: flex; gap: 3px; height: 38px; }
+  .occupancy-band__span {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding: 0 11px;
+    border-radius: var(--r-bar);
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--bg-surface);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  /* Not a fifth tone: the band's ends are rounded and its middle is not, which is a property of
+     position rather than of what the segment means. */
+  .occupancy-band__span:not(:first-child):not(:last-child) { border-radius: 0; }
+  .occupancy-band__span:first-child { border-radius: var(--r-bar) 0 0 var(--r-bar); }
+  .occupancy-band__span:last-child { border-radius: 0 var(--r-bar) var(--r-bar) 0; }
+  .occupancy-band__span--neutral { background: var(--text-disabled); }
+  .occupancy-band__span--soft { background: var(--accent-green-soft); }
+  .occupancy-band__span--current { background: var(--accent-green); }
+  /* A gap between tenancies — the one segment whose text is not on a filled ground. */
+  .occupancy-band__span--void { background: var(--neutral-track); color: var(--text-faint); }
+
+  .occupancy-band__axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 7px;
+    font-size: 9.5px;
+    color: var(--text-placeholder);
+  }
+
+  /* The three tenancy cards under the band. auto-fit rather than a fixed three, so a unit with two
+     past tenants does not leave a hole and one with five wraps instead of shrinking to nothing. */
+  .spell-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .spell {
+    border: 1px solid var(--border-hairline);
+    background: var(--bg-surface);
+    border-radius: var(--r-control);
+    padding: 11px 13px;
+  }
+  /* The tenancy that is running and behind. Border and ground together, never colour alone. */
+  .spell--flagged { border-color: var(--danger-border); background: var(--danger-bg); }
+  .spell__head { display: flex; align-items: baseline; gap: 7px; }
+  .spell__name { font-size: 12.5px; font-weight: 600; }
+  .spell__range { font-size: 11px; color: var(--text-faint); }
+  .spell__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--text-body);
+  }
+  .spell__late { color: var(--danger); font-weight: 600; }
+  /* Forced onto its own line: it is a sentence, not a fact, and wrapping it beside the figures
+     makes both unreadable. */
+  .spell__note { width: 100%; color: var(--text-faint); }
+
+  /* The footer under every Oś czasu view — four figures, or a legend and a trailing average. */
+  .timeline-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 26px;
+    margin-top: 14px;
+    padding-top: 13px;
+    border-top: 1px solid var(--border-hairline);
+    font-size: 11.5px;
+    color: var(--text-body);
+  }
+  .timeline-stats__trailing { margin-left: auto; }
+
+  /* A legend entry: a colour swatch and what it means. The swatch is a pseudo-element so the
+     template carries a meaning (`--green`) rather than an empty <span> carrying a colour. */
+  .legend-key { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-key::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: var(--r-chart);
+    background: var(--neutral-track);
+  }
+  .legend-key--green::before { background: var(--accent-green); }
+  .legend-key--warn::before { background: var(--warn-soft); }
+  .legend-key--danger::before { background: var(--danger); }
+
+  /* Twelve months of payment behaviour, one block each. */
+  .pay-strip { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; }
+  .pay-strip__month { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .pay-strip__block {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    width: 100%;
+    height: 52px;
+    padding-bottom: 5px;
+    border-radius: var(--r-bar);
+    font-size: 9.5px;
+    color: var(--bg-surface);
+  }
+  .pay-strip__block--green { background: var(--accent-green); }
+  .pay-strip__block--warn { background: var(--warn-soft); }
+  .pay-strip__block--danger { background: var(--danger); }
+  .pay-strip__label { font-size: 9.5px; color: var(--text-placeholder); }
+
+  /*
+    Rent over five years. Each column is amount / bar / label stacked, and the bar's height is the
+    runtime percentage — so the row has to be a fixed height for a percentage to mean anything,
+    which is what the 120px here is doing.
+  */
+  .rent-steps { display: flex; align-items: stretch; gap: 2px; height: 150px; }
+  .rent-step {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+  .rent-step__amount { font-size: 10.5px; color: var(--text-body); margin-bottom: 4px; }
+  /*
+    The plot area. `flex: 1` gives it whatever the caption and the label leave, and `position:
+    relative` is what makes the bar's percentage resolve against THIS box rather than against the
+    whole column — see the template's own note, which records what putting the bar straight in the
+    column does (every bar overflows the chart by the height of its caption).
+  */
+  .rent-step__track { position: relative; flex: 1; display: block; }
+  .rent-step__bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-radius: var(--r-chart) var(--r-chart) 0 0;
+    background: var(--neutral-chart);
+  }
+  .rent-step__bar--past { background: var(--neutral-chart-quiet); }
+  .rent-step__bar--soft { background: var(--accent-green-soft); }
+  .rent-step__bar--current { background: var(--accent-green); }
+  /* Not yet true — a projection, and the only bar that is not a fact. Palest of the four. */
+  .rent-step__bar--projected { background: var(--neutral-track); }
+  .rent-step__label {
+    padding-top: 7px;
+    border-top: 1px solid var(--border-hairline);
+    font-size: 10.5px;
+    color: var(--text-faint);
+  }
+
+  /* The quiet boxed paragraph the mockups put under a chart to explain what happens next. */
+  .inset-note {
+    margin-top: 14px;
+    padding: 11px 13px;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--r-control);
+    background: var(--bg-subtle);
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  /* The contract card beside the two rails — the mockup's 320px + rest. One column below 1023,
+     where 320px of card and anything useful beside it no longer both fit. */
+  .unit-overview { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+  .unit-overview__rails { display: flex; flex-direction: column; gap: 16px; }
+  @media (max-width: 1023px) {
+    .unit-overview { grid-template-columns: 1fr; }
+  }
+
+  /* One named person: avatar, name, and the ways to reach them. */
+  .party {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .party:last-child { border-bottom: none; }
+  .party__who { display: flex; flex-direction: column; min-width: 0; }
+  .party__name { font-size: 13.5px; font-weight: 600; }
+  .party__contact { font-size: 11px; color: var(--text-faint); }
+
+  /* A run of keyvalue rows. The fragment styles a row; this is what puts space between them. */
+  .keyvalue-list { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
+
+  /* A line between a card's head and its body — the Oś czasu card's link out to the real tenancy
+     timeline. Not `card__meta`, which belongs to the head's own baseline row and would have to
+     compete with the chips for the space at its right. */
+  .card__aside { padding: 0 18px 4px; margin: 0; font-size: 11.5px; }
+
+  /* The "Otwórz pełne konto ›" foot of a card — a link that closes the card rather than sits in it. */
+  .card__link {
+    display: block;
+    margin-top: 14px;
+    padding-top: 13px;
+    border-top: 1px solid var(--border-hairline);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent-green);
+    text-decoration: none;
+  }
+
+  /*
+    A "Wymaga uwagi" row. The tone drives the left edge, the border AND the ground — three carriers
+    for one state, because the edge alone is 6px of colour and that is the whole signal for anyone
+    who cannot separate red from amber.
+  */
+  .attention {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 13px;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--r-control);
+    background: var(--bg-surface);
+  }
+  .attention + .attention { margin-top: 10px; }
+  .attention__edge { width: 6px; height: 34px; border-radius: var(--r-chart); flex: none; background: var(--text-disabled); }
+  .attention__text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .attention__title { font-size: 12.5px; font-weight: 600; }
+  .attention__subline { font-size: 11px; color: var(--text-faint); }
+  .attention--danger { border-color: var(--danger-border); background: var(--danger-bg); }
+  .attention--danger .attention__edge { background: var(--danger); }
+  .attention--warn { border-color: var(--warn-border); background: var(--warn-bg); }
+  .attention--warn .attention__edge { background: var(--warn-soft); }
+
+  /*
+    Konto's ledger. Description takes the room; the three money columns are equal-width numerals,
+    right-aligned by POSITION rather than by a class each head and value cell has to remember —
+    the same mechanism the portfolio table uses, and for the same reason.
+  */
+  .ledger-table { --cols: .8fr 2fr .9fr .9fr .9fr; }
+  .ledger-table .table__head > :nth-child(n+3),
+  .ledger-table .table__row > :nth-child(n+3) { text-align: right; }
+  /* The line that is still owed. Ground, not text colour: the row's own figures already carry
+     their tones and a second colour on top of them would fight. */
+  .table__row--flagged { background: var(--danger-tint); }
+  .ledger-balance--danger { color: var(--danger); font-weight: 600; }
+  .ledger-balance--neutral { color: var(--text-primary); }
+  /* The deposit: held, not owed, and not part of the running figure at all. */
+  .ledger-balance--faint { color: var(--text-faint); }
+
+  /* Liczniki. Kind identifies the row; the serial is the widest and the least interesting, which
+     is why it is muted rather than given room. */
+  .meters-table { --cols: 1.1fr 1fr .9fr .8fr .9fr; }
+  .meters-table .table__head > :nth-child(n+3),
+  .meters-table .table__row > :nth-child(n+3) { text-align: right; }
+
+  /* One filed (or missing) document. */
+  .document {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .document:last-child { border-bottom: none; }
+  .document__mark { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--neutral-icon); }
+  .document--green .document__mark { background: var(--accent-green); }
+  /* Not filed. An outline rather than a fill, so "missing" is a hole and not another colour. */
+  .document--warn .document__mark { background: var(--warn-bg); border: 2px solid var(--warn-soft); }
+  .document__text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .document__name { font-size: 12.5px; font-weight: 500; }
+  .document__meta { font-size: 11px; color: var(--text-faint); }
+  .document__filed { font-size: 11.5px; color: var(--text-body); }
+
+  /*
+    ── which of the two new tables survive 768 ──
+
+    Measured the way the block above measures the other six: each column's narrowest unbreakable
+    content divided by its share of `--cols`.
+
+      ledger-table   612px   fits — full grid
+      meters-table   548px   fits — full grid
+
+    Both fit inside the 680px content area at 768, so neither carries `table--stacks` and neither
+    needs `table-scroll`. The ledger's widest column is its description ("Rozliczenie mediów II kw.
+    · nadpłata", 268px at 2fr), and the three money columns are short numerals — this is the shape
+    the report table already has, which is why it lands in the same place.
+  */
 }

@@ -199,8 +199,9 @@ class TemplateHygieneTest {
             .toList();
 
         assertThat(real)
-            .as("th:replace substitutes the element before th:if/th:unless is ever read — the "
-                + "guard at the file:line above does nothing; split it onto a wrapping element")
+            .as("th:replace substitutes the element before th:if/th:unless/th:each is ever read — "
+                + "the guard at the file:line above does nothing, or the loop variable is never "
+                + "bound; split it onto a wrapping element")
             .isEmpty();
 
         List<Violation> fixture = deadGuardViolations(FIXTURES.resolve("bad-dead-guard.html"));
@@ -216,10 +217,12 @@ class TemplateHygieneTest {
         // Asserting two is what makes narrowing TAG back go red here instead of nowhere; see TAG's
         // own javadoc for the two real elements this hole was skipping.
         assertThat(fixture)
-            .as("both of bad-dead-guard.html's specimens must be found — the second has '<' inside "
-                + "an attribute value, and a TAG pattern that cannot cross it silently skips the "
-                + "whole element rather than failing (refactoring.md rules 20 and 21)")
-            .hasSize(2);
+            .as("all three of bad-dead-guard.html's specimens must be found — the second has '<' "
+                + "inside an attribute value, and a TAG pattern that cannot cross it silently skips "
+                + "the whole element rather than failing; the third is the th:each shape, which was "
+                + "not scanned at all until it cost an integration run (refactoring.md rules 20 "
+                + "and 21)")
+            .hasSize(3);
     }
 
     private static List<Violation> deadGuardViolations(Path file) {
@@ -239,6 +242,23 @@ class TemplateHygieneTest {
                 violations.add(new Violation(file, lineOf(content, tag.start()),
                     "th:replace and a guard on one element — the fragment always renders: "
                         + condensed(source)));
+            }
+            // th:each is the SAME mechanism with a louder failure, and it was not covered until it
+            // cost a full integration run: th:each resolves at 200, still after th:replace's 100, so
+            // the element is substituted before the loop variable exists and every expression in the
+            // fragment call throws on an unbound name. Unlike the guard above it does not fail
+            // silently — but it is caught here rather than at render time because only one of the
+            // five tabs on unit.html rendered the offending loop, so four green tabs and one 500 is
+            // what it actually looked like.
+            //
+            // Reported separately from the guard, and not by widening `hasGuard`: the two produce
+            // different failures and deserve different messages. The th:insert exemption the test's
+            // javadoc argues for applies unchanged — th:insert keeps the host element, so a th:each
+            // on it still binds.
+            if (hasReplace && source.contains("th:each=")) {
+                violations.add(new Violation(file, lineOf(content, tag.start()),
+                    "th:replace and th:each on one element — the loop variable is never bound and "
+                        + "every expression in the fragment call throws: " + condensed(source)));
             }
         }
         return violations;

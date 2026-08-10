@@ -191,6 +191,28 @@
     padding: 5px 11px;
     font-size: 11.5px;
   }
+  /*
+    An action the designs draw and this application has not built.
+
+    It exists because the alternative was worse in both directions: dropping the button loses the
+    shape the design gives a header, and wiring it up gives a manager a 404. This is the same call
+    the sidebar makes with `.nav__item--unbuilt` — draw it, do not promise it — and the class name
+    is deliberately the same word so the two are recognisably one decision.
+
+    Rendered on a <span>, never an <a> or a <button>: nothing here is focusable, so a keyboard user
+    is not offered a control that does nothing, and `cursor: default` keeps a mouse from suggesting
+    one. `.btn`'s own `cursor: pointer` is what that overrides.
+  */
+  .btn--unbuilt {
+    background: var(--bg-surface);
+    border: 1px dashed var(--border-control);
+    border-radius: var(--r-sm);
+    color: var(--text-disabled);
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: normal;
+    cursor: default;
+  }
 
   /* ── field / selectField ── */
 

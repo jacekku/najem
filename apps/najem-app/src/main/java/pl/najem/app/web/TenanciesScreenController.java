@@ -62,8 +62,8 @@ public class TenanciesScreenController {
      * @param colour    accounting's, verbatim, for {@code arrearsPill}. Null when the board has no
      *                  row for this tenancy at all.
      */
-    public record Row(UUID tenancyId, String initials, String tenant, String where, String term,
-                      BigDecimal rent, BigDecimal balance, ArrearsColour colour) {
+    public record Row(UUID tenancyId, UUID unitId, String initials, String tenant, String where,
+                      String term, BigDecimal rent, BigDecimal balance, ArrearsColour colour) {
     }
 
     private final TenancyBoardProjection tenancies;
@@ -109,7 +109,7 @@ public class TenanciesScreenController {
         // Absent from the balances map is "owes nothing", which the port's javadoc states rather
         // than leaves to be inferred — so ZERO here is a reading of that answer, not a default.
         var owed = outstanding.getOrDefault(row.tenancyId(), BigDecimal.ZERO);
-        return new Row(row.tenancyId(), initials(tenants), String.join(", ", named),
+        return new Row(row.tenancyId(), row.unitId(), initials(tenants), String.join(", ", named),
             row.propertyAddress() + " · " + row.unitName(), term(row), row.monthlyTotal(),
             owed.negate(), colours.get(row.tenancyId()));
     }

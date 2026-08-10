@@ -8,7 +8,7 @@
   src/test/resources, never under src/main/resources/templates, so Thymeleaf's template resolver
   never sees it and nothing can accidentally render it.
 
-  Carries TWO violations of this tripwire, and the difference between them is the point.
+  Carries THREE violations of this tripwire, and the difference between them is the point.
 
   The first is the plain shape: th:if and th:replace on the same element, which Thymeleaf evaluates
   in the wrong order for the guard to matter (th:replace at precedence 100, th:if at 300 —
@@ -24,6 +24,12 @@
   first specimen. A fixture that can be satisfied by one of its two specimens does not prove the
   other one is scanned.
 
+  The third is the th:each shape, added after it escaped the scanner and cost a full integration
+  run. It is the same precedence defect — th:replace at 100, th:each at 200 — but it fails loudly
+  at render time rather than silently, so it needs its own specimen for the opposite reason to the
+  second one: not because the pattern cannot see it, but because the scanner did not look for it,
+  and a scanner that stops looking is indistinguishable from a clean tree.
+
   Isolated from Tripwires A and C on purpose — no hex colour, no style attribute, no px, and every
   th:* expression here carries zero '__' — so a change to this file's outcome can only ever be
   attributed to Tripwire B.
@@ -32,5 +38,6 @@
 <body>
 <div th:if="${units.isEmpty()}" th:replace="~{components :: emptyState(text='Brak')}"></div>
 <div th:if="${iter.count < current}" th:replace="~{components :: emptyState(text='Brak')}"></div>
+<div th:each="u : ${units}" th:replace="~{components :: emptyState(text='Brak')}"></div>
 </body>
 </html>

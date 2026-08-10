@@ -110,8 +110,13 @@ class TenanciesScreenTest {
         assertThat(html).as("initials for the avatar").contains(">AK<");
         assertThat(html).contains("Marszałkowska 12 · m. 1");
         assertThat(html).contains("01.09.2026 – 31.08.2027");
-        assertThat(html).as("the row links to the timeline that already exists")
-            .contains("/tenancies/" + tenancyId + "/timeline");
+        // → the unit, which is where the prototype sends a tenancy row and where the whole contract
+        // now lives. The tenancy's own timeline is one link inside that screen; sending the register
+        // straight at it would open the narrowest of the five views the unit page carries.
+        assertThat(html).as("the row links to the unit detail")
+            .contains("href=\"/units/" + UNIT + "\"");
+        assertThat(html).as("and no longer straight at the timeline")
+            .doesNotContain("/tenancies/" + tenancyId + "/timeline");
     }
 
     /**
@@ -224,8 +229,11 @@ class TenanciesScreenTest {
             .andReturn().getResponse().getContentAsString();
     }
 
+    /** Fixed so a test can assert the row's link, which now names the unit rather than the tenancy. */
+    static final UUID UNIT = UUID.fromString("6c1f7a10-0000-4000-8000-0000000000a1");
+
     private static TenancyBoardRow row(UUID tenancyId, LocalDate endDate) {
-        return new TenancyBoardRow(tenancyId, UUID.randomUUID(), "m. 1", "Marszałkowska 12",
+        return new TenancyBoardRow(tenancyId, UNIT, "m. 1", "Marszałkowska 12",
             Tenancy.State.ACTIVE, LocalDate.of(2026, 9, 1), endDate, new BigDecimal("3200"),
             List.of(ANNA));
     }

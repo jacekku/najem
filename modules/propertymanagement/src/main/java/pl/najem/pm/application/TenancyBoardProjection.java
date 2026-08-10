@@ -1,6 +1,7 @@
 package pl.najem.pm.application;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -32,4 +33,20 @@ public interface TenancyBoardProjection {
      * and a register that forgot them would tell a manager the unit had never been let.
      */
     List<TenancyBoardRow> forWorkspace(UUID workspaceId);
+
+    /**
+     * One tenancy, for the screen that shows one tenancy.
+     *
+     * <p>The warning above is about a board calling a per-row primitive N times, and it stands.
+     * This is the other case, and {@code UnitBoardQuery.forUnit} spells out the same distinction:
+     * a single-subject screen calling it once. Reaching for {@link #forWorkspace} and filtering
+     * would read an agency's worth of tenancies to render one of them, which is the fan-out this
+     * port's javadoc refuses, only paid on the wrong axis.
+     *
+     * <p>Empty for unknown, foreign, cancelled and error-annulled alike — the same four answers
+     * {@link #forWorkspace} collapses by omitting the row. A caller that could tell "not yours"
+     * from "no such tenancy" would have an oracle for ids in other agencies, which is why every
+     * read here is undifferentiated.
+     */
+    Optional<TenancyDetailRow> forTenancy(UUID workspaceId, UUID tenancyId);
 }

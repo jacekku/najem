@@ -84,7 +84,13 @@
                   empty cell. It is a real state for rows written before pm_tenancy_party existed,
                   and a blank there reads as a rendering fault rather than as missing data.
                 */-->
-                <a th:href="@{/tenancies/{id}/timeline(id=${t.tenancyId()})}"
+                <!--/*
+                  → the unit, which is where the prototype sends a tenancy row and where the whole
+                  contract now lives: the term, the parties, the ledger and the arrears colour are
+                  all on /units/{id}, and the tenancy timeline is one link inside it. Sending the
+                  register at the timeline instead would open the narrowest of those five views.
+                */-->
+                <a th:href="@{/units/{id}(id=${t.unitId()})}"
                    th:text="${#strings.isEmpty(t.tenant())} ? 'Bez najemcy' : ${t.tenant()}">—</a>
             </div>
             <span class="tenancy__where" th:attr="data-label=${cols[1]}" th:text="${t.where()}">—</span>

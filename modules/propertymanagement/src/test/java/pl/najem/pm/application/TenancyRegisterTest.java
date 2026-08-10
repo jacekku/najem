@@ -179,6 +179,100 @@ class TenancyRegisterTest {
             });
     }
 
+    // ----------------------------------------------------------------------------------------
+    // forTenancy — the single-contract read the unit screen holds
+    // ----------------------------------------------------------------------------------------
+
+    /**
+     * The whole contract, including the four facts the register's own row does not carry: the legal
+     * form, the payment day, the deposit and the reference.
+     *
+     * <p>Each is asserted separately rather than as one record equality, because a record built with
+     * two adjacent same-typed arguments transposed still equals nothing but itself — naming the
+     * fields is what makes a swapped {@code rentDay}/{@code depositAmount} pair fail here.
+     */
+    @Test
+    void forTenancyCarriesTheWholeContractAndNotJustTheRegistersColumns() {
+        var anna = UUID.randomUUID();
+        var poreczyciel = UUID.randomUUID();
+        var tenancyId = reserve(List.of(anna), List.of(poreczyciel), LegalForm.OKAZJONALNY);
+
+        assertThat(tenancyRows.forTenancy(agency, tenancyId))
+            .get()
+            .satisfies(row -> {
+                assertThat(row.legalForm()).isEqualTo(LegalForm.OKAZJONALNY);
+                assertThat(row.rentDay()).isEqualTo(10);
+                assertThat(row.monthlyTotal()).isEqualByComparingTo("2500");
+                assertThat(row.paymentReference()).startsWith("NAJEM/");
+                assertThat(row.unitName()).isEqualTo("M1");
+                assertThat(row.propertyAddress()).isEqualTo("Testowa 1, Kraków");
+                assertThat(row.tenantContactIds()).containsExactly(anna);
+                assertThat(row.guarantorContactIds()).containsExactly(poreczyciel);
+            });
+    }
+
+    /**
+     * A contract with no declared component split says so, and its three components stay null.
+     *
+     * <p>V22 records that "no split" and "a split with a zero admin fee" are legally different. A
+     * read that coalesced the nulls to zero would erase the distinction the flag exists to carry,
+     * and the screen would render "Czynsz bazowy 0,00" for a perfectly ordinary contract.
+     */
+    @Test
+    void acontractWithNoSplitReportsNullComponentsRatherThanZeroes() {
+        var tenancyId = reserve(List.of(UUID.randomUUID()), List.of());
+
+        assertThat(tenancyRows.forTenancy(agency, tenancyId))
+            .get()
+            .satisfies(row -> {
+                assertThat(row.componentSplit()).isFalse();
+                assertThat(row.rent()).isNull();
+                assertThat(row.adminFee()).isNull();
+                assertThat(row.mediaAdvance()).isNull();
+            });
+    }
+
+    /**
+     * The four ways this read answers empty, asserted together because they are ONE predicate set.
+     *
+     * <p>Unknown, foreign, cancelled and error-annulled must be indistinguishable: an id that
+     * answered differently for a tenancy in another agency would confirm that it exists, which is
+     * the disclosure every undifferentiated read here exists to prevent. And the two exclusions must
+     * match {@code forWorkspace}'s exactly — the adapter shares one {@code SCOPE} string for that
+     * reason, and this is the assertion that notices if a future edit gives one read its own.
+     */
+    @Test
+    void forTenancyIsEmptyForUnknownForeignCancelledAndAnnulledAlike() {
+        assertThat(tenancyRows.forTenancy(agency, UUID.randomUUID()))
+            .as("never created").isEmpty();
+
+        var mine = reserve(List.of(UUID.randomUUID()), List.of());
+        assertThat(tenancyRows.forTenancy(stranger, mine)).as("another agency asking").isEmpty();
+
+        service.cancelReservation(agency, mine, "najemca się rozmyślił");
+        assertThat(tenancyRows.forTenancy(agency, mine)).as("called off").isEmpty();
+
+        var annulled = reserve(List.of(UUID.randomUUID()), List.of());
+        service.activate(agency, annulled, LocalDate.of(2026, 9, 1));
+        service.end(agency, annulled, new EndTenancy(LocalDate.of(2026, 9, 30), null,
+            EndReason.ERROR_ANNULLED, "aktywowany przez pomyłkę", true));
+        assertThat(tenancyRows.forTenancy(agency, annulled)).as("should never have existed")
+            .isEmpty();
+    }
+
+    /** An ended tenancy is still readable — it ran, and its contract is what a manager looks up. */
+    @Test
+    void anendedTenancyIsStillReadableInFull() {
+        var tenancyId = reserve(List.of(UUID.randomUUID()), List.of());
+        service.activate(agency, tenancyId, LocalDate.of(2026, 9, 1));
+        service.end(agency, tenancyId, new EndTenancy(LocalDate.of(2027, 8, 31),
+            LocalDate.of(2027, 8, 31), EndReason.AGREEMENT_EXPIRY, null, true));
+
+        assertThat(tenancyRows.forTenancy(agency, tenancyId))
+            .get()
+            .satisfies(row -> assertThat(row.state()).isEqualTo(Tenancy.State.ENDED));
+    }
+
     private List<UUID> tenants(UUID tenancyId) {
         return tenancyRows.forWorkspace(agency).stream()
             .filter(row -> row.tenancyId().equals(tenancyId))
@@ -193,9 +287,19 @@ class TenancyRegisterTest {
     }
 
     private UUID reserve(List<UUID> tenants, List<UUID> guarantors) {
+        return reserve(tenants, guarantors, LegalForm.ZWYKLY);
+    }
+
+    /**
+     * The form is a parameter because {@code ZWYKLY} is the enum's FIRST constant, so a projection
+     * that hardcoded a default, or read the wrong column into it, would still satisfy an assertion
+     * made against a tenancy reserved as zwykły. One test reserves an okazjonalny one for exactly
+     * that reason (refactoring rule 13 — a check that cannot fail is not a check).
+     */
+    private UUID reserve(List<UUID> tenants, List<UUID> guarantors, LegalForm form) {
         return service.reserve(agency, new ReserveTenancy(null, null, unitId, tenants, guarantors,
             LocalDate.of(2026, 9, 1), new Term.FixedTerm(LocalDate.of(2027, 8, 31)),
-            LegalForm.ZWYKLY, new MonthlyAmount(new BigDecimal("2500"), null), 10, null,
+            form, new MonthlyAmount(new BigDecimal("2500"), null), 10, null,
             "NAJEM/" + UUID.randomUUID())).tenancyId();
     }
 }

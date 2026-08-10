@@ -203,6 +203,82 @@ class TenancyBoardQueryTest {
         assertThat(board.forWorkspace(UUID.randomUUID())).isEmpty();
     }
 
+    // ----------------------------------------------------------------------------------------
+    // forTenancy — the single-contract statement, which selects columns the register never does
+    // ----------------------------------------------------------------------------------------
+
+    /**
+     * The whole contract off the real statement, including the seven columns the register's own
+     * query does not select at all.
+     *
+     * <p>This is the tier that can catch them, and the in-memory one is not: {@code legal_form},
+     * {@code rent_day}, {@code deposit_amount} and {@code payment_reference} are read by NAME here,
+     * so a column renamed in a migration, or a {@code getBigDecimal} pointed at the wrong one, fails
+     * against Postgres and passes against a fake reading a Java record's fields (rule 15).
+     *
+     * <p>The two party sub-selects are the other reason. The register interpolates one; this
+     * statement interpolates two, into one query, and a copy-paste that left both saying
+     * {@code TENANT} would return the tenant twice — visible only here.
+     */
+    @Test
+    void forTenancyCarriesEveryContractColumnAndBothPartyRoles() {
+        var agency = UUID.randomUUID();
+        var anna = UUID.randomUUID();
+        var poreczyciel = UUID.randomUUID();
+        var tenancyId = reserve(agency, unitIn(agency, "Emilii Plater 4", "M7"), List.of(anna),
+            List.of(poreczyciel));
+
+        assertThat(board.forTenancy(agency, tenancyId))
+            .get()
+            .satisfies(row -> {
+                assertThat(row.legalForm()).isEqualTo(LegalForm.ZWYKLY);
+                assertThat(row.rentDay()).isEqualTo(10);
+                assertThat(row.monthlyTotal()).isEqualByComparingTo("2500");
+                assertThat(row.paymentReference()).startsWith("NAJEM/");
+                assertThat(row.unitName()).isEqualTo("M7");
+                assertThat(row.propertyAddress()).isEqualTo("Emilii Plater 4");
+                assertThat(row.tenantContactIds()).containsExactly(anna);
+                assertThat(row.guarantorContactIds()).containsExactly(poreczyciel);
+                // Nullable in the table, and read straight through: V22 records that "no split" and
+                // "a split with a zero admin fee" are legally different, so a coalesce to zero here
+                // would state a term nobody agreed.
+                assertThat(row.componentSplit()).isFalse();
+                assertThat(row.rent()).isNull();
+                assertThat(row.adminFee()).isNull();
+                assertThat(row.mediaAdvance()).isNull();
+            });
+    }
+
+    /**
+     * The four empty answers, in one test, for the reason
+     * {@code expiredStaysWhileCancelledAndAnnulledBothLeave} gives: what is asserted is the boundary
+     * rather than any one case.
+     *
+     * <p>And they must be the SAME four the register collapses by omitting the row — the adapter
+     * shares one {@code SCOPE} string between the two statements so they cannot drift, and this is
+     * what notices if a future edit gives one read a {@code where} clause of its own.
+     */
+    @Test
+    void forTenancyIsEmptyForUnknownForeignCancelledAndAnnulledAlike() {
+        var agency = UUID.randomUUID();
+
+        assertThat(board.forTenancy(agency, UUID.randomUUID())).as("never created").isEmpty();
+
+        var mine = reserve(agency, unitIn(agency, "Nowy Świat 6", "M1"),
+            List.of(UUID.randomUUID()), List.of());
+        assertThat(board.forTenancy(UUID.randomUUID(), mine)).as("another agency asking").isEmpty();
+
+        tenancies.cancelReservation(agency, mine, "najemca się rozmyślił");
+        assertThat(board.forTenancy(agency, mine)).as("called off").isEmpty();
+
+        var annulled = endedTenancy(agency, "Nowy Świat 8", EndReason.ERROR_ANNULLED);
+        assertThat(board.forTenancy(agency, annulled)).as("should never have existed").isEmpty();
+
+        var expired = endedTenancy(agency, "Nowy Świat 10", EndReason.AGREEMENT_EXPIRY);
+        assertThat(board.forTenancy(agency, expired)).as("ran and finished — still readable")
+            .isPresent();
+    }
+
     private UUID endedTenancy(UUID agency, String address, EndReason reason) {
         var tenancyId = reserve(agency, unitIn(agency, address, "M1"), List.of(UUID.randomUUID()),
             List.of());

@@ -105,7 +105,7 @@ class UnitScreenTest {
         }
         mvc.perform(request)
             .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/units/" + unitId));
+            .andExpect(redirectedUrl("/units/" + unitId + "?tab=najemca"));
     }
 
     @Test
@@ -115,7 +115,7 @@ class UnitScreenTest {
             "infoClauseServed", "true",
             "willingToPay", "2900.00", "desiredStart", "2026-09-01");
 
-        mvc.perform(get("/units/" + unitId))
+        mvc.perform(get("/units/" + unitId).param("tab", "najemca"))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Piotr Nowak")))
             // The stated format, not the server locale's — see units.html.
@@ -178,10 +178,110 @@ class UnitScreenTest {
 
         mvc.perform(post("/units/" + unitId + "/interests/" + interestId + "/withdraw").with(csrf()))
             .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/units/" + unitId));
+            .andExpect(redirectedUrl("/units/" + unitId + "?tab=najemca"));
 
-        mvc.perform(get("/units/" + unitId))
+        mvc.perform(get("/units/" + unitId).param("tab", "najemca"))
             .andExpect(content().string(not(containsString("Krzysztof Wycofany"))));
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // The tab strip
+    // ----------------------------------------------------------------------------------------
+
+    /**
+     * Each of the five tabs renders ITS OWN content and not another's.
+     *
+     * <p>One test rather than five, and asserting both halves each time — what this tab shows and
+     * what it must not — because five one-sided tests all pass against a screen that renders every
+     * tab at once, which is precisely what a dropped {@code th:if} produces. The negative is the
+     * assertion; the positive only proves the page loaded.
+     *
+     * <p><b>Never assert a negative on a tab's LABEL.</b> The strip renders all five labels on every
+     * tab, by design — so {@code doesNotContain("Liczniki")} fails on a perfectly correct page. Each
+     * string below is content from inside one tab's body and appears nowhere else: a card title, or
+     * a row only that tab's data carries. This is written down because the first version of this
+     * test made exactly that mistake and cost an 8-minute run to find.
+     */
+    @Test
+    void eachTabRendersItsOwnContentAndNotAnothers() throws Exception {
+        assertThat(tab(null)).contains("Oś czasu").doesNotContain("Konto najemcy", "Woda zimna");
+        assertThat(tab("konto")).contains("Konto najemcy").doesNotContain("Oś czasu", "Zainteresowani");
+        assertThat(tab("najemca")).contains("Zainteresowani").doesNotContain("Konto najemcy", "Oś czasu");
+        assertThat(tab("liczniki")).contains("Woda zimna").doesNotContain("Konto najemcy", "Oś czasu");
+        assertThat(tab("dokumenty")).contains("Protokół zdawczo-odbiorczy")
+            .doesNotContain("Konto najemcy", "Woda zimna");
+    }
+
+    /**
+     * An unrecognised tab is a 404, not a silent fall back to Przegląd.
+     *
+     * <p>A typo that renders the default answers 200 for a URL that names nothing — which reads as
+     * "the meters tab is empty" rather than "there is no such tab", and is a link somebody keeps
+     * sending round. Both parameters are checked, because they are validated by one method and a
+     * regression would take both with it.
+     */
+    @Test
+    void anunrecognisedTabOrTimelineIsNotFound() throws Exception {
+        mvc.perform(get("/units/" + unitId).param("tab", "likcznik"))
+            .andExpect(status().isNotFound());
+        mvc.perform(get("/units/" + unitId).param("os", "platnosc"))
+            .andExpect(status().isNotFound());
+    }
+
+    /**
+     * The Oś czasu chips carry the tab they are standing on.
+     *
+     * <p>Without it, every chip would point at {@code ?os=…} alone, the tab would fall back to its
+     * default, and clicking a chip on Przegląd would work by accident — right until the card is
+     * reused anywhere else. The strip is built once in the controller precisely so this holds.
+     */
+    @Test
+    void atimelineChipKeepsTheTabItSitsOn() throws Exception {
+        assertThat(tab(null)).contains("/units/" + unitId + "?tab=przeglad&amp;os=platnosci");
+    }
+
+    /** The four timeline views are one card, and only one of them renders at a time. */
+    @Test
+    void eachTimelineViewRendersAloneOnTheOverviewTab() throws Exception {
+        var spells = mvc.perform(get("/units/" + unitId)).andReturn()
+            .getResponse().getContentAsString();
+        assertThat(spells).contains("Śr. długość najmu").doesNotContain("W terminie");
+
+        var payments = mvc.perform(get("/units/" + unitId).param("os", "platnosci")).andReturn()
+            .getResponse().getContentAsString();
+        assertThat(payments).contains("W terminie").doesNotContain("Śr. długość najmu");
+    }
+
+    /**
+     * A vacant unit says so instead of rendering an empty contract card, and every tab still loads.
+     *
+     * <p>The unit this class builds is never let, so this is the state all the tab assertions above
+     * are made in — worth naming, because a NullPointerException on a null contract would show up as
+     * a 500 in exactly one of them and be read as a template typo.
+     */
+    @Test
+    void avacantUnitRendersTheVacancyStateRatherThanABlankContract() throws Exception {
+        assertThat(tab(null)).contains("Pustostan");
+        assertThat(tab("najemca")).contains("Pustostan — nikt nie wynajmuje tego lokalu.");
+    }
+
+    /** The two unbuilt header actions are drawn and are not links — this app never fakes a route. */
+    @Test
+    void adrawnButUnbuiltActionIsNotALink() throws Exception {
+        var html = tab(null);
+
+        assertThat(html).contains("Wyślij ponaglenie").contains("btn--unbuilt");
+        assertThat(html).as("no anchor was invented for it")
+            .doesNotContain("<a class=\"btn btn--unbuilt\"");
+    }
+
+    private String tab(String tab) throws Exception {
+        var request = get("/units/" + unitId);
+        if (tab != null) {
+            request = request.param("tab", tab);
+        }
+        return mvc.perform(request).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
     }
 
     /**

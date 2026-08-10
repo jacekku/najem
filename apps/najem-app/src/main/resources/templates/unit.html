@@ -1,223 +1,637 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="pl"
-      th:replace="~{layout :: page('Lokal — NAJEM', null, ~{::main})}">
+      th:replace="~{layout :: page('Lokal — NAJEM', ~{::header.pagebar__content}, ~{::main})}">
 <body>
+<!--/*
+  The unit's header, on the shell's page bar — the arrangement prototype v2 draws for this screen
+  and the one properties.html, units.html and tenancies.html already use. Outside <main>
+  deliberately: the layout selects this element by class and `~{::main}` below does not match it,
+  so it renders once, up there.
+*/-->
+<header class="pagebar__content">
+    <div class="pagebar__titles">
+        <!--/*
+          Not the breadcrumb fragment: this app has one real, working link back to the unit's own
+          property, and the fragment's own contract is deliberately unlinked plain text ("wiring
+          real navigation onto it is a Task 5/6 concern" — components.html). Dropping the working
+          link to stay literally inside the fragment call would be a navigation regression nothing
+          tests but everybody would notice. Reuses the breadcrumb's own CSS class.
+        */-->
+        <nav class="breadcrumb">
+            <a th:href="@{/properties/{id}/units(id=${unit.propertyId()})}">Lokale /</a>
+        </nav>
+
+        <!--/*
+          TWO PILLS, AND THEY ARE DIFFERENT FACTS. The mockup draws one, because in the prototype
+          the only state a unit has is whether its tenant has paid. Here `marketState` is a real,
+          separate answer — whether the unit is being advertised — and a let unit is legitimately
+          still `inventory` because nobody is marketing it. Merging the two would make "Zajęty" and
+          "Nieogłoszony" one word that is wrong half the time.
+
+          Each th:case nests one level deeper than its th:replace: a guard and a replace on ONE
+          element never fire together, because th:replace resolves at precedence 100 and the
+          conditional at 300 (TemplateHygieneTest enforces this; see units.html's own note).
+        */-->
+        <div class="screen-head__title-row">
+            <h1 th:text="${unit.name()}">—</h1>
+            <span th:switch="${unit.marketState()}">
+                <span th:case="'open'"><span th:replace="~{components :: pill(tone='paid', text='Ogłoszony')}"></span></span>
+                <span th:case="'closed'"><span th:replace="~{components :: pill(tone='neutral', text='Wycofany z oferty')}"></span></span>
+                <span th:case="'inventory'"><span th:replace="~{components :: pill(tone='neutral', text='Nieogłoszony')}"></span></span>
+                <span th:case="*"><span th:replace="~{components :: pill(tone='neutral', text=${unit.marketState()})}"></span></span>
+            </span>
+            <!--/*
+              Accounting's colour, verbatim, never recomputed — reports.html's rule and A7's whole
+              point. Absent when the arrears board has no row for this tenancy: it has not spoken,
+              which is not the same as green, and a pill invented here would be a second opinion on
+              a legal state.
+            */-->
+            <span th:if="${contract != null and contract.colour() != null}">
+                <span th:replace="~{components :: arrearsPill(colour=${contract.colour().name()})}"></span>
+            </span>
+        </div>
+
+        <!--/*
+          Stated format, not inherited: Thymeleaf's default takes the separator from the server
+          locale, so the same code renders 2,850.00 on one machine and 2 850,00 on another with
+          tests green either way. Same reason as the units table.
+
+          The mockup's meta line is area, rooms, floor and features — none of which this application
+          stores. What it does know about a unit is its rent and whether anybody is in it, so that is
+          what the line says. Inventing "52 m² · 2 pokoje" here would be the one thing
+          UnitDetailFake's javadoc refuses: a fact that reads as real because it sits beside real ones.
+        */-->
+        <p class="pagebar__subtitle">
+            <span class="mono" th:text="${#numbers.formatDecimal(unit.baseRent(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+            <span th:if="${contract != null}" th:text="'· ' + ${contract.term()}">—</span>
+            <span th:if="${contract == null}" class="faint-note">· Pustostan</span>
+            <a th:if="${unit.nextTenancyId() != null}"
+               th:href="@{/tenancies/{id}/timeline(id=${unit.nextTenancyId()})}">· nadchodzący najem</a>
+        </p>
+    </div>
+
+    <!--/*
+      The mockup's three actions. Only the first leads anywhere: registering a payment is the bank
+      screen's reconciliation flow, which exists. The other two are drawn and unbuilt, and this app
+      never turns an unbuilt destination into a live link — the same convention the sidebar's
+      `nav__item--unbuilt` follows, applied here so the header keeps the shape the design gives it
+      without promising a screen that would 404.
+    */-->
+    <div class="pagebar__actions">
+        <div th:replace="~{components :: btn(href=@{/bank}, text='Zarejestruj wpłatę', kind='secondary')}"></div>
+        <span class="btn btn--unbuilt">Wyślij ponaglenie</span>
+        <span class="btn btn--unbuilt">Edytuj umowę</span>
+    </div>
+</header>
+
 <main>
     <!--/*
-      Not the breadcrumb fragment: this app has one real, working link back to the unit's own
-      property (the original screen's "← Lokale"), and the fragment's own contract is
-      deliberately unlinked plain text ("wiring real navigation onto it is a Task 5/6 concern" —
-      components.html). Dropping the working link to stay literally inside the fragment call would
-      be a navigation regression nothing tests but everybody would notice. Reuses the breadcrumb's
-      own CSS class rather than inventing a new one.
+      The tab strip, from ONE list in the controller — items and the active label both. reports.html
+      writes its items out in the template and its own javadoc admits the labels are then repeated
+      and can drift; this does not repeat them. Each tab is a real, bookmarkable link and an
+      unrecognised `?tab=` is a 404, never a silent fall back to Przegląd.
     */-->
-    <nav class="breadcrumb">
-        <a th:href="@{/properties/{id}/units(id=${unit.propertyId()})}">Lokale /</a>
-    </nav>
+    <nav th:replace="~{components :: tabs(items=${tabs}, active=${activeTab})}"></nav>
 
-    <!--/*
-      Unit + tenancy detail's header, bounded: the status pill beside the title is real (the
-      unit's own market state), but the arrears pill the handoff draws there has no data behind
-      it on this screen, and neither does a tab strip — Ledger/Tenant/Meters/Documents/
-      Maintenance are none of them routes this application has, and this app's own sidebar
-      convention (nav__item--unbuilt) never turns an unbuilt destination into a live link, so a
-      multi-item tab strip here would need the same treatment the fragment library has no shape
-      for. Left out rather than half-built.
-    */-->
-    <div class="screen-head__title-row">
-        <h1 th:text="${unit.name()}">—</h1>
-        <!--/*
-          Marketing, not occupancy — the two must never be merged. A let unit is legitimately still
-          `inventory` because nobody is advertising it; whether it is let is the subtitle below.
-          Nested one level deeper than a bare th:case + th:replace — see units.html's own note on
-          why the guard and the replace cannot share a tag.
-        */-->
-        <span th:switch="${unit.marketState()}">
-            <span th:case="'open'"><span th:replace="~{components :: pill(tone='paid', text='Ogłoszony')}"></span></span>
-            <span th:case="'closed'"><span th:replace="~{components :: pill(tone='neutral', text='Wycofany z oferty')}"></span></span>
-            <span th:case="'inventory'"><span th:replace="~{components :: pill(tone='neutral', text='Nieogłoszony')}"></span></span>
-            <span th:case="*"><span th:replace="~{components :: pill(tone='neutral', text=${unit.marketState()})}"></span></span>
-        </span>
-    </div>
-
-    <!--/*
-      Stated format, not inherited: Thymeleaf's default takes the separator from the server
-      locale, so the same code renders 2,850.00 on one machine and 2 850,00 on another with
-      tests green either way. Same reason as the units table.
-    */-->
-    <p class="muted">
-        <span class="mono" th:text="${#numbers.formatDecimal(unit.baseRent(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
-        <a th:if="${unit.currentTenancyId() != null}"
-           th:href="@{/tenancies/{id}/timeline(id=${unit.currentTenancyId()})}">Najem bieżący</a>
-        <span th:if="${unit.currentTenancyId() == null}" class="faint-note">Pustostan</span>
-        <a th:if="${unit.nextTenancyId() != null}"
-           th:href="@{/tenancies/{id}/timeline(id=${unit.nextTenancyId()})}">· nadchodzący</a>
-    </p>
-
-    <!--/*
-      Card anatomy from Unit + tenancy detail, on this app's real content: who has asked about the
-      unit, not the tenancy history / ledger / payment strip the handoff draws for a screen this
-      one is not (no data behind any of those here). The body fragment's own root carries no
-      `card__body` class, so none of the card's 18px body padding applies — tableHead/table__row
-      already carry that padding themselves, the same reasoning as properties.html and units.html.
-    */-->
-    <!--/*
-      Local same-file th:fragment declarations render their content twice — once at the
-      declaration site (inert to a browser's DOM inside <template>, but still literal text in the
-      raw HTTP response) and once at the th:insert/th:replace call site. property-new.html and
-      reports.html found and removed this pattern; these two are its last occurrences. Since
-      interestedBody/leadBody are specific to this one screen (not shared the way arrearsPill
-      turned out to be), the fix here is local: apply card's own CSS classes (card, card__head,
-      card__title, card__body) directly instead of calling components :: card(...) with a
-      fragment-expression body param, so the content is written once, in its natural position,
-      with no local th:fragment at all.
-    */-->
-    <div class="card">
-        <header class="card__head">
-            <h2 class="card__title">Zainteresowani</h2>
-            <span class="card__meta" th:text="'(' + ${interested.size()} + ')'">—</span>
-        </header>
+    <!--/* ══════════════════════════ Przegląd ══════════════════════════ */-->
+    <div th:if="${tab == 'przeglad'}" class="unit-tab">
 
         <!--/*
-          Head and rows scroll together — see properties.html's own note on why.
-
-          `table--stacks` because this table measures 793px against the 680px content area at 768,
-          so at that width each row becomes a card, two across (components.css). The trailing
-          Rezerwuj/Wycofaj pair is what makes it wide, not the data.
-
-          The column names are declared once, here, and read twice: by `tableHead` for the head and
-          by each cell's `data-label` for the stacked form. Two literal copies of the same five
-          strings is exactly the drift the `gridClass` indirection already avoids for `--cols`.
-          The trailing action column is deliberately left without a `data-label` — its header is
-          blank, and a label rendered from an empty string is 2px of margin under a heading that
-          says nothing.
+          Oś czasu: one card, four views, chosen by the chips in its own header and carried in
+          `?os=`. Four views of one question ("this unit over time"), which is why they are chips
+          inside the card rather than four more tabs beside Przegląd.
         */-->
-        <!--/* No `table-scroll`: this table stacks at 768 and fits above it, so there is no width at
-               which a horizontal scroll is the right answer — and the class could not have been
-               undone anyway, since `.table-scroll`'s `overflow-x: auto` sits in a later cascade layer
-               than `.table--stacks`'s `visible`. See bank.html's suggestions table for the whole
-               account. */-->
-        <div class="unit-interested-table table--stacks"
-             th:with="cols=${ {'Osoba','Kontakt','Gotów płacić','Od kiedy',''} }">
-        <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='unit-interested-table')}"></div>
-
-        <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
-        <div th:if="${interested.isEmpty()}">
-            <div th:replace="~{components :: emptyState(text='Nikt jeszcze nie pytał o ten lokal.')}"></div>
-        </div>
-
-        <div class="table__row" th:each="party : ${interested}">
-            <span th:attr="data-label=${cols[0]}" th:text="${party.fullName()}">—</span>
-            <span th:attr="data-label=${cols[1]}">
-                <span th:text="${party.email()}">—</span>
-                <span class="muted" th:text="${party.phone()}">—</span>
-            </span>
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Oś czasu</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta" th:switch="${timeline}">
+                    <span th:case="'najmy'">kto tu mieszkał od 2023</span>
+                    <span th:case="'platnosci'">ostatnie 12 miesięcy tego najmu</span>
+                    <span th:case="'czynsz'">historia czynszu i indeksacji</span>
+                    <span th:case="'konserwacja'">prace i przeglądy</span>
+                </span>
+                <span class="card__actions">
+                    <!--/* The chip fragment is a <span> with no href of its own — it is a shape,
+                           not a control. Wrapping it in a link is what makes these navigate, and
+                           keeps the fragment usable by the forms that want a non-clickable one. */-->
+                    <a class="chip-link" th:each="c : ${timelines}" th:href="${c.href}">
+                        <span th:replace="~{components :: chip(text=${c.label}, selected=${c.label == activeTimeline}, shape='pill')}"></span>
+                    </a>
+                </span>
+            </header>
             <!--/*
-              Both are nullable: somebody who rings to ask what the agency would take has named
-              neither, and a dash is the honest rendering of a question that was not answered.
+              The one view on this card that is REAL, and it is a separate screen rather than a
+              fifth chip: /tenancies/{id}/timeline is the running tenancy's own event history, built
+              and tested, where the four chips above are drawn from UnitDetailFake. Putting it in
+              the strip would file a real view among four invented ones, and a reader would have no
+              way to tell which is which. Absent for a vacant unit — there is no tenancy to open.
             */-->
-            <span class="mono" th:attr="data-label=${cols[2]}">
-                <span th:if="${party.willingToPay() != null}"
-                      th:text="${#numbers.formatDecimal(party.willingToPay(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
-                <span th:if="${party.willingToPay() == null}" class="faint-note">—</span>
-            </span>
-            <!--/*
-              Already dd.mm.rrrr by the time this template sees it — UnitScreenController.
-              InterestedPartyView formats it in Java, the same reason ReserveScreenController's
-              booked-periods list does (this codebase's stated date convention; no
-              thymeleaf-extras-java8time on this module's classpath, so #temporals does not exist).
-            */-->
-            <span class="mono" th:attr="data-label=${cols[3]}">
-                <span th:if="${party.desiredStart() != null}" th:text="${party.desiredStart()}">—</span>
-                <span th:if="${party.desiredStart() == null}" class="faint-note">—</span>
-            </span>
-            <span class="table-row-actions">
-                <div th:replace="~{components :: btn(href=@{/units/{u}/reserve(u=${unit.unitId()}, interestId=${party.interestId()})}, text='Rezerwuj', kind='primary')}"></div>
-                <form th:action="@{/units/{u}/interests/{i}/withdraw(u=${unit.unitId()}, i=${party.interestId()})}"
-                      method="post">
-                    <div th:replace="~{components :: btn(href=null, text='Wycofaj', kind='danger')}"></div>
-                </form>
-            </span>
-        </div>
-        </div>
-    </div>
+            <p class="card__aside" th:if="${contract != null}">
+                <a th:href="@{/tenancies/{id}/timeline(id=${contract.tenancyId()})}">Pełna oś czasu tego najmu ›</a>
+            </p>
 
-    <div class="card">
-        <header class="card__head">
-            <h2 class="card__title">Dodaj zainteresowanego</h2>
-        </header>
+            <div class="card__body">
+                <!--/* ── Najmy: who lived here, as a proportion of the drawn period ── */-->
+                <div th:if="${timeline == 'najmy'}">
+                    <!--/* Widths are runtime data, which is the one thing a th:style may carry
+                           (TemplateHygieneTest); the colours are classes, as everything else is. */-->
+                    <div class="occupancy-band">
+                        <span th:each="b : ${fake.band()}" class="occupancy-band__span"
+                              th:classappend="'occupancy-band__span--' + ${b.tone()}"
+                              th:style="'width:' + ${b.pct()} + '%'" th:text="${b.label()}">—</span>
+                    </div>
+                    <div class="occupancy-band__axis">
+                        <span class="mono" th:each="a : ${fake.bandAxis()}" th:text="${a}">—</span>
+                    </div>
+
+                    <div class="spell-grid">
+                        <article th:each="s : ${fake.spells()}" class="spell"
+                                 th:classappend="${s.flagged()} ? 'spell--flagged' : ''">
+                            <header class="spell__head">
+                                <span class="spell__name" th:text="${s.name()}">—</span>
+                                <span class="spell__range" th:text="${s.range()}">—</span>
+                            </header>
+                            <div class="spell__facts">
+                                <span>Czynsz <span class="mono" th:text="${s.rent()}">—</span></span>
+                                <span th:text="${s.months()}">—</span>
+                                <span th:classappend="${s.flagged()} ? 'spell__late' : ''"
+                                      th:text="${s.late()}">—</span>
+                                <span class="spell__note" th:text="${s.note()}">—</span>
+                            </div>
+                        </article>
+                    </div>
+
+                    <footer class="timeline-stats">
+                        <span th:each="s : ${fake.bandStats()}" th:text="${s}">—</span>
+                    </footer>
+                </div>
+
+                <!--/* ── Płatności: twelve months, one block each ── */-->
+                <div th:if="${timeline == 'platnosci'}">
+                    <div class="pay-strip">
+                        <div th:each="p : ${fake.payMonths()}" class="pay-strip__month">
+                            <span class="pay-strip__block mono"
+                                  th:classappend="'pay-strip__block--' + ${p.tone()}"
+                                  th:text="${p.marker()}">—</span>
+                            <span class="pay-strip__label mono" th:text="${p.month()}">—</span>
+                        </div>
+                    </div>
+                    <footer class="timeline-stats">
+                        <span class="legend-key legend-key--green">W terminie</span>
+                        <span class="legend-key legend-key--warn">Po terminie — liczba to dni zwłoki</span>
+                        <span class="legend-key legend-key--danger">Niezapłacone</span>
+                        <span class="timeline-stats__trailing" th:text="${fake.payAverage()}">—</span>
+                    </footer>
+                </div>
+
+                <!--/* ── Czynsz: what it has been, and what the indexation projects ── */-->
+                <div th:if="${timeline == 'czynsz'}">
+                    <div class="rent-steps">
+                        <div th:each="r : ${fake.rentSteps()}" class="rent-step">
+                            <span class="rent-step__amount mono" th:text="${r.amount()}">—</span>
+                            <!--/*
+                              The bar needs a track of its own. A percentage height only resolves
+                              against a containing block with a DEFINITE height — put the bar
+                              straight in the column and its 88% is 88% of the whole column, labels
+                              included, so every bar overflows the top of the chart by the height of
+                              its own caption. The track is positioned and takes the leftover space;
+                              the bar is absolute inside it, which is what makes the percentage mean
+                              "of the plot area" rather than "of the column".
+                            */-->
+                            <span class="rent-step__track">
+                                <span class="rent-step__bar"
+                                      th:classappend="'rent-step__bar--' + ${r.tone()}"
+                                      th:style="'height:' + ${r.pct()} + '%'"></span>
+                            </span>
+                            <span class="rent-step__label" th:text="${r.label()}">—</span>
+                        </div>
+                    </div>
+                    <p class="inset-note" th:text="${fake.rentNote()}">—</p>
+                </div>
+
+                <!--/* ── Konserwacja: what has been done to the unit ── */-->
+                <!--/* th:each on a WRAPPER, th:replace on the child — never both on one element,
+                       for the same precedence reason th:if cannot share one: th:replace resolves at
+                       100 and th:each at 200, so the element is substituted before the loop
+                       variable exists and every expression inside the fragment call fails on an
+                       unbound `m`. home.html carries the same note. */-->
+                <div th:if="${timeline == 'konserwacja'}">
+                    <div th:each="m : ${fake.maintenance()}">
+                        <div th:replace="~{components :: railItem(title=${m.title()}, subline=${m.subline()}, date=${m.date()}, tone=${m.tone()}, filled=true)}"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!--/*
-          Unlike the card above, this body DOES carry card__body — it's prose and a form, not
-          a table wanting flush edges against the card's border, so the normal 18px body padding
-          is what we want here.
+          The contract beside the two rails — 320px and the rest, as the mockup sets it, collapsing
+          to one column when there is no room for two.
         */-->
-        <div class="card__body">
-            <!--/*
-              A GET, so the search is bookmarkable and the screen keeps one template for all three
-              states: nothing asked, hits to pick from, somebody picked. It carries no CSRF token
-              because it changes nothing — only the two forms below do. field__input reused
-              directly (not the field() fragment, which always renders a label above the input) —
-              this is a compact inline search bar, the same shape as the header bar's own search.
-            */-->
-            <form class="lead-search" th:action="@{/units/{id}(id=${unit.unitId()})}" method="get">
-                <input class="field__input" type="search" name="q" th:value="${term}" placeholder="Nazwisko albo imię">
-                <div th:replace="~{components :: btn(href=null, text='Szukaj', kind='secondary')}"></div>
-            </form>
+        <div class="unit-overview">
+            <!--/* ── Bieżąca umowa: every value here is real, from PM, Contacts and Accounting ── */-->
+            <div class="card">
+                <header class="card__head">
+                    <h2 class="card__title">Bieżąca umowa</h2>
+                </header>
+                <div class="card__body">
+                    <!--/* th:if and th:replace never share an element — the empty state hangs off a
+                           wrapper, as everywhere else here. */-->
+                    <div th:if="${contract == null}">
+                        <div th:replace="~{components :: emptyState(text='Pustostan — żaden najem nie biegnie w tym lokalu.')}"></div>
+                    </div>
 
-            <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
-            <div th:if="${asked and hits.isEmpty()}">
-                <div th:replace="~{components :: emptyState(text='Nikogo takiego jeszcze nie znamy — wpisz dane poniżej.')}"></div>
+                    <div th:if="${contract != null}">
+                        <!--/* A tenancy the register knows but whose parties were never projected
+                               renders as unnamed rather than as a blank row — a real state for rows
+                               written before pm_tenancy_party existed, and a blank there reads as a
+                               rendering fault rather than as missing data. */-->
+                        <div th:if="${contract.tenants().isEmpty()}" class="party">
+                            <span class="faint-note">Bez najemcy</span>
+                        </div>
+                        <div th:each="p : ${contract.tenants()}" class="party">
+                            <div th:replace="~{components :: avatar(initials=${p.initials()}, size='36')}"></div>
+                            <div class="party__who">
+                                <span class="party__name" th:text="${p.name()}">—</span>
+                                <span class="party__contact" th:text="${p.email()}">—</span>
+                            </div>
+                        </div>
+
+                        <div class="keyvalue-list">
+                            <div th:replace="~{components :: keyvalue(label='Okres', value=${contract.term()}, tone=null, mono=true)}"></div>
+                            <div th:replace="~{components :: keyvalue(label='Rodzaj', value=${contract.legalForm()}, tone=null, mono=false)}"></div>
+                            <!--/*
+                              The three components render ONLY when the contract declares a split.
+                              V22 records that "no split" and "a split with a zero admin fee" are
+                              legally different, so a zero shown here for an undivided contract
+                              would state a term nobody agreed.
+                            */-->
+                            <div th:if="${contract.split()}">
+                                <div th:replace="~{components :: keyvalue(label='Czynsz bazowy', value=${#numbers.formatDecimal(contract.rent(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                                <div th:replace="~{components :: keyvalue(label='Opłata administracyjna', value=${#numbers.formatDecimal(contract.adminFee(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                                <div th:replace="~{components :: keyvalue(label='Zaliczka na media', value=${#numbers.formatDecimal(contract.mediaAdvance(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                            </div>
+                            <div th:unless="${contract.split()}">
+                                <div th:replace="~{components :: keyvalue(label='Czynsz', value='bez podziału na składniki', tone=null, mono=false)}"></div>
+                            </div>
+                            <!--/* Nullable: a tenancy may be signed without one, and a formatted
+                                   null would render the string "null" rather than a dash. */-->
+                            <div th:if="${contract.deposit() != null}">
+                                <div th:replace="~{components :: keyvalue(label='Kaucja', value=${#numbers.formatDecimal(contract.deposit(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                            </div>
+                            <div th:if="${contract.deposit() == null}">
+                                <div th:replace="~{components :: keyvalue(label='Kaucja', value='—', tone=null, mono=false)}"></div>
+                            </div>
+                            <div th:replace="~{components :: keyvalue(label='Dzień płatności', value=${contract.rentDay()}, tone=null, mono=false)}"></div>
+                            <div th:replace="~{components :: keyvalue(label='Razem miesięcznie', value=${#numbers.formatDecimal(contract.monthlyTotal(), 1, 'WHITESPACE', 2, 'COMMA')}, tone='total', mono=true)}"></div>
+                            <!--/*
+                              Saldo is SIGNED, and negative is what owing money looks like — the same
+                              rule the register renders under, decided on the SIGN alone and never on
+                              the arrears colour. Two sources for one figure is how they end up
+                              disagreeing about the same tenancy.
+                            */-->
+                            <div th:replace="~{components :: keyvalue(label='Saldo', value=${#numbers.formatDecimal(contract.balance(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=${contract.balance().signum() < 0} ? 'danger' : null, mono=true)}"></div>
+                        </div>
+
+                        <a class="card__link" th:href="@{/units/{id}(id=${unit.unitId()}, tab='konto')}">Otwórz pełne konto ›</a>
+                    </div>
+                </div>
             </div>
 
-            <ul class="lead-hits" th:unless="${hits.isEmpty()}">
-                <li th:each="hit : ${hits}">
-                    <a th:href="@{/units/{id}(id=${unit.unitId()}, contactId=${hit.contactId()})}"
-                       th:text="${hit.givenName()} + ' ' + ${hit.surname()} + ' — ' + ${hit.email()}">—</a>
-                </li>
-            </ul>
+            <div class="unit-overview__rails">
+                <!--/* ── Wymaga uwagi ── */-->
+                <div class="card">
+                    <header class="card__head">
+                        <h2 class="card__title">Wymaga uwagi</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                        <span th:replace="~{components :: pill(tone='danger', text=${fake.attention().size()} + ' otwarte')}"></span>
+                    </header>
+                    <div class="card__body">
+                        <div th:each="a : ${fake.attention()}" class="attention"
+                             th:classappend="'attention--' + ${a.tone()}">
+                            <span class="attention__edge"></span>
+                            <span class="attention__text">
+                                <span class="attention__title" th:text="${a.title()}">—</span>
+                                <span class="attention__subline" th:text="${a.subline()}">—</span>
+                            </span>
+                            <!--/* Unbuilt, like the two header actions: neither "zarejestruj wpłatę
+                                   for this exact charge" nor "zalicz nadpłatę" is a route this
+                                   application has. Drawn, not promised. */-->
+                            <span class="btn btn--unbuilt" th:text="${a.action()}">—</span>
+                        </div>
+                    </div>
+                </div>
 
-            <form th:action="@{/units/{id}/interests(id=${unit.unitId()})}" method="post">
+                <!--/* ── Nadchodzące ── */-->
+                <div class="card">
+                    <header class="card__head">
+                        <h2 class="card__title">Nadchodzące</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                        <span class="card__meta">najbliższe 12 miesięcy</span>
+                    </header>
+                    <div class="card__body">
+                        <!--/* Wrapper, as above — th:each and th:replace never share an element. */-->
+                        <div th:each="e : ${fake.upcoming()}">
+                            <div th:replace="~{components :: railItem(title=${e.title()}, subline=${e.subline()}, date=${e.date()}, tone=${e.tone()}, filled=false)}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!--/* ══════════════════════════ Konto ══════════════════════════ */-->
+    <div th:if="${tab == 'konto'}" class="unit-tab">
+        <div class="card ledger-table"
+             th:with="cols=${ {'Data','Opis','Obciążenie','Wpłata','Saldo'} }">
+            <header class="card__head">
+                <h2 class="card__title">Konto najemcy</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta" th:if="${contract != null}">Saldo
+                    <span class="mono"
+                          th:classappend="${contract.balance().signum() < 0} ? 'amount--owed' : 'amount--settled'"
+                          th:text="${#numbers.formatDecimal(contract.balance(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                </span>
+            </header>
+
+            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='ledger-table')}"></div>
+
+            <div class="table__row" th:each="l : ${fake.ledger()}"
+                 th:classappend="${l.flagged()} ? 'table__row--flagged' : ''">
+                <span class="mono" th:attr="data-label=${cols[0]}" th:text="${l.date()}">—</span>
+                <span th:attr="data-label=${cols[1]}" th:text="${l.description()}">—</span>
+                <!--/* A line has a charge or a payment and never both; the absent one is a dash,
+                       not a zero, which would claim a zero-złoty posting was made. */-->
+                <span class="mono" th:attr="data-label=${cols[2]}">
+                    <span th:if="${l.charge() != null}" th:text="${l.charge()}">—</span>
+                    <span th:if="${l.charge() == null}" class="faint-note">—</span>
+                </span>
+                <span class="mono" th:attr="data-label=${cols[3]}">
+                    <span th:if="${l.payment() != null}" th:text="${l.payment()}">—</span>
+                    <span th:if="${l.payment() == null}" class="faint-note">—</span>
+                </span>
+                <span class="mono" th:attr="data-label=${cols[4]}"
+                      th:classappend="'ledger-balance--' + ${l.tone()}" th:text="${l.balance()}">—</span>
+            </div>
+
+            <footer class="card__foot" th:text="${fake.ledgerAccounts()}">—</footer>
+        </div>
+    </div>
+
+    <!--/* ══════════════════════════ Najemca ══════════════════════════ */-->
+    <!--/*
+      The tenant, whoever stands behind them, and — for a unit nobody is in — everyone who has
+      asked about it. The interest list moved here from Przegląd when the tabs arrived: it is the
+      answer to "who is in this unit, or who might be", which is what this tab asks. Both write
+      paths redirect back here rather than to the default tab, so a manager who adds somebody sees
+      the list they just changed.
+    */-->
+    <div th:if="${tab == 'najemca'}" class="unit-tab">
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Strony umowy</h2>
+            </header>
+            <div class="card__body">
+                <div th:if="${contract == null}">
+                    <div th:replace="~{components :: emptyState(text='Pustostan — nikt nie wynajmuje tego lokalu.')}"></div>
+                </div>
+
+                <div th:if="${contract != null}">
+                    <span th:replace="~{components :: microLabel(text='Najemcy')}"></span>
+                    <div th:if="${contract.tenants().isEmpty()}" class="party">
+                        <span class="faint-note">Ten najem nie ma zapisanych stron.</span>
+                    </div>
+                    <div th:each="p : ${contract.tenants()}" class="party">
+                        <div th:replace="~{components :: avatar(initials=${p.initials()}, size='36')}"></div>
+                        <div class="party__who">
+                            <span class="party__name" th:text="${p.name()}">—</span>
+                            <span class="party__contact" th:text="${p.email()}">—</span>
+                            <span class="party__contact" th:text="${p.phone()}">—</span>
+                        </div>
+                    </div>
+
+                    <!--/* Usually empty, and rendered only when it is not: an empty "Poręczyciele"
+                           heading suggests a guarantor is missing rather than that none was ever
+                           required. */-->
+                    <div th:unless="${contract.guarantors().isEmpty()}">
+                        <span th:replace="~{components :: microLabel(text='Poręczyciele')}"></span>
+                        <div th:each="p : ${contract.guarantors()}" class="party">
+                            <div th:replace="~{components :: avatar(initials=${p.initials()}, size='36')}"></div>
+                            <div class="party__who">
+                                <span class="party__name" th:text="${p.name()}">—</span>
+                                <span class="party__contact" th:text="${p.email()}">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="keyvalue-list">
+                        <div th:replace="~{components :: keyvalue(label='Tytuł przelewu', value=${contract.paymentReference()}, tone=null, mono=true)}"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!--/*
+          Card anatomy from Unit + tenancy detail, on this app's real content: who has asked about
+          the unit. The body fragment's own root carries no `card__body` class, so none of the
+          card's 18px body padding applies — tableHead/table__row already carry that padding
+          themselves, the same reasoning as properties.html and units.html.
+        */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Zainteresowani</h2>
+                <span class="card__meta" th:text="'(' + ${interested.size()} + ')'">—</span>
+            </header>
+
+            <!--/*
+              Head and rows scroll together — see properties.html's own note on why.
+
+              `table--stacks` because this table measures 793px against the 680px content area at
+              768, so at that width each row becomes a card, two across (components.css). The
+              trailing Rezerwuj/Wycofaj pair is what makes it wide, not the data.
+
+              The column names are declared once, here, and read twice: by `tableHead` for the head
+              and by each cell's `data-label` for the stacked form. The trailing action column is
+              deliberately left without a `data-label` — its header is blank, and a label rendered
+              from an empty string is 2px of margin under a heading that says nothing.
+            */-->
+            <div class="unit-interested-table table--stacks"
+                 th:with="cols=${ {'Osoba','Kontakt','Gotów płacić','Od kiedy',''} }">
+            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='unit-interested-table')}"></div>
+
+            <div th:if="${interested.isEmpty()}">
+                <div th:replace="~{components :: emptyState(text='Nikt jeszcze nie pytał o ten lokal.')}"></div>
+            </div>
+
+            <div class="table__row" th:each="party : ${interested}">
+                <span th:attr="data-label=${cols[0]}" th:text="${party.fullName()}">—</span>
+                <span th:attr="data-label=${cols[1]}">
+                    <span th:text="${party.email()}">—</span>
+                    <span class="muted" th:text="${party.phone()}">—</span>
+                </span>
                 <!--/*
-                  Two shapes of the same form. With somebody picked, the person is settled and only
-                  the two facts about the call remain; without, the manager describes them.
-                  Rendering both at once would let a form both name a person and describe a
-                  different one.
+                  Both are nullable: somebody who rings to ask what the agency would take has named
+                  neither, and a dash is the honest rendering of a question that was not answered.
                 */-->
-                <div th:if="${chosen != null}" class="lead-chosen">
-                    <input type="hidden" name="contactId" th:value="${chosenId}">
-                    <p>
-                        <strong th:text="${chosen.givenName()} + ' ' + ${chosen.surname()}">—</strong>
-                        <span class="muted" th:text="${chosen.email()}">—</span>
-                        <a th:href="@{/units/{id}(id=${unit.unitId()})}">zmień</a>
-                    </p>
+                <span class="mono" th:attr="data-label=${cols[2]}">
+                    <span th:if="${party.willingToPay() != null}"
+                          th:text="${#numbers.formatDecimal(party.willingToPay(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                    <span th:if="${party.willingToPay() == null}" class="faint-note">—</span>
+                </span>
+                <!--/*
+                  Already dd.mm.rrrr by the time this template sees it — UnitScreenController.
+                  InterestedPartyView formats it in Java, the same reason ReserveScreenController's
+                  booked-periods list does (this codebase's stated date convention; no
+                  thymeleaf-extras-java8time on this module's classpath, so #temporals does not exist).
+                */-->
+                <span class="mono" th:attr="data-label=${cols[3]}">
+                    <span th:if="${party.desiredStart() != null}" th:text="${party.desiredStart()}">—</span>
+                    <span th:if="${party.desiredStart() == null}" class="faint-note">—</span>
+                </span>
+                <span class="table-row-actions">
+                    <div th:replace="~{components :: btn(href=@{/units/{u}/reserve(u=${unit.unitId()}, interestId=${party.interestId()})}, text='Rezerwuj', kind='primary')}"></div>
+                    <form th:action="@{/units/{u}/interests/{i}/withdraw(u=${unit.unitId()}, i=${party.interestId()})}"
+                          method="post">
+                        <div th:replace="~{components :: btn(href=null, text='Wycofaj', kind='danger')}"></div>
+                    </form>
+                </span>
+            </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Dodaj zainteresowanego</h2>
+            </header>
+            <!--/*
+              Unlike the card above, this body DOES carry card__body — it's prose and a form, not
+              a table wanting flush edges against the card's border, so the normal 18px body padding
+              is what we want here.
+            */-->
+            <div class="card__body">
+                <!--/*
+                  A GET, so the search is bookmarkable and the screen keeps one template for all
+                  three states: nothing asked, hits to pick from, somebody picked. It carries no CSRF
+                  token because it changes nothing — only the two forms below do. The tab is a hidden
+                  field rather than part of the action, because a GET form discards the query string
+                  in its action attribute and would throw the manager back to Przegląd on every
+                  search. field__input reused directly (not the field() fragment, which always
+                  renders a label above the input) — this is a compact inline search bar, the same
+                  shape as the header bar's own search.
+                */-->
+                <form class="lead-search" th:action="@{/units/{id}(id=${unit.unitId()})}" method="get">
+                    <input type="hidden" name="tab" value="najemca">
+                    <input class="field__input" type="search" name="q" th:value="${term}" placeholder="Nazwisko albo imię">
+                    <div th:replace="~{components :: btn(href=null, text='Szukaj', kind='secondary')}"></div>
+                </form>
+
+                <div th:if="${asked and hits.isEmpty()}">
+                    <div th:replace="~{components :: emptyState(text='Nikogo takiego jeszcze nie znamy — wpisz dane poniżej.')}"></div>
                 </div>
 
-                <p class="muted" th:if="${chosen == null}">— albo nowa osoba —</p>
+                <ul class="lead-hits" th:unless="${hits.isEmpty()}">
+                    <li th:each="hit : ${hits}">
+                        <a th:href="@{/units/{id}(id=${unit.unitId()}, tab='najemca', contactId=${hit.contactId()})}"
+                           th:text="${hit.givenName()} + ' ' + ${hit.surname()} + ' — ' + ${hit.email()}">—</a>
+                    </li>
+                </ul>
 
-                <div th:if="${chosen == null}" class="lead-fields">
-                    <div th:replace="~{components :: field(name='givenName', label='Imię', value=null, type='text', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder='Imię', autofocus=false)}"></div>
-                    <div th:replace="~{components :: field(name='surname', label='Nazwisko', value=null, type='text', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder='Nazwisko', autofocus=false)}"></div>
-                    <div th:replace="~{components :: field(name='email', label='E-mail', value=null, type='email', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder='E-mail', autofocus=false)}"></div>
-                    <div th:replace="~{components :: field(name='phone', label='Telefon', value=null, type='tel', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder='Telefon', autofocus=false)}"></div>
+                <form th:action="@{/units/{id}/interests(id=${unit.unitId()})}" method="post">
                     <!--/*
-                      The one fact on this form that is genuinely the manager's to assert.
-                      Defaulting it to today would have the application claim the clause was read
-                      out when nobody said so — see ContactService.registerLead. Not required: an
-                      unticked box is a valid, meaningful answer (anUnconfirmedClauseIsStoredAsAbsent).
+                      Two shapes of the same form. With somebody picked, the person is settled and
+                      only the two facts about the call remain; without, the manager describes them.
+                      Rendering both at once would let a form both name a person and describe a
+                      different one.
                     */-->
-                    <label class="lead-consent">
-                        <input type="checkbox" name="infoClauseServed" value="true">
-                        Przekazano klauzulę informacyjną
-                    </label>
-                </div>
+                    <div th:if="${chosen != null}" class="lead-chosen">
+                        <input type="hidden" name="contactId" th:value="${chosenId}">
+                        <p>
+                            <strong th:text="${chosen.givenName()} + ' ' + ${chosen.surname()}">—</strong>
+                            <span class="muted" th:text="${chosen.email()}">—</span>
+                            <a th:href="@{/units/{id}(id=${unit.unitId()}, tab='najemca')}">zmień</a>
+                        </p>
+                    </div>
 
-                <div class="lead-fields">
-                    <div th:replace="~{components :: field(name='willingToPay', label='Gotów płacić', value=null, type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
-                    <div th:replace="~{components :: field(name='desiredStart', label='Od kiedy', value=null, type='date', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
-                </div>
+                    <p class="muted" th:if="${chosen == null}">— albo nowa osoba —</p>
 
-                <div th:replace="~{components :: btn(href=null, text='Dodaj', kind='primary')}"></div>
-            </form>
+                    <div th:if="${chosen == null}" class="lead-fields">
+                        <div th:replace="~{components :: field(name='givenName', label='Imię', value=null, type='text', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder='Imię', autofocus=false)}"></div>
+                        <div th:replace="~{components :: field(name='surname', label='Nazwisko', value=null, type='text', required=true, help=null, suffix=null, error=null, inputmode=null, placeholder='Nazwisko', autofocus=false)}"></div>
+                        <div th:replace="~{components :: field(name='email', label='E-mail', value=null, type='email', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder='E-mail', autofocus=false)}"></div>
+                        <div th:replace="~{components :: field(name='phone', label='Telefon', value=null, type='tel', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder='Telefon', autofocus=false)}"></div>
+                        <!--/*
+                          The one fact on this form that is genuinely the manager's to assert.
+                          Defaulting it to today would have the application claim the clause was read
+                          out when nobody said so — see ContactService.registerLead. Not required: an
+                          unticked box is a valid, meaningful answer (anUnconfirmedClauseIsStoredAsAbsent).
+                        */-->
+                        <label class="lead-consent">
+                            <input type="checkbox" name="infoClauseServed" value="true">
+                            Przekazano klauzulę informacyjną
+                        </label>
+                    </div>
+
+                    <div class="lead-fields">
+                        <div th:replace="~{components :: field(name='willingToPay', label='Gotów płacić', value=null, type='text', required=false, help=null, suffix='zł', error=null, inputmode='decimal', placeholder=null, autofocus=false)}"></div>
+                        <div th:replace="~{components :: field(name='desiredStart', label='Od kiedy', value=null, type='date', required=false, help=null, suffix=null, error=null, inputmode=null, placeholder=null, autofocus=false)}"></div>
+                    </div>
+
+                    <div th:replace="~{components :: btn(href=null, text='Dodaj', kind='primary')}"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!--/* ══════════════════════════ Liczniki ══════════════════════════ */-->
+    <div th:if="${tab == 'liczniki'}" class="unit-tab">
+        <div class="card meters-table"
+             th:with="cols=${ {'Licznik','Numer','Ostatni odczyt','Stan','Następny odczyt'} }">
+            <header class="card__head">
+                <h2 class="card__title">Liczniki</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta" th:text="'(' + ${fake.meters().size()} + ')'">—</span>
+            </header>
+
+            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='meters-table')}"></div>
+
+            <div class="table__row" th:each="m : ${fake.meters()}">
+                <span th:attr="data-label=${cols[0]}" th:text="${m.kind()}">—</span>
+                <span class="mono muted" th:attr="data-label=${cols[1]}" th:text="${m.serial()}">—</span>
+                <span class="mono" th:attr="data-label=${cols[2]}" th:text="${m.readOn()}">—</span>
+                <span class="mono" th:attr="data-label=${cols[3]}"
+                      th:text="${m.reading()} + ' ' + ${m.unit()}">—</span>
+                <span class="mono" th:attr="data-label=${cols[4]}" th:text="${m.dueOn()}">—</span>
+            </div>
+
+            <footer class="card__foot" th:text="${fake.metersNote()}">—</footer>
+        </div>
+    </div>
+
+    <!--/* ══════════════════════════ Dokumenty ══════════════════════════ */-->
+    <div th:if="${tab == 'dokumenty'}" class="unit-tab">
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Dokumenty</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta" th:text="'(' + ${fake.documents().size()} + ')'">—</span>
+            </header>
+            <div class="card__body">
+                <div th:each="d : ${fake.documents()}" class="document"
+                     th:classappend="'document--' + ${d.tone()}">
+                    <span class="document__mark"></span>
+                    <span class="document__text">
+                        <span class="document__name" th:text="${d.name()}">—</span>
+                        <span class="document__meta" th:text="${d.kind()}">—</span>
+                    </span>
+                    <!--/* A document that has not been filed has no date and no size, and renders
+                           as what it is: outstanding. A dash in both columns would read as a filed
+                           document whose metadata went missing. */-->
+                    <span class="document__filed mono" th:if="${d.added() != null}"
+                          th:text="${d.added()} + ' · ' + ${d.size()}">—</span>
+                    <span class="document__filed faint-note" th:if="${d.added() == null}">brakuje</span>
+                </div>
+            </div>
+            <footer class="card__foot" th:text="${fake.documentsNote()}">—</footer>
         </div>
     </div>
 </main>
