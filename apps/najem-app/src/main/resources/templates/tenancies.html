@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Najmy — NAJEM', ~{::header.pagebar__content}, ~{::main})}">
+<body>
+<!--/*
+  Title, what the register contains, and the one action, on the shell's page bar — the same
+  arrangement properties.html and units.html use, and the one prototype v2 draws for this screen.
+
+  Outside <main> deliberately: the layout selects this element by class and renders it in the band,
+  and `~{::main}` below does not match it, so it appears once, up there.
+
+  The subtitle counts this page's own rows. The mockup's second figure is empty units; this screen
+  never queries units, so reporting one here would be a number nobody could check against the table
+  under it — see the controller's summary() for the whole argument.
+*/-->
+<header class="pagebar__content">
+    <div class="pagebar__titles">
+        <h1>Najmy</h1>
+        <p class="pagebar__subtitle" th:text="${summary}">—</p>
+    </div>
+    <!--/*
+      → /dodaj/najem, the picker the shell's "+ Dodaj" chooser already opens for this same intent,
+      rather than a /tenancies/new of this screen's own.
+
+      The mockup makes choosing the lokal step 1 of the wizard and lists vacant units directly. This
+      application cannot: UnitBoardQuery is per property, deliberately, and AddPickerController's
+      javadoc already refused to build a workspace-wide unit list to serve a navigation step. So the
+      choice is property-then-unit in two steps instead of one — a departure from the drawing, made
+      where the alternative was inventing a read model for a button, and made by reusing the answer
+      this app had already given rather than adding a second one beside it.
+    */-->
+    <div class="pagebar__actions">
+        <div th:replace="~{components :: btn(href=@{/dodaj/najem}, text='Nowy najem', kind='primary')}"></div>
+    </div>
+</header>
+<main>
+
+    <!--/*
+      A plain `.card` wrapper rather than the `card` fragment, for the reason properties.html
+      records: no title/actions/footer to give it, and tableHead/table__row already carry the
+      card's own horizontal padding. `tenancies-table` sits on the card because it defines --cols
+      and BOTH the head and the rows have to inherit it.
+
+      `table--stacks` and NO `table-scroll`: six columns carrying a name, an address, a date range,
+      two amounts and a pill measure wider than the 680px content area at 768, which is what THE
+      TABLE RULE (components.css) makes the deciding figure. Sideways scrolling was considered for
+      that case and rejected there, once, for every table — a manager on a tablet is working through
+      the list rather than scanning a column. The two classes are also mutually exclusive in
+      practice: `.table-scroll`'s `overflow-x` is declared in a later cascade layer and would win
+      regardless of specificity, which is the trap bank.html documents at length.
+
+      Column names declared ONCE here and read twice — by `tableHead` and by each cell's
+      `data-label`, which is what labels the fields once the head is hidden at 768. Same `th:with`
+      mechanism bank.html and unit.html use, and for the same reason: two lists of six column names
+      drift apart, one list cannot.
+    */-->
+    <div class="card tenancies-table table--stacks"
+         th:with="cols=${ {'Najemca','Lokal','Okres','Czynsz','Saldo','Status'} }">
+        <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='tenancies-table')}"></div>
+
+        <!--/* th:if and th:replace on ONE element never fire together — th:replace resolves at
+               precedence 100, th:if at 300, so the fragment substitutes the element before the
+               guard is evaluated and the empty state renders above populated rows. Wrapper it is,
+               the same fix properties.html and reports.html carry. */-->
+        <div th:if="${rows.isEmpty()}">
+            <div th:replace="~{components :: emptyState(text='Ta agencja nie ma jeszcze żadnych najmów.')}"></div>
+        </div>
+
+        <div class="table__row" th:each="t : ${rows}">
+            <!--/*
+              A div, not a span: the avatar fragment's root is a <div>, and nesting a block element
+              inside an inline one is invalid — the same correction unit.html's tenant cell needed.
+
+              The name is the link, following properties.html rather than the mockup's whole-row
+              click target: a row that is one big tap area gives the keyboard nothing to focus and
+              a screen reader nothing to announce.
+            */-->
+            <div class="tenancy__who" th:attr="data-label=${cols[0]}">
+                <!--/* 24px — the size the mockup draws in this row, and one of the four the avatar
+                       fragment already offers. */-->
+                <div th:replace="~{components :: avatar(initials=${t.initials()}, size='24')}"></div>
+                <!--/*
+                  A tenancy whose parties were never projected renders "Bez najemcy" rather than an
+                  empty cell. It is a real state for rows written before pm_tenancy_party existed,
+                  and a blank there reads as a rendering fault rather than as missing data.
+                */-->
+                <a th:href="@{/tenancies/{id}/timeline(id=${t.tenancyId()})}"
+                   th:text="${#strings.isEmpty(t.tenant())} ? 'Bez najemcy' : ${t.tenant()}">—</a>
+            </div>
+            <span class="tenancy__where" th:attr="data-label=${cols[1]}" th:text="${t.where()}">—</span>
+            <span class="mono tenancy__term" th:attr="data-label=${cols[2]}" th:text="${t.term()}">—</span>
+            <span class="mono" th:attr="data-label=${cols[3]}"
+                  th:text="${#numbers.formatDecimal(t.rent(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+            <!--/*
+              Saldo is SIGNED, and negative is what owing money looks like — the mockup stores it
+              that way (`bal: -4120`) and a ledger reads that way. Accounting reports what is
+              outstanding as a positive figure; the controller negates it once, and nothing here
+              re-decides the sign.
+
+              Zero is faint rather than red, so a page of settled tenancies reads as quiet. The
+              class is chosen on the SIGN alone, never on the arrears colour — two sources for one
+              cell is how they end up disagreeing about the same tenancy.
+            */-->
+            <span class="mono" th:attr="data-label=${cols[4]}"
+                  th:classappend="${t.balance().signum() < 0} ? 'amount--owed' : 'amount--settled'"
+                  th:text="${#numbers.formatDecimal(t.balance(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+            <!--/*
+              The colour comes from accounting verbatim and is only ever handed to arrearsPill,
+              never recomputed — reports.html's rule, and the reason A7 keeps the derived board out
+              of reach of anything that could form a second opinion about it.
+
+              Guarded, and the guard is on a WRAPPER inside the cell rather than beside the
+              th:replace: a tenancy the arrears board has no row for would otherwise not merely
+              render arrearsPill's neutral fallback, it would throw on t.colour().name(). Accounting
+              has simply not spoken about that tenancy, and an empty pill would claim it has.
+            */-->
+            <!--/* No class of its own: `--cols`' 6th track and the nth-child(n+4) alignment rule
+                   already place this cell, so a `tenancy__status` here would style nothing —
+                   TemplateHygieneTest caught exactly that and is right to. */-->
+            <span th:attr="data-label=${cols[5]}">
+                <span th:if="${t.colour() != null}">
+                    <span th:replace="~{components :: arrearsPill(colour=${t.colour().name()})}"></span>
+                </span>
+            </span>
+        </div>
+    </div>
+</main>
+</body>
+</html>

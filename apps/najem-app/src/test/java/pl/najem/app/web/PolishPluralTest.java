@@ -12,45 +12,47 @@ import static org.assertj.core.api.Assertions.assertThat;
  * developer types while checking their work (1, 2, 3, 5). A portfolio of twelve flats reading
  * "12 lokale" is wrong Polish on the most ordinary number on the screen.
  *
- * <p>No Spring, no database: this is a pure function on a controller and the test is a few
- * microseconds.
+ * <p>No Spring, no database: this is a pure function and the test is a few microseconds.
+ *
+ * <p>It tests {@link PolishPlural} rather than a controller because the rule outgrew the one screen
+ * that first needed it — see that class for why it moved.
  */
 class PolishPluralTest {
 
     @Test
     void oneTakesTheSingular() {
-        assertThat(PropertiesScreenController.polish(1, "lokal", "lokale", "lokali")).isEqualTo("lokal");
+        assertThat(PolishPlural.of(1, "lokal", "lokale", "lokali")).isEqualTo("lokal");
     }
 
     @Test
     void twoToFourTakeTheFewForm() {
-        assertThat(PropertiesScreenController.polish(2, "lokal", "lokale", "lokali")).isEqualTo("lokale");
-        assertThat(PropertiesScreenController.polish(3, "lokal", "lokale", "lokali")).isEqualTo("lokale");
-        assertThat(PropertiesScreenController.polish(4, "lokal", "lokale", "lokali")).isEqualTo("lokale");
+        assertThat(PolishPlural.of(2, "lokal", "lokale", "lokali")).isEqualTo("lokale");
+        assertThat(PolishPlural.of(3, "lokal", "lokale", "lokali")).isEqualTo("lokale");
+        assertThat(PolishPlural.of(4, "lokal", "lokale", "lokali")).isEqualTo("lokale");
     }
 
     /** The half of the rule that gets left out. 12–14 end in 2–4 and still take the many form. */
     @Test
     void theTeensTakeTheManyFormDespiteEndingInTwoToFour() {
-        assertThat(PropertiesScreenController.polish(12, "lokal", "lokale", "lokali")).isEqualTo("lokali");
-        assertThat(PropertiesScreenController.polish(13, "lokal", "lokale", "lokali")).isEqualTo("lokali");
-        assertThat(PropertiesScreenController.polish(14, "lokal", "lokale", "lokali")).isEqualTo("lokali");
+        assertThat(PolishPlural.of(12, "lokal", "lokale", "lokali")).isEqualTo("lokali");
+        assertThat(PolishPlural.of(13, "lokal", "lokale", "lokali")).isEqualTo("lokali");
+        assertThat(PolishPlural.of(14, "lokal", "lokale", "lokali")).isEqualTo("lokali");
     }
 
     /** And the twenties resume the few form — 22 is "lokale" again, which is what makes 12 a rule
      *  about the last two digits rather than a special case for one number. */
     @Test
     void countsAboveTwentyEndingInTwoToFourTakeTheFewFormAgain() {
-        assertThat(PropertiesScreenController.polish(22, "lokal", "lokale", "lokali")).isEqualTo("lokale");
-        assertThat(PropertiesScreenController.polish(103, "lokal", "lokale", "lokali")).isEqualTo("lokale");
+        assertThat(PolishPlural.of(22, "lokal", "lokale", "lokali")).isEqualTo("lokale");
+        assertThat(PolishPlural.of(103, "lokal", "lokale", "lokali")).isEqualTo("lokale");
     }
 
     @Test
     void everythingElseTakesTheManyForm() {
-        assertThat(PropertiesScreenController.polish(0, "lokal", "lokale", "lokali")).isEqualTo("lokali");
-        assertThat(PropertiesScreenController.polish(5, "lokal", "lokale", "lokali")).isEqualTo("lokali");
-        assertThat(PropertiesScreenController.polish(11, "lokal", "lokale", "lokali")).isEqualTo("lokali");
-        assertThat(PropertiesScreenController.polish(100, "lokal", "lokale", "lokali")).isEqualTo("lokali");
+        assertThat(PolishPlural.of(0, "lokal", "lokale", "lokali")).isEqualTo("lokali");
+        assertThat(PolishPlural.of(5, "lokal", "lokale", "lokali")).isEqualTo("lokali");
+        assertThat(PolishPlural.of(11, "lokal", "lokale", "lokali")).isEqualTo("lokali");
+        assertThat(PolishPlural.of(100, "lokal", "lokale", "lokali")).isEqualTo("lokali");
     }
 
     /**
@@ -60,7 +62,7 @@ class PolishPluralTest {
      */
     @Test
     void zeroPropertiesReadsAsThePluralNotTheSingular() {
-        assertThat(PropertiesScreenController.polish(0, "nieruchomość", "nieruchomości", "nieruchomości"))
+        assertThat(PolishPlural.of(0, "nieruchomość", "nieruchomości", "nieruchomości"))
             .isEqualTo("nieruchomości");
     }
 }

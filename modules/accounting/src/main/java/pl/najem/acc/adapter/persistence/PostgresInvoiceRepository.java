@@ -10,7 +10,9 @@ import pl.najem.acc.domain.Invoice;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -45,6 +47,28 @@ public class PostgresInvoiceRepository implements InvoiceRepository {
             from acc_charge
             where workspace_id = ? and tenancy_id = ? and active and amount > allocated_amount
             """, PostgresInvoiceRepository::invoice, workspaceId, tenancyId);
+    }
+
+    /**
+     * The {@code where} clause is the one above, character for character, and the port's javadoc
+     * says why that matters. {@code sum} over a filtered set never returns null here, because the
+     * filter is what puts the group in the result at all.
+     */
+    @Override
+    public Map<UUID, BigDecimal> outstandingByTenancy(UUID workspaceId) {
+        var totals = new LinkedHashMap<UUID, BigDecimal>();
+        jdbc.query("""
+            select tenancy_id, sum(amount - allocated_amount) as outstanding
+            from acc_charge
+            where workspace_id = ? and active and amount > allocated_amount
+            group by tenancy_id
+            """,
+            rs -> {
+                totals.put(rs.getObject("tenancy_id", UUID.class),
+                    rs.getBigDecimal("outstanding"));
+            },
+            workspaceId);
+        return totals;
     }
 
     @Override

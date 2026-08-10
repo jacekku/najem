@@ -151,6 +151,7 @@ public class TenancyService {
         var tenancy = Tenancy.from(stream.events());
         tenancy.requireOwnedBy(workspaceId);
         store.append(tenancyId, "Tenancy", stream.version(), tenancy.addTenant(contactId), List.of());
+        projection.tenantAdded(tenancyId, tenancy.workspaceId(), contactId);
     }
 
     public void removeTenant(UUID workspaceId, UUID tenancyId, UUID contactId) {
@@ -158,6 +159,7 @@ public class TenancyService {
         var tenancy = Tenancy.from(stream.events());
         tenancy.requireOwnedBy(workspaceId);
         store.append(tenancyId, "Tenancy", stream.version(), tenancy.removeTenant(contactId), List.of());
+        projection.tenantRemoved(tenancyId, tenancy.workspaceId(), contactId);
     }
 
     /** A manager activating early, ahead of the timer armed at reservation. */
@@ -308,7 +310,7 @@ public class TenancyService {
         due.disarm(TenancyStartProcess.KIND, tenancyId);
         due.disarm(RentChangeProcess.KIND, tenancyId);
         due.disarm(EndOfTenancyProcess.KIND, tenancyId);
-        projection.ended(tenancyId, tenancy.workspaceId());
+        projection.ended(tenancyId, tenancy.workspaceId(), command.reason());
     }
 
     /**

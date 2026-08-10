@@ -109,6 +109,29 @@ public class InMemoryInvoiceRepository implements InvoiceRepository {
     }
 
     /**
+     * Written as the {@code group by} it mirrors: filter with the SAME predicate
+     * {@link #openInvoices} uses, then fold {@code amount - allocated_amount} per tenancy.
+     *
+     * <p>Expressed by reusing this class's own {@code active}/{@code owed} fields rather than by
+     * summing what {@code openInvoices} returns. Deriving one from the other would make them agree
+     * by construction, and the whole point of the contract test is that they agree because two
+     * independent expressions say the same thing — which is exactly the trap
+     * {@code fullySettled()} fell into (rules 13 and 14).
+     *
+     * <p>A tenancy owing nothing contributes no entry, because the filter removes its last invoice
+     * before the fold ever sees the group — as the statement's {@code where} does.
+     */
+    @Override
+    public Map<UUID, BigDecimal> outstandingByTenancy(UUID workspaceId) {
+        var totals = new LinkedHashMap<UUID, BigDecimal>();
+        invoices.values().stream()
+            .filter(stored -> stored.workspaceId().equals(workspaceId))
+            .filter(stored -> stored.active() && stored.owed().signum() > 0)
+            .forEach(stored -> totals.merge(stored.tenancyId(), stored.owed(), BigDecimal::add));
+        return totals;
+    }
+
+    /**
      * The workspace clause is the boundary, and it is a filter rather than a failure: a charge in
      * another agency is absent, not forbidden.
      */

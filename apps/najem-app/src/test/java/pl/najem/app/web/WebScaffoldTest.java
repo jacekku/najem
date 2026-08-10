@@ -127,9 +127,14 @@ class WebScaffoldTest {
     /**
      * The nav has the shape the design gives it, and no item is a link to nothing.
      *
-     * <p>Three of the seven destinations are not built. They render muted and non-clickable rather
+     * <p>Two of the seven destinations are not built. They render muted and non-clickable rather
      * than being omitted, which is a deliberate departure from home.html's "only what is wired is
      * a link" — honoured in substance, since nothing here is a link to nothing.
+     *
+     * <p><b>It was three until Najmy was built.</b> This test went red on that change, which is the
+     * whole reason it names the unbuilt items individually rather than counting them: an item
+     * quietly losing its link is the same diff as an item quietly gaining one, and only the
+     * assertion below can tell those apart.
      *
      * <p><b>Seven, and "Zaległości" rather than "Raporty".</b> Prototype v2 rebuilt the rail: three
      * groups instead of two, Płatności dropped, and Raporty promoted from an item inside KSIĘGOWOŚĆ
@@ -173,15 +178,43 @@ class WebScaffoldTest {
             .containsExactly("Pulpit", "Nieruchomości", "Najmy",
                 "Faktury", "Bank", "Księga główna",
                 "Zaległości");
-        // Unbuilt: rendered, muted, and carrying no href.
-        org.assertj.core.api.Assertions.assertThat(rail).contains("nav__item--unbuilt");
-        org.assertj.core.api.Assertions.assertThat(rail).doesNotContain("href=\"/tenancies\"");
+        // Unbuilt: rendered, muted, and carrying no href. Faktury and Księga główna are the two
+        // left — named rather than counted, so that a THIRD item silently becoming unbuilt (a
+        // regression that would look like nothing in a diff) fails here.
+        org.assertj.core.api.Assertions.assertThat(unbuiltLabelsOf(rail))
+            .containsExactly("Faktury", "Księga główna");
+        // And Najmy is a real link now, which is what makes the register reachable at all.
+        org.assertj.core.api.Assertions.assertThat(rail).contains("href=\"/tenancies\"");
         // The active item is distinguishable by more than colour alone (weight 600, per the
         // handoff) — asserted here as the class actually landing, not merely as a CSS rule that
         // could be dead: Thymeleaf 3.1 dropped #httpServletRequest, so the comparison this class
         // depends on runs through a model attribute instead, and that wiring deserves its own
         // check rather than trust.
         org.assertj.core.api.Assertions.assertThat(rail).contains("nav__item--active");
+    }
+
+    /**
+     * The visible labels of the items that are NOT links — the {@code <span class="nav__item">}s.
+     *
+     * <p>Reads the labels rather than counting {@code nav__item--unbuilt} occurrences, for the same
+     * reason {@link #navLabelsOf} exists: a count cannot tell which items are muted, and "three
+     * unbuilt" stayed true for a while across two different sets of three.
+     */
+    private static java.util.List<String> unbuiltLabelsOf(String rail) {
+        var labels = new java.util.ArrayList<String>();
+        var matcher = java.util.regex.Pattern
+            .compile("<span class=\"nav__item nav__item--unbuilt\".*?</span>\\s*</span>",
+                java.util.regex.Pattern.DOTALL)
+            .matcher(rail);
+        while (matcher.find()) {
+            var label = java.util.regex.Pattern
+                .compile("<span class=\"nav__label\">(.*?)</span>")
+                .matcher(matcher.group());
+            if (label.find()) {
+                labels.add(label.group(1).trim());
+            }
+        }
+        return labels;
     }
 
     /**

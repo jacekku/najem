@@ -44,28 +44,7 @@ public class PropertiesScreenController {
      */
     private static String portfolio(java.util.List<PropertyBoardQuery.Row> board) {
         long units = board.stream().mapToLong(row -> row.occupancy().total()).sum();
-        return board.size() + " " + polish(board.size(), "nieruchomość", "nieruchomości", "nieruchomości")
-            + " · " + units + " " + polish(units, "lokal", "lokale", "lokali");
-    }
-
-    /**
-     * Polish has three plural forms, not two, and the rule is on the last two digits.
-     *
-     * <p>One (1 lokal), few for a count ending in 2–4 (2 lokale, 23 lokale) — except the teens,
-     * where 12–14 take the many form (12 lokali, not "12 lokale") — and many for everything else
-     * (5 lokali, 0 lokali). English's singular/plural applied here reads as broken Polish on most
-     * counts rather than on an edge case, and the teens exception is the half of the rule that gets
-     * left out; {@code PolishPluralTest} pins both.
-     */
-    static String polish(long count, String one, String few, String many) {
-        long lastTwo = Math.abs(count) % 100;
-        long last = Math.abs(count) % 10;
-        if (count == 1) {
-            return one;
-        }
-        if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) {
-            return few;
-        }
-        return many;
+        return PolishPlural.count(board.size(), "nieruchomość", "nieruchomości", "nieruchomości")
+            + " · " + PolishPlural.count(units, "lokal", "lokale", "lokali");
     }
 }

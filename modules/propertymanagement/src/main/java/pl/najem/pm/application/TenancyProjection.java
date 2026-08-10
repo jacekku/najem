@@ -1,5 +1,6 @@
 package pl.najem.pm.application;
 
+import pl.najem.pm.domain.EndReason;
 import pl.najem.pm.domain.MonthlyAmount;
 import pl.najem.pm.domain.ReserveTenancy;
 
@@ -24,13 +25,33 @@ import java.util.UUID;
  */
 public interface TenancyProjection {
 
+    /** Writes the tenancy AND its parties: the command carries both lists and this is the one
+     *  moment they are handed over together. */
     void tenancyReserved(ReserveTenancy command);
+
+    /**
+     * A co-tenant added after the agreement was signed.
+     *
+     * <p>New here, and the reason the parties table was worth adding at all.
+     * {@code TenancyService.addTenant} appended {@code TenantAddedToTenancy} to the stream and then
+     * called nothing — there was no derived copy of the party list for it to fall out of step with,
+     * so the omission was invisible. The moment one exists, both writers have to reach it.
+     */
+    void tenantAdded(UUID tenancyId, UUID workspaceId, UUID contactId);
+
+    /** The other half of the same omission. Removes the row; the event stays in the stream. */
+    void tenantRemoved(UUID tenancyId, UUID workspaceId, UUID contactId);
 
     void reservationCancelled(UUID tenancyId, UUID workspaceId);
 
     void activated(UUID tenancyId, UUID workspaceId, LocalDate on);
 
-    void ended(UUID tenancyId, UUID workspaceId);
+    /**
+     * The reason is carried because one of them is not an ending. {@code ERROR_ANNULLED} says the
+     * tenancy should never have existed, and a store that recorded only "ended" cannot tell a
+     * register which of its finished rows describe somebody who actually lived there.
+     */
+    void ended(UUID tenancyId, UUID workspaceId, EndReason reason);
 
     /** The applied rent, breakdown included — see {@code TenancyService.applyRentChange}. */
     void rentChanged(UUID tenancyId, UUID workspaceId, MonthlyAmount monthly);

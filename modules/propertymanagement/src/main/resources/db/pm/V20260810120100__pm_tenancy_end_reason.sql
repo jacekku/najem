@@ -1,0 +1,16 @@
+-- Why a tenancy ended, kept because one of the reasons is not an ending.
+--
+-- ERROR_ANNULLED records a tenancy that should never have existed -- a mistaken reservation or
+-- activation being taken back. The event stays in the stream, because an event store does not
+-- forget, but nobody lived there. Reporting already draws this line (V64 in db/reporting: "a period
+-- counts as occupancy unless it was annulled") and PM could not, because TenancyProjection.ended
+-- took only the id and the workspace. Every ending looked the same in pm_tenancy.
+--
+-- Found while writing the register's own test: without this column the Najmy screen lists an
+-- annulled tenancy as an ordinary finished one, which is a claim that somebody lived in a unit
+-- that was never let.
+--
+-- Null for every row written before this migration, and for every tenancy that has not ended.
+-- Neither is annulled, so the register's predicate reads null as "keep" -- see
+-- PostgresTenancyBoardProjection.
+alter table pm_tenancy add column end_reason text;

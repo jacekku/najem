@@ -110,6 +110,15 @@ class PmSchemaShapeTest {
         // the same reason, so if a squash ever adds the column the exemption becomes a lie.
         assertThat(columnsOf("pm_process_due"))
             .containsExactly("due_on", "fired_at", "kind", "subject_id");
+
+        // Role is IN this key, and narrowing it to (tenancy_id, contact_id) is the tempting change
+        // that must not be made. The web layer refuses to name one person as both tenant and
+        // guarantor on a reservation, but the AGGREGATE does not — so the narrower key would encode
+        // an invariant the record has never enforced, and the projection would start throwing on a
+        // state PM considers legal. A projection is not the place to introduce a rule the record
+        // lacks. The DDL snapshot above would notice the change; only this says why it is wrong.
+        assertThat(constraintOn("pm_tenancy_party", "pm_tenancy_party_pkey"))
+            .isEqualTo("PRIMARY KEY (tenancy_id, contact_id, role)");
     }
 
     /**
@@ -217,6 +226,7 @@ class PmSchemaShapeTest {
         "pm_tenancy.component_split boolean not null",
         "pm_tenancy.deposit_amount numeric null",
         "pm_tenancy.end_date date null",
+        "pm_tenancy.end_reason text null",
         "pm_tenancy.insurance_valid_to date null",
         "pm_tenancy.legal_form text not null",
         "pm_tenancy.media_advance numeric null",
@@ -229,6 +239,10 @@ class PmSchemaShapeTest {
         "pm_tenancy.tenancy_id uuid not null",
         "pm_tenancy.unit_id uuid not null",
         "pm_tenancy.workspace_id uuid not null",
+        "pm_tenancy_party.contact_id uuid not null",
+        "pm_tenancy_party.role text not null",
+        "pm_tenancy_party.tenancy_id uuid not null",
+        "pm_tenancy_party.workspace_id uuid not null",
         "pm_unit.base_rent numeric not null",
         "pm_unit.listing_ref text null",
         "pm_unit.market_state text not null default 'INVENTORY'::text",
@@ -246,6 +260,7 @@ class PmSchemaShapeTest {
         "pm_property pm_property_pkey PRIMARY KEY (property_id)",
         "pm_repair pm_repair_pkey PRIMARY KEY (repair_id)",
         "pm_tenancy pm_tenancy_pkey PRIMARY KEY (tenancy_id)",
+        "pm_tenancy_party pm_tenancy_party_pkey PRIMARY KEY (tenancy_id, contact_id, role)",
         "pm_unit pm_unit_pkey PRIMARY KEY (unit_id)");
 
     private static final List<String> EXPECTED_INDEXES = List.of(
@@ -260,6 +275,8 @@ class PmSchemaShapeTest {
         "pm_tenancy pm_tenancy_pkey CREATE UNIQUE INDEX pm_tenancy_pkey ON pm_tenancy USING btree (tenancy_id)",
         "pm_tenancy pm_tenancy_unit_idx CREATE INDEX pm_tenancy_unit_idx ON pm_tenancy USING btree (unit_id)",
         "pm_tenancy pm_tenancy_workspace_idx CREATE INDEX pm_tenancy_workspace_idx ON pm_tenancy USING btree (workspace_id)",
+        "pm_tenancy_party pm_tenancy_party_by_tenancy CREATE INDEX pm_tenancy_party_by_tenancy ON pm_tenancy_party USING btree (workspace_id, tenancy_id)",
+        "pm_tenancy_party pm_tenancy_party_pkey CREATE UNIQUE INDEX pm_tenancy_party_pkey ON pm_tenancy_party USING btree (tenancy_id, contact_id, role)",
         "pm_unit pm_unit_pkey CREATE UNIQUE INDEX pm_unit_pkey ON pm_unit USING btree (unit_id)",
         "pm_unit pm_unit_workspace_idx CREATE INDEX pm_unit_workspace_idx ON pm_unit USING btree (workspace_id)");
 }

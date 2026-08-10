@@ -71,6 +71,40 @@
   .units-table .table__head > :nth-child(2),
   .units-table .table__row > :nth-child(2) { text-align: right; }
 
+  /*
+    tenancies.html's register — prototype v2's tenancies table, columns and shares unchanged
+    (1.4fr 1.3fr 1.3fr .8fr .8fr .9fr). Najemca takes the most because it carries an avatar and can
+    run to two names; Czynsz and Saldo take the least because a formatted amount has a known width.
+
+    Columns 4–6 are right-aligned by the same positional mechanism properties-table uses. Saldo and
+    Czynsz are numeric; Status joins them because the pill is the row's right edge in the mockup,
+    and a pill left-aligned in a .9fr column floats in the middle of white space.
+  */
+  .tenancies-table { --cols: 1.4fr 1.3fr 1.3fr .8fr .8fr .9fr; }
+  .tenancies-table .table__head > :nth-child(n+4),
+  .tenancies-table .table__row > :nth-child(n+4) { text-align: right; }
+
+  /* Avatar and name on one line. `min-width: 0` so a long name ellipsises inside its column
+     instead of widening the grid track and pushing Saldo off the right edge. */
+  .tenancy__who { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .tenancy__who > a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .tenancy__where { color: var(--text-secondary); }
+  /* 11px, matching the mockup: a date RANGE is twice as long as any other cell's content, and it
+     is reference detail rather than something a manager scans down. */
+  .tenancy__term { font-size: 11px; color: var(--text-secondary); }
+
+  /*
+    The two states of Saldo, chosen on the sign alone (see tenancies.html).
+
+    `--danger` (#b4342a) rather than a new red: it is the token the danger pill beside it already
+    uses and the exact value the mockup gives this figure, and a second red for one concept is how
+    two reds end up almost matching. Settled is faint rather than default-coloured so a page of
+    paid-up tenancies reads quiet and the debts are what the eye lands on — the column's whole job.
+  */
+  .amount--owed { color: var(--danger); font-weight: 600; }
+  .amount--settled { color: var(--text-faint); }
+
   /* units.html's "Dodano lokal X." confirmation after adding a unit — success tone, the same
      accent-green `.auth-notice` (below) uses for its own "signed in" state. One caller, so kept
      screen-specific rather than promoted alongside it. */

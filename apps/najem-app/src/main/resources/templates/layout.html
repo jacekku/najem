@@ -95,8 +95,8 @@
           instead. See that rule for the whole argument.
 
           Every item is named by its own `.nav__label` text, and by nothing else. No aria-label
-          anywhere in this rail: four of the eight items are <span>s, which may not carry an
-          accessible name (see the note on the first one), and a duplicate name on the four that
+          anywhere in this rail: three of the eight items are <span>s, which may not carry an
+          accessible name (see the note on the first one), and a duplicate name on the five that
           could carry one would be the same Polish string written twice with nothing keeping the
           copies together. layout.css clips the label rather than removing it below 1180, so the
           name is the visible word at every width.
@@ -124,7 +124,7 @@
               That still holds in the 56px rail: the label is hidden there but the element stays a
               <span>, so an icon a manager cannot read is also an icon they cannot click.
 
-              NO aria-label on these four. A <span> with no role has the implicit role `generic`, and
+              NO aria-label on these three. A <span> with no role has the implicit role `generic`, and
               ARIA forbids an accessible name on a generic element — a conforming screen reader may
               simply drop it, which below 1180 (where `.nav__label` is the only text) leaves the item
               with no name whatsoever. The name comes from the `.nav__label` text instead, which
@@ -133,16 +133,29 @@
               tooltip, not the accessible name, and it is allowed anywhere.
 
               The alternative considered and rejected was `role="link" aria-disabled="true"`, which
-              permits a name — but it also announces four links a manager cannot follow, and these
+              permits a name — but it also announces three links a manager cannot follow, and these
               must stay non-interactive: not focusable, not clickable, exactly as they are now.
             */-->
-            <span class="nav__item nav__item--unbuilt" title="Najmy">
+            <!--/*
+              Built, as of the tenancies register. It was a <span class="nav__item--unbuilt"> under
+              the note above, which is why that note now counts three items rather than four — the
+              count is load-bearing there, because the ARIA argument it makes is about the items
+              that are still <span>s.
+
+              The active rule covers /tenancies/{id}/timeline as well as the register, so the rail
+              stays lit on the screen every row here links to. Same `startsWith` shape Nieruchomości
+              uses for its own detail routes. It does NOT cover /dodaj/najem, which the button opens
+              — that picker is the shell's, reached from "+ Dodaj" on every screen, and lighting a
+              rail item from it would claim the manager is somewhere they may not have come from.
+            */-->
+            <a class="nav__item" th:href="@{/tenancies}" title="Najmy"
+               th:classappend="${currentPath == '/tenancies' or #strings.startsWith(currentPath, '/tenancies/')} ? 'nav__item--active' : ''">
                 <svg class="nav__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor"
                      stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="4.5" cy="9.5" r="2.7"></circle><path d="M6.5 7.6 12 2.1"></path><path d="M9.5 4.6l1.6 1.6"></path>
                 </svg>
                 <span class="nav__label">Najmy</span>
-            </span>
+            </a>
         </nav>
 
         <div class="sidebar__section">KSIĘGOWOŚĆ</div>

@@ -3,15 +3,18 @@ package pl.najem.pm.adapter.persistence;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import pl.najem.pm.application.TenancyProjection;
+import pl.najem.pm.domain.EndReason;
 import pl.najem.pm.domain.MonthlyAmount;
+import pl.najem.pm.domain.PartyRole;
 import pl.najem.pm.domain.ReserveTenancy;
 import pl.najem.pm.domain.Tenancy;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
-/** pm_tenancy. Every statement is scoped to the workspace as well as the id. */
+/** pm_tenancy and pm_tenancy_party. Every statement is scoped to the workspace as well as the id. */
 @Repository
 public class PostgresTenancyProjection implements TenancyProjection {
 
@@ -35,6 +38,36 @@ public class PostgresTenancyProjection implements TenancyProjection {
             breakdown == null ? null : breakdown.mediaAdvance(),
             c.monthly().componentSplitInContract(), c.rentDay(), c.depositAmount(),
             c.paymentReference(), Tenancy.State.RESERVED.name());
+
+        party(c.tenancyId(), c.workspaceId(), c.tenantContactIds(), PartyRole.TENANT);
+        party(c.tenancyId(), c.workspaceId(), c.guarantorContactIds(), PartyRole.GUARANTOR);
+    }
+
+    @Override
+    public void tenantAdded(UUID tenancyId, UUID workspaceId, UUID contactId) {
+        party(tenancyId, workspaceId, List.of(contactId), PartyRole.TENANT);
+    }
+
+    @Override
+    public void tenantRemoved(UUID tenancyId, UUID workspaceId, UUID contactId) {
+        jdbc.update("delete from pm_tenancy_party where tenancy_id = ? and contact_id = ? "
+            + "and role = ? and workspace_id = ?",
+            tenancyId, contactId, PartyRole.TENANT.name(), workspaceId);
+    }
+
+    /**
+     * {@code do nothing} on conflict rather than an unguarded insert: {@code Tenancy.addTenant}
+     * decides whether a contact is already on the tenancy, and a second event for one it refused
+     * never reaches here — but a replay of a stream that legitimately contains the same contact
+     * twice under two roles must not fail the write. The aggregate is where the rule lives; this
+     * only has to be safe to run again.
+     */
+    private void party(UUID tenancyId, UUID workspaceId, List<UUID> contactIds, PartyRole role) {
+        for (UUID contactId : contactIds) {
+            jdbc.update("insert into pm_tenancy_party(tenancy_id, contact_id, role, workspace_id) "
+                + "values (?,?,?,?) on conflict do nothing",
+                tenancyId, contactId, role.name(), workspaceId);
+        }
     }
 
     @Override
@@ -42,9 +75,12 @@ public class PostgresTenancyProjection implements TenancyProjection {
         setState(Tenancy.State.CANCELLED, tenancyId, workspaceId);
     }
 
+    /** The reason is stored because ERROR_ANNULLED is not an ending — see V20260810120100. */
     @Override
-    public void ended(UUID tenancyId, UUID workspaceId) {
-        setState(Tenancy.State.ENDED, tenancyId, workspaceId);
+    public void ended(UUID tenancyId, UUID workspaceId, EndReason reason) {
+        jdbc.update("update pm_tenancy set state = ?, end_reason = ? "
+                + "where tenancy_id = ? and workspace_id = ?",
+            Tenancy.State.ENDED.name(), reason.name(), tenancyId, workspaceId);
     }
 
     @Override

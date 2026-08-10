@@ -10,6 +10,7 @@ import pl.najem.pm.application.PortfolioService;
 import pl.najem.pm.application.ProcessDueRepository;
 import pl.najem.pm.application.RentChangeProcess;
 import pl.najem.pm.application.RepairService;
+import pl.najem.pm.application.TenancyBoardProjection;
 import pl.najem.pm.application.TenancyService;
 import pl.najem.pm.application.TenancyStartProcess;
 
@@ -62,6 +63,14 @@ public final class PostgresPropertyManagement {
     public static ComplianceService complianceService(EventStore store, JdbcTemplate jdbc) {
         return new ComplianceService(store, new PostgresInspectionProjection(jdbc),
             new PostgresOverdueInspectionQuery(jdbc));
+    }
+
+    /**
+     * The register's read port. Returned as the port and not the adapter, so a test that drives it
+     * is testing what a screen holds rather than what happens to implement it today.
+     */
+    public static TenancyBoardProjection tenancyBoard(JdbcTemplate jdbc) {
+        return new PostgresTenancyBoardProjection(jdbc);
     }
 
     public static AttentionListsService attentionListsService(JdbcTemplate jdbc) {
