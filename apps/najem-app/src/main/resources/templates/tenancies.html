@@ -85,12 +85,15 @@
                   and a blank there reads as a rendering fault rather than as missing data.
                 */-->
                 <!--/*
-                  → the unit, which is where the prototype sends a tenancy row and where the whole
-                  contract now lives: the term, the parties, the ledger and the arrears colour are
-                  all on /units/{id}, and the tenancy timeline is one link inside it. Sending the
-                  register at the timeline instead would open the narrowest of those five views.
+                  → the CONTRACT, not the unit. This used to open /units/{id}, because that screen
+                  was the only place a tenancy's term, parties and deposit could be seen; prototype
+                  v2 splits the contract out and this row follows it. The reason is not layout: a
+                  unit has many tenancies over its life, so a register row that opens the unit
+                  answers a different question than the one it was clicked to ask, and an ended
+                  tenancy opened that way shows the tenancy that replaced it. The unit is one click
+                  on from here, as the breadcrumb.
                 */-->
-                <a th:href="@{/units/{id}(id=${t.unitId()})}"
+                <a th:href="@{/tenancies/{id}(id=${t.tenancyId()})}"
                    th:text="${#strings.isEmpty(t.tenant())} ? 'Bez najemcy' : ${t.tenant()}">—</a>
             </div>
             <span class="tenancy__where" th:attr="data-label=${cols[1]}" th:text="${t.where()}">—</span>

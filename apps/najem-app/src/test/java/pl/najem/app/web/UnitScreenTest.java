@@ -97,7 +97,7 @@ class UnitScreenTest extends SharedDatabase {
         }
         mvc.perform(request)
             .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/units/" + unitId + "?tab=najemca"));
+            .andExpect(redirectedUrl("/units/" + unitId + "?tab=najmy"));
     }
 
     @Test
@@ -107,7 +107,7 @@ class UnitScreenTest extends SharedDatabase {
             "infoClauseServed", "true",
             "willingToPay", "2900.00", "desiredStart", "2026-09-01");
 
-        mvc.perform(get("/units/" + unitId).param("tab", "najemca"))
+        mvc.perform(get("/units/" + unitId).param("tab", "najmy"))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Piotr Nowak")))
             // The stated format, not the server locale's — see units.html.
@@ -170,9 +170,9 @@ class UnitScreenTest extends SharedDatabase {
 
         mvc.perform(post("/units/" + unitId + "/interests/" + interestId + "/withdraw").with(csrf()))
             .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/units/" + unitId + "?tab=najemca"));
+            .andExpect(redirectedUrl("/units/" + unitId + "?tab=najmy"));
 
-        mvc.perform(get("/units/" + unitId).param("tab", "najemca"))
+        mvc.perform(get("/units/" + unitId).param("tab", "najmy"))
             .andExpect(content().string(not(containsString("Krzysztof Wycofany"))));
     }
 
@@ -198,9 +198,14 @@ class UnitScreenTest extends SharedDatabase {
     void eachTabRendersItsOwnContentAndNotAnothers() throws Exception {
         assertThat(tab(null)).contains("Oś czasu").doesNotContain("Konto najemcy", "Woda zimna");
         assertThat(tab("konto")).contains("Konto najemcy").doesNotContain("Oś czasu", "Zainteresowani");
-        assertThat(tab("najemca")).contains("Zainteresowani").doesNotContain("Konto najemcy", "Oś czasu");
+        assertThat(tab("najmy")).contains("Zainteresowani").doesNotContain("Konto najemcy", "Oś czasu");
         assertThat(tab("liczniki")).contains("Woda zimna").doesNotContain("Konto najemcy", "Oś czasu");
-        assertThat(tab("dokumenty")).contains("Protokół zdawczo-odbiorczy")
+        // "Świadectwo energetyczne", not "Protokół zdawczo-odbiorczy". Prototype v2 splits the unit's
+        // documents from the CONTRACT's, and the protokół moved with the contract — it names parties
+        // and expires with the tenancy, where a świadectwo survives every tenant. So the string this
+        // asserts on had to change with the split, and it is deliberately one that now appears on
+        // this tab and nowhere else.
+        assertThat(tab("dokumenty")).contains("Świadectwo energetyczne")
             .doesNotContain("Konto najemcy", "Woda zimna");
     }
 
@@ -254,7 +259,68 @@ class UnitScreenTest extends SharedDatabase {
     @Test
     void avacantUnitRendersTheVacancyStateRatherThanABlankContract() throws Exception {
         assertThat(tab(null)).contains("Pustostan");
-        assertThat(tab("najemca")).contains("Pustostan — nikt nie wynajmuje tego lokalu.");
+        assertThat(tab("najmy")).contains("Pustostan — nikt nie wynajmuje tego lokalu.");
+    }
+
+    /**
+     * The renamed tab leads with the unit's own tenancy history, and that list is REAL.
+     *
+     * <p>This unit has never been let, so the list is empty and says so. The empty state is the
+     * assertion worth having: it is the difference between "this unit has had no tenancies" and "the
+     * register read returned nothing because it broke", which look identical without it — and it is
+     * the state every other assertion in this class is made in.
+     */
+    @Test
+    void thenajmyTabLeadsWithTheUnitsOwnTenancyHistory() throws Exception {
+        var html = tab("najmy");
+
+        assertThat(html).contains("Najmy tego lokalu");
+        assertThat(html).contains("Ten lokal nie miał jeszcze żadnego najmu.");
+        assertThat(html).as("counted, and declined — 0 takes the many form").contains("0 najmów");
+    }
+
+    /**
+     * The meters tab is three things now, not one table.
+     *
+     * <p>Asserting one string from each — the rail, the per-meter card, the history — because the
+     * failure this catches is a whole section silently not rendering, which a single assertion on
+     * "Woda zimna" (present in two of the three) would miss.
+     */
+    @Test
+    void themetersTabCarriesTheDeadlinesTheCardsAndTheHistory() throws Exception {
+        var html = tab("liczniki");
+
+        assertThat(html).as("the rail of what is due").contains("Najbliższe terminy");
+        assertThat(html).as("a card per meter, with its legalisation date")
+            .contains("Legalizacja do").contains("EL-88214773");
+        assertThat(html).as("the history, with the source of each reading")
+            .contains("Historia odczytów").contains("zdjęcie najemcy");
+    }
+
+    /**
+     * The documents tab holds the UNIT's own papers.
+     *
+     * <p>The split is the change worth pinning: a protokół zdawczo-odbiorczy names parties and
+     * expires with the tenancy, so it belongs to the contract, while a świadectwo energetyczne
+     * survives every tenant.
+     *
+     * <p><b>The signpost to the contract's documents is asserted ABSENT here, and that is the
+     * point.</b> This class's unit is vacant, so there is no contract to point at and the bar is
+     * guarded on {@code contract != null} — pointing a manager at an umowa that does not exist
+     * would be worse than saying nothing. An earlier version of this test asserted the signpost's
+     * TEXT was present, which passed only because that sentence was also duplicated into the
+     * card's footer; deduplicating the copy is what exposed it.
+     */
+    @Test
+    void thedocumentsTabHoldsTheUnitsOwnPapers() throws Exception {
+        var html = tab("dokumenty");
+
+        assertThat(html).contains("Dokumenty lokalu");
+        assertThat(html).contains("Świadectwo energetyczne").contains("Przegląd kominiarski");
+        assertThat(html).as("deadlines are called out above the list, not buried in it")
+            .contains("Terminy");
+        assertThat(html).as("a vacant unit points at no contract documents, because it has none")
+            .doesNotContain("Otwórz umowę");
     }
 
     /** The two unbuilt header actions are drawn and are not links — this app never fakes a route. */

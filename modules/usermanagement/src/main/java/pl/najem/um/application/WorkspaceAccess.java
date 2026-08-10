@@ -68,6 +68,37 @@ public class WorkspaceAccess {
         return users.subjectOf(userId);
     }
 
+    /**
+     * Everybody in one agency, with the contact each account is linked to.
+     *
+     * <p>What the agency's settings screen lists. Composed here rather than in the web layer because
+     * it is two reads of this module's own tables, and a caller doing the join itself would be
+     * reaching past {@link WorkspaceAccess} into {@link MembershipProjection} and
+     * {@link UserProjection} — the reaching this class exists to stop (see its own javadoc).
+     *
+     * <p><b>{@code contactId} is nullable and stays nullable.</b> This module holds no personal data
+     * (D1), so it cannot supply a name; the caller joins to Contacts. An account with no linked
+     * contact is a real member of the agency with a real role, and dropping it from the list to
+     * avoid a null would under-report who has access — the one direction that must never be wrong.
+     */
+    public record Member(UUID userId, Role role, UUID contactId) {}
+
+    public List<Member> membersOf(UUID workspaceId) {
+        return memberships.rolesIn(workspaceId).entrySet().stream()
+            .map(entry -> new Member(entry.getKey(), entry.getValue(),
+                users.contactOf(entry.getKey()).orElse(null)))
+            .toList();
+    }
+
+    /** The acting person's own account and contact, reached from the subject a token carries. */
+    public Optional<UUID> userOfSubject(UUID keycloakSubject) {
+        return users.findBySubject(keycloakSubject);
+    }
+
+    public Optional<UUID> contactOf(UUID userId) {
+        return users.contactOf(userId);
+    }
+
     private static Membership asMembership(MembershipProjection.Membership m) {
         return new Membership(m.workspaceId(), m.name(), m.role());
     }

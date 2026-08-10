@@ -78,7 +78,14 @@ public class UnitScreenController {
      */
     static final String OVERVIEW = "Przegląd";
     static final String LEDGER = "Konto";
-    static final String TENANT = "Najemca";
+    /**
+     * Was {@code Najemca}. Prototype v2 renames it, and the rename is a change of subject rather
+     * than of wording: the tab now leads with every tenancy this unit has had — the register can
+     * answer that and nothing was asking it — and the current tenant's parties and the people who
+     * have enquired follow beneath. "Najemca" named whoever is in the unit today, which is one row
+     * of what the tab now shows.
+     */
+    static final String TENANT = "Najmy";
     static final String METERS = "Liczniki";
     static final String DOCUMENTS = "Dokumenty";
 
@@ -97,12 +104,16 @@ public class UnitScreenController {
      */
     static final String OVERVIEW_KEY = "przeglad";
 
+    /** The renamed tab's key. Named because two write paths redirect back to it and a typo in
+     *  either is a 404 the manager meets straight after a successful command. */
+    static final String TENANT_KEY = "najmy";
+
     /** A strip entry: what the URL says and what the manager reads. */
     record Tab(String key, String label) {
     }
 
     private static final List<Tab> TABS = List.of(
-        new Tab(OVERVIEW_KEY, OVERVIEW), new Tab("konto", LEDGER), new Tab("najemca", TENANT),
+        new Tab(OVERVIEW_KEY, OVERVIEW), new Tab("konto", LEDGER), new Tab(TENANT_KEY, TENANT),
         new Tab("liczniki", METERS), new Tab("dokumenty", DOCUMENTS));
 
     /**
@@ -132,7 +143,7 @@ public class UnitScreenController {
     }
 
     /**
-     * The Bieżąca umowa card, and the Najemca tab, from the one tenancy running in this unit today.
+     * The Bieżąca umowa card, and the Najmy tab's parties, from the one tenancy running today.
      *
      * <p><b>Every field here is real.</b> The term, the legal form, the components, the deposit,
      * the payment day and the parties come from PM; the names from Contacts; the balance and its
@@ -149,7 +160,8 @@ public class UnitScreenController {
      * @param rent    null unless the contract declares a component split, which {@code split} says
      *                outright. A zero here would claim a zero-złoty rent was agreed.
      */
-    public record Contract(UUID tenancyId, String term, String legalForm, String rentDay,
+    public record Contract(UUID tenancyId, String reference, String term, String legalForm,
+                           String rentDay,
                            boolean split, BigDecimal rent, BigDecimal adminFee,
                            BigDecimal mediaAdvance, BigDecimal monthlyTotal, BigDecimal deposit,
                            BigDecimal balance, ArrearsColour colour, String paymentReference,
@@ -230,7 +242,21 @@ public class UnitScreenController {
         // that, clicking a chip would silently throw the reader back to the default tab.
         model.addAttribute("timelines", strip(TIMELINES, unitId, tabKey));
         model.addAttribute("contract", contract(workspaceId, unit.currentTenancyId()));
+        // Every tenancy this unit has ever had, newest first, and REAL — see spells(). The Najmy
+        // tab leads with it and the Konto tab lists the ended ones beneath the running account.
+        var spells = spells(workspaceId, unitId, unit.currentTenancyId());
+        model.addAttribute("spells", spells);
+        model.addAttribute("spellsSummary",
+            PolishPlural.count(spells.size(), "najem", "najmy", "najmów"));
+        model.addAttribute("endedSpells", spells.stream().filter(s -> !s.current()).toList());
         model.addAttribute("fake", UnitDetailFake.VIEW);
+        // "2 otwarte" was concatenated in the template and was right for exactly one count. Polish
+        // has three plural forms and the rule is on the last two digits, so the pill's whole text
+        // is decided here — see PolishPlural, and prototype v2's own list of the declensions it
+        // expects ("2 sprawy", "5 spraw").
+        model.addAttribute("attentionCount", PolishPlural.count(
+            UnitDetailFake.VIEW.attention().size(), "otwarta sprawa", "otwarte sprawy",
+            "otwartych spraw"));
         model.addAttribute("interested", interested.activeForUnit(workspaceId, unitId).stream()
             .map(InterestedPartyView::of).toList());
 
@@ -251,6 +277,91 @@ public class UnitScreenController {
             .map(id -> directory.find(workspaceId, id).orElseThrow(() -> new NoSuchContactException(id)))
             .orElse(null));
         return "unit";
+    }
+
+    /**
+     * One tenancy this unit has had — the Najmy tab's rows, and the Konto tab's archive.
+     *
+     * @param term    {@code 01.06.2026 – 31.05.2027}, or {@code 01.06.2026 – bezterminowa}. The
+     *                register's own {@code ∞} is used in tables of many tenancies where the column
+     *                is narrow; here the row has the width for the word, and "bezterminowa" is what
+     *                a manager says out loud. Prototype v2 asks for the word by name.
+     * @param length  in correctly-declined Polish, whole months from start to end (or to today for
+     *                a running one). "trwa" for an open-ended tenancy, which has no length yet.
+     * @param current the one running in the unit today, by the unit board's own answer rather than
+     *                by comparing dates here — two sources for "which tenancy is current" is how
+     *                they end up disagreeing.
+     */
+    public record Spell(UUID tenancyId, String tenant, String term, String length, BigDecimal rent,
+                        String state, String stateTone, boolean current) {
+    }
+
+    /**
+     * Every tenancy of this unit, newest first.
+     *
+     * <p><b>This replaces an invented widget with a read, which is the point.</b>
+     * {@link UnitDetailFake} still draws the occupancy band on Przegląd from three literal spells;
+     * this list is the register's own rows, filtered to the unit. The band stays invented because
+     * its proportions need a continuous timeline the register does not model; a LIST of tenancies
+     * needs nothing the register does not already answer, and it had been fake purely because
+     * nobody had asked.
+     *
+     * <p>One workspace-wide read filtered in memory, not a per-unit query: {@link TenancyBoardProjection}
+     * offers no by-unit read, and adding one for a screen that already holds the whole register in
+     * memory a line later would be a port shaped by a template. The same call
+     * {@code TenanciesScreenController} makes about its own four reads.
+     *
+     * <p>Names come from Contacts, one lookup per party per tenancy, and NOT deduplicated across
+     * rows — a unit's tenancies are a handful and their parties rarely repeat, so the dedup
+     * {@code TenanciesScreenController} needs at register scale would be machinery for nothing here.
+     * That is a claim about this list's size and it stops being true if a by-unit history ever
+     * covers a whole property.
+     */
+    private List<Spell> spells(UUID workspaceId, UUID unitId, UUID currentTenancyId) {
+        var rows = tenancies.forWorkspace(workspaceId).stream()
+            .filter(row -> row.unitId().equals(unitId))
+            // Newest first, which is what a history is read in. Sorted on the start date rather
+            // than on the projection's order, which is the table's and not a promise.
+            .sorted(java.util.Comparator.comparing(
+                pl.najem.pm.application.TenancyBoardRow::startDate).reversed())
+            .toList();
+        return rows.stream()
+            .map(row -> new Spell(row.tenancyId(), tenantNames(workspaceId, row.tenantContactIds()),
+                spellTerm(row.startDate(), row.endDate()),
+                length(row.startDate(), row.endDate()), row.monthlyTotal(),
+                row.tenancyId().equals(currentTenancyId) ? "Obecna" : "Zakończona",
+                row.tenancyId().equals(currentTenancyId) ? "paid" : "neutral",
+                row.tenancyId().equals(currentTenancyId)))
+            .toList();
+    }
+
+    /** Every tenant on one tenancy, comma-separated — a tenancy legally may have several, and
+     *  naming only the first quietly makes a co-tenant disappear from the only list showing them. */
+    private String tenantNames(UUID workspaceId, List<UUID> contactIds) {
+        return String.join(", ", people(workspaceId, contactIds).stream()
+            .map(Person::name).filter(name -> !name.isBlank()).toList());
+    }
+
+    /** The full end date or the word, never {@code ∞} — see {@link Spell}. */
+    private static String spellTerm(LocalDate startDate, LocalDate endDate) {
+        return DATE.format(startDate) + " – "
+            + (endDate == null ? "bezterminowa" : DATE.format(endDate));
+    }
+
+    /**
+     * How long the tenancy ran, in whole months.
+     *
+     * <p>Counted to the end date, or to TODAY for one still running — a tenancy that started three
+     * months ago has run three months regardless of what it is signed until, and reporting its full
+     * signed length as elapsed would overstate every current row on the list.
+     */
+    private String length(LocalDate startDate, LocalDate endDate) {
+        if (endDate == null) {
+            return "trwa";
+        }
+        LocalDate until = endDate.isAfter(LocalDate.now(clock)) ? LocalDate.now(clock) : endDate;
+        long months = Math.max(0, java.time.temporal.ChronoUnit.MONTHS.between(startDate, until));
+        return PolishPlural.count(months, "miesiąc", "miesiące", "miesięcy");
     }
 
     /**
@@ -334,7 +445,8 @@ public class UnitScreenController {
             .filter(row -> row.tenancyId().equals(tenancyId))
             .map(ArrearsBoardProjection.Row::colour)
             .findFirst().orElse(null);
-        return new Contract(tenancyId, term(tenancy), legalForm(tenancy.legalForm()),
+        return new Contract(tenancyId, TenancyScreenController.reference(tenancy), term(tenancy),
+            legalForm(tenancy.legalForm()),
             tenancy.rentDay() + ". dnia miesiąca", tenancy.componentSplit(), tenancy.rent(),
             tenancy.adminFee(), tenancy.mediaAdvance(), tenancy.monthlyTotal(),
             tenancy.depositAmount(), owed.negate(), colour, tenancy.paymentReference(),
@@ -422,7 +534,7 @@ public class UnitScreenController {
             new ContactDetails(givenName, surname, email, phone),
             infoClauseServed, LocalDate.now(clock)));
         interests.register(workspaceId, person, unitId, willingToPay, desiredStart);
-        return "redirect:/units/" + unitId + "?tab=najemca";
+        return "redirect:/units/" + unitId + "?tab=" + TENANT_KEY;
     }
 
     /**
@@ -437,6 +549,6 @@ public class UnitScreenController {
     public String withdraw(@PathVariable UUID unitId, @PathVariable UUID interestId,
                            WebWorkspace workspace) {
         interests.withdraw(workspace.workspaceId(), interestId, LocalDate.now(clock));
-        return "redirect:/units/" + unitId + "?tab=najemca";
+        return "redirect:/units/" + unitId + "?tab=" + TENANT_KEY;
     }
 }

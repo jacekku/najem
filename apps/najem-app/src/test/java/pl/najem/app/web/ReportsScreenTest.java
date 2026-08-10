@@ -9,11 +9,18 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 import pl.najem.acc.application.ArrearsBoardProjection;
+import pl.najem.acc.application.InvoiceRepository;
 import pl.najem.acc.domain.ArrearsColour;
 import pl.najem.app.SharedDatabase;
+import pl.najem.contacts.application.ContactDetails;
+import pl.najem.contacts.application.ContactDirectory;
+import pl.najem.pm.application.TenancyBoardProjection;
+import pl.najem.pm.application.TenancyBoardRow;
+import pl.najem.pm.domain.Tenancy;
 import pl.najem.um.application.UserService;
 import pl.najem.um.application.WorkspaceService;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +66,13 @@ class ReportsScreenTest extends SharedDatabase {
     @Autowired WorkspaceService workspaces;
     @MockBean ArrearsBoardProjection board;
     @MockBean TenancyLabels labels;
+    /* The three reads the board grew when it stopped being a colour and became a report. Mocked for
+       the reason the two above are: what this class asks is what the TEMPLATE renders given a row,
+       not whether PM projects a party list or accounting computes an outstanding figure — both of
+       which have their own tests in the modules that own them. */
+    @MockBean TenancyBoardProjection register;
+    @MockBean InvoiceRepository invoices;
+    @MockBean ContactDirectory contacts;
 
     static boolean seeded;
 
@@ -135,6 +149,72 @@ class ReportsScreenTest extends SharedDatabase {
 
         assertThat(html).contains("Brak najmów do pokazania.");
         assertThat(html).doesNotContain("class=\"legend\"");
+    }
+
+    /**
+     * The board says WHO owes and HOW MUCH, not only which colour they are.
+     *
+     * <p>It was two columns — a unit label and a colour — for as long as it existed, because the
+     * projection carries only those two. The name and the amount were both already answerable, from
+     * PM's party list through Contacts and from {@code InvoiceRepository}; nothing was asking. This
+     * pins all four columns, because a regression that dropped one back to the projection's own
+     * fields would leave a board that still renders and still looks like a report.
+     *
+     * <p>The amount is asserted POSITIVE. This column is headed "Zaległość" where the register's is
+     * headed "Saldo", and the two carry opposite signs on purpose — a minus under "Zaległość" reads
+     * as a credit. That is exactly the kind of thing a later "make the two screens consistent"
+     * change would flip.
+     */
+    @Test
+    void aRowNamesTheTenantTheUnitAndWhatIsOwed() throws Exception {
+        var tenancyId = UUID.randomUUID();
+        var contactId = UUID.randomUUID();
+        when(board.forWorkspace(any())).thenReturn(List.of(
+            new ArrearsBoardProjection.Row(tenancyId, ArrearsColour.RED, 1)));
+        when(labels.forWorkspace(any(), any()))
+            .thenReturn(Map.of(tenancyId, "ul. Hoża 42 · 2A"));
+        when(register.forWorkspace(any())).thenReturn(List.of(new TenancyBoardRow(
+            tenancyId, UUID.randomUUID(), "2A", "ul. Hoża 42", Tenancy.State.ACTIVE,
+            LocalDate.of(2026, 6, 1), LocalDate.of(2027, 5, 31), new BigDecimal("4010"),
+            List.of(contactId))));
+        when(invoices.outstandingByTenancy(any()))
+            .thenReturn(Map.of(tenancyId, new BigDecimal("4010.00")));
+        when(contacts.find(any(), any())).thenReturn(java.util.Optional.of(
+            new ContactDetails("Barbara", "Krawczyk", "b.krawczyk@op.pl", "+48 502 440 918")));
+
+        String html = mvc.perform(get("/reports"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("Barbara Krawczyk");
+        assertThat(html).contains("ul. Hoża 42 · 2A");
+        assertThat(html).as("positive under a heading that says Zaległość").contains("4 010,00");
+        assertThat(html).as("and the row opens the contract")
+            .contains("href=\"/tenancies/" + tenancyId + "\"");
+    }
+
+    /**
+     * A tenancy the occupancy projection cannot place still gets its row, and never gets its id
+     * rendered as a name.
+     *
+     * <p>An ended tenancy is exactly this case, and it is the one the board most needs to keep: the
+     * colour is the point of the row and dropping it would lose an arrears state. A UUID in the
+     * unit column is what {@link TenancyLabels} exists to prevent, so the absence renders as a dash.
+     */
+    @Test
+    void anUnplaceableTenancyKeepsItsRowWithoutShowingItsId() throws Exception {
+        var tenancyId = UUID.randomUUID();
+        when(board.forWorkspace(any())).thenReturn(List.of(
+            new ArrearsBoardProjection.Row(tenancyId, ArrearsColour.RED, 1)));
+        when(labels.forWorkspace(any(), any())).thenReturn(Map.of());
+
+        String html = mvc.perform(get("/reports"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("Bez najemcy");
+        assertThat(html).as("the id is a link target, never a rendered label")
+            .doesNotContain(">" + tenancyId + "<");
     }
 
     /**

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Mój profil — NAJEM', ~{::header.pagebar__content}, ~{::main})}">
+<body>
+<!--/*
+  Header on the shell's page bar, the arrangement every screen here uses. Outside <main>
+  deliberately: the layout selects it by class, and `~{::main}` below does not match it.
+*/-->
+<header class="pagebar__content">
+    <div class="pagebar__titles">
+        <nav class="breadcrumb">
+            <span>Konto /</span>
+        </nav>
+        <div class="screen-head__title-row">
+            <h1>Mój profil</h1>
+        </div>
+        <p class="pagebar__subtitle" th:text="${profile.signedInAs()}">—</p>
+    </div>
+</header>
+
+<main>
+    <div class="settings-grid">
+        <!--/* ── Dane osobowe: real, from Contacts ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Dane osobowe</h2>
+            </header>
+            <div class="card__body">
+                <!--/*
+                  An account with no linked contact is an ordinary state — nobody has matched it to a
+                  person yet — and it renders as itself. Falling back to the Keycloak username here
+                  would put an identifier where a name goes, which is the same defect
+                  ActiveAgencyAdvice's initials rule was fixed for: a login is not a name.
+                */-->
+                <div th:if="${profile.name() == null}">
+                    <div th:replace="~{components :: emptyState(text='To konto nie jest jeszcze powiązane z osobą w kontaktach, więc nie ma tu imienia ani nazwiska do pokazania.')}"></div>
+                </div>
+
+                <div th:if="${profile.name() != null}">
+                    <div class="party">
+                        <div th:replace="~{components :: avatar(initials=${profile.initials()}, size='36')}"></div>
+                        <div class="party__who">
+                            <span class="party__name" th:text="${profile.name()}">—</span>
+                            <span class="party__contact" th:text="${profile.email()}">—</span>
+                        </div>
+                    </div>
+
+                    <div class="keyvalue-list">
+                        <div th:replace="~{components :: keyvalue(label='Imię i nazwisko', value=${profile.name()}, tone=null, mono=false)}"></div>
+                        <!--/* Both nullable: a contact may carry one, the other, or neither, and a
+                               dash is the honest rendering of a field nobody filled in. */-->
+                        <div th:if="${profile.email() != null}">
+                            <div th:replace="~{components :: keyvalue(label='E-mail', value=${profile.email()}, tone=null, mono=false)}"></div>
+                        </div>
+                        <div th:if="${profile.email() == null}">
+                            <div th:replace="~{components :: keyvalue(label='E-mail', value='—', tone=null, mono=false)}"></div>
+                        </div>
+                        <div th:if="${profile.phone() != null}">
+                            <div th:replace="~{components :: keyvalue(label='Telefon', value=${profile.phone()}, tone=null, mono=true)}"></div>
+                        </div>
+                        <div th:if="${profile.phone() == null}">
+                            <div th:replace="~{components :: keyvalue(label='Telefon', value='—', tone=null, mono=false)}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <footer class="card__foot">
+                Dane osobowe prowadzi moduł kontaktów — zmiana tutaj zmienia je wszędzie, gdzie ta
+                osoba występuje.
+            </footer>
+        </div>
+
+        <!--/* ── Agencje: real, from usermanagement ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Agencje</h2>
+                <span class="card__meta" th:text="'(' + ${memberships.size()} + ')'">—</span>
+            </header>
+            <div class="card__body">
+                <!--/*
+                  Every agency this person may act in, with the current one marked. The list is the
+                  card's whole point: somebody who belongs to three needs to see which of the three
+                  the rest of the application is showing them.
+
+                  Each row LINKS to /agencies rather than posting the switch itself. Choosing is a
+                  POST that screen already carries, and duplicating it here would be a second place
+                  that decides which agency a request acts in — the exact thing
+                  WebWorkspaceResolver keeps to itself.
+                */-->
+                <div th:each="m : ${memberships}" class="membership"
+                     th:classappend="${m.active()} ? 'membership--active' : ''">
+                    <span class="membership__who">
+                        <span class="membership__name" th:text="${m.name()}">—</span>
+                        <span class="membership__role" th:text="${m.role()}">—</span>
+                    </span>
+                    <!--/* Guard on the wrapper, replace on the child — never both on one element:
+                           th:replace resolves at precedence 100 and th:if at 300, so the guard
+                           would be substituted away before it was ever read (TemplateHygieneTest). */-->
+                    <span th:if="${m.active()}">
+                        <span th:replace="~{components :: pill(tone='paid', text='Bieżąca')}"></span>
+                    </span>
+                    <a th:unless="${m.active()}" class="membership__switch"
+                       th:href="@{/agencies}">Przełącz ›</a>
+                </div>
+            </div>
+        </div>
+
+        <!--/* ── Hasło i logowanie: Keycloak's, and this screen says so ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Hasło i logowanie</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+            </header>
+            <div class="card__body">
+                <div class="keyvalue-list">
+                    <div th:replace="~{components :: keyvalue(label='Uwierzytelnianie dwuskładnikowe', value=${twoFactorState}, tone=null, mono=false)}"></div>
+                </div>
+                <p class="inset-note" th:text="${twoFactorNote}">—</p>
+                <p class="inset-note" th:text="${passwordNote}">—</p>
+                <!--/* Unbuilt, not a dead link: there is no route here that changes a password, and
+                       this application never draws one that would 404 — the same convention the
+                       sidebar's nav__item--unbuilt and the unit header's actions follow. */-->
+                <span class="btn btn--unbuilt">Zmień hasło</span>
+            </div>
+        </div>
+
+        <!--/* ── Powiadomienia: invented, and flagged ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Powiadomienia</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+            </header>
+            <div class="card__body">
+                <!--/*
+                  Checkboxes with no form around them, deliberately. There is nothing to submit to —
+                  no preference is stored anywhere — and a form that posted to a route which quietly
+                  discarded the choice would be worse than a control that visibly does nothing.
+                  `disabled` is what says so without inventing a destination.
+                */-->
+                <div th:each="p : ${notifications}" class="preference">
+                    <input class="preference__box" type="checkbox" th:checked="${p.on()}" disabled>
+                    <span class="preference__text">
+                        <span class="preference__label" th:text="${p.label()}">—</span>
+                        <span class="preference__detail" th:text="${p.detail()}">—</span>
+                    </span>
+                </div>
+            </div>
+            <footer class="card__foot">
+                Ustawienia powiadomień nie są jeszcze nigdzie zapisywane — ekran pokazuje kształt,
+                nie stan.
+            </footer>
+        </div>
+    </div>
+</main>
+</body>
+</html>

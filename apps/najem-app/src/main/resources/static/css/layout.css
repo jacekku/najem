@@ -40,7 +40,10 @@
     border-right: 1px solid var(--border-default);
     display: flex;
     flex-direction: column;
-    padding: 20px 0;
+    /* No bottom padding: the account footer is full-bleed and sits flush on the sidebar's bottom
+       edge, so 20px of surface below it would put the section's hover state in a box that stops
+       short of the corner it visually belongs to. */
+    padding: 20px 0 0;
     min-height: 0;
   }
 
@@ -179,32 +182,134 @@
   }
   .nav__item--unbuilt .nav__icon { color: currentColor; }
 
+  /*
+    The footer is the account menu's root <details>, so it is not the flex row itself — the row is
+    .account-menu__opener (the <summary>), and this keeps only what belongs to the footer as a
+    block: where it sits, the rule above it, and the containing block the popup anchors to.
+
+    It carries NO padding, and that is the point: every pixel of it is the summary, so the hover
+    state covers the whole section rather than a box floating inside it. It used to be
+    `padding: 16px 20px 0` with the opener pulling back out by `margin: 0 -8px` to line up with the
+    nav items, which made the hover target 192×40 inside a 216-wide strip — 16px of dead space
+    above it and the sidebar's own 20px below. Alignment with the nav items was the wrong thing to
+    optimise for anyway: those are destinations and this is a menu opener, so reading as a
+    different KIND of control is correct.
+
+    `position: relative` is what the popup anchors to. Without it the absolutely-positioned list
+    would resolve against the viewport and sit wherever the page happened to be scrolled.
+  */
   .sidebar__footer {
     margin-top: auto;
-    padding: 16px 20px 0;
+    padding: 0;
     border-top: 1px solid var(--border-hairline);
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    position: relative;
   }
 
   .sidebar__identity-name { font-size: 12.5px; font-weight: 600; }
   .sidebar__identity-role { font-size: 11px; color: var(--text-faint); }
 
-  .sidebar__signout {
+  /* ── account menu ── */
+
+  /*
+    `list-item` is the <summary> default and it draws a disclosure triangle; `list-style: none`
+    removes it in every engine except Safari, which needs the ::-webkit-details-marker rule below.
+    The chevron is our own element, so two markers would otherwise render side by side.
+  */
+  /*
+    Full-bleed: the padding that used to sit on the footer lives here instead, so the hover surface
+    is the section's full width and full height. No radius for the same reason — a rounded box
+    inside a square strip is what reads as "a button in a section" rather than as the section.
+
+    The 20px horizontal padding is the sidebar's own edge inset, moved inward from the footer; the
+    avatar therefore lands exactly where it did before, and only the hoverable area changed.
+  */
+  .account-menu__opener {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 20px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .account-menu__opener::-webkit-details-marker { display: none; }
+  .account-menu__opener:hover { background: var(--bg-app); }
+  .account-menu[open] > .account-menu__opener { background: var(--bg-app); }
+
+  .account-menu__chevron {
+    width: 14px;
+    height: 14px;
     margin-left: auto;
     flex: none;
+    color: var(--text-faint);
+    transition: transform .12s ease;
   }
-  .sidebar__signout button {
+  /* Points UP when closed, because the menu opens upward — a chevron that promises a direction the
+     panel does not come from is worse than none. */
+  .account-menu[open] > .account-menu__opener .account-menu__chevron { transform: rotate(180deg); }
+
+  /*
+    `bottom: 100%` rather than `top: 100%`: this sits at the bottom of a full-height rail, and a
+    menu opening downward would be clipped by the viewport at every window height.
+  */
+  .account-menu__list {
+    position: absolute;
+    bottom: 100%;
+    left: 12px;
+    right: 12px;
+    margin-bottom: 6px;
+    min-width: 210px;
+    padding: 6px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-drop);
+    box-shadow: var(--focus-ring);
+    z-index: 20;
+  }
+
+  .account-menu__current {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 8px 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .account-menu__current-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .account-menu__current-role { font-size: 11px; color: var(--text-faint); }
+
+  /* One rule for both the three <a>s and the sign-out <button>, which is why the button resets
+     border/background/font — a <button> that looks like a menu row must BE a menu row. */
+  .account-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 7px 8px;
     border: none;
     background: none;
-    padding: 0;
+    border-radius: var(--r-sm);
     font: inherit;
-    font-size: 11px;
-    color: var(--text-label);
+    font-size: 12.5px;
+    color: var(--text-primary);
+    text-align: left;
     cursor: pointer;
   }
-  .sidebar__signout button:hover { color: var(--text-secondary); }
+  .account-menu__item:hover { background: var(--bg-app); }
+  .account-menu__item--danger { color: var(--danger); }
+
+  .account-menu__icon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    color: var(--text-muted);
+  }
+  .account-menu__item--danger .account-menu__icon { color: currentColor; }
+
+  .account-menu__signout { margin: 0; }
 
   /* ── header bar ── */
 
@@ -532,7 +637,7 @@
     nothing to say about it.
   */
   @media (max-width: 1179px) {
-    .sidebar { width: 56px; padding: 18px 0; align-items: center; }
+    .sidebar { width: 56px; padding: 18px 0 0; align-items: center; }
 
     /*
       `overflow-x: hidden` because `.sidebar__nav` already scrolls on the y axis; without it a
@@ -606,9 +711,25 @@
       Only the 28px avatar fits. It stays pinned to the bottom by `.sidebar__footer`'s own
       `margin-top: auto`, which is untouched here — the footer's border-top goes because a 1px rule
       across a 56px rail above a lone circle reads as a divider between nothing and nothing.
+
+      The menu still WORKS in the rail, which is the whole reason it is a <summary> and not a
+      hover-only affordance: the avatar is the opener and the panel escapes the rail's 56px to its
+      own width (below). Prototype v2 states this outright — "działa też w zwiniętym railu" — and
+      it is the case that matters, because in the rail this circle is the only route to sign-out.
     */
-    .sidebar__footer { padding: 16px 0 0; border-top: none; gap: 0; justify-content: center; }
-    .sidebar__identity, .sidebar__signout { display: none; }
+    /* `width: 100%` because `.sidebar`'s own `align-items: center` shrink-wraps its children here —
+       without it the footer collapses to the avatar's width and the full-bleed hover surface would
+       be 28px wide in a 56px rail, which is the same defect this rule set exists to fix. */
+    .sidebar__footer { padding: 0; border-top: none; width: 100%; }
+    .account-menu__opener { gap: 0; justify-content: center; padding: 14px 0; }
+    .sidebar__identity, .account-menu__chevron { display: none; }
+
+    /*
+      Anchored to the rail's left edge and given its own width rather than the rail's — `left/right`
+      would make it 32px wide. `bottom: 100%` still applies from the base rule, so it opens upward
+      out of the rail exactly as it does out of the full sidebar.
+    */
+    .account-menu__list { left: 8px; right: auto; width: 210px; }
 
     /* Header bar 60 → 56px, and the omnibox SHORTENS rather than disappearing — it only becomes an
        icon at 768 (spec, this frame's own note). The width is on the form, which is the box. */

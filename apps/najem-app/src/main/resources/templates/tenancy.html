@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Szczegóły umowy — NAJEM', ~{::header.pagebar__content}, ~{::main})}">
+<body>
+<!--/*
+  The contract's header on the shell's page bar. Outside <main> deliberately: the layout selects
+  this element by class and `~{::main}` below does not match it, so it renders once, up there.
+*/-->
+<header class="pagebar__content">
+    <div class="pagebar__titles">
+        <!--/*
+          Back to the unit, which is the parent of a contract in the way this application navigates:
+          the register is a flat list and the unit is where a tenancy sits in a portfolio. Not the
+          breadcrumb fragment, for the reason unit.html records — the fragment's own contract is
+          unlinked plain text, and this is a working link.
+        */-->
+        <nav class="breadcrumb">
+            <a th:href="@{/units/{id}(id=${contract.unitId()})}" th:text="${contract.where()} + ' /'">—</a>
+        </nav>
+
+        <div class="screen-head__title-row">
+            <!--/*
+              A tenancy whose parties were never projected renders as unnamed rather than blank —
+              a real state for rows written before pm_tenancy_party existed, and a blank there reads
+              as a rendering fault rather than as missing data.
+            */-->
+            <h1 th:text="${#strings.isEmpty(contract.tenantNames())} ? 'Umowa bez najemcy' : ${contract.tenantNames()}">—</h1>
+            <span th:replace="~{components :: pill(tone=${contract.stateTone()}, text=${contract.state()})}"></span>
+            <!--/*
+              TWO PILLS, AND THEY ARE DIFFERENT FACTS. The state above is PM's — whether the
+              contract is running. The colour below is accounting's — whether the tenant has paid.
+              The prototype merges them into one word, and the merged word is wrong for a reserved
+              tenancy that owes nothing and for an active one that owes everything. Same argument
+              unit.html's own two-pill note makes about market state.
+
+              Absent when the arrears board has no row: it has not spoken, which is not the same as
+              green, and the guard sits on a WRAPPER because a th:if beside a th:replace never fires.
+            */-->
+            <span th:if="${contract.colour() != null}">
+                <span th:replace="~{components :: arrearsPill(colour=${contract.colour().name()})}"></span>
+            </span>
+        </div>
+
+        <p class="pagebar__subtitle">
+            <span class="mono" th:text="${contract.reference()}">—</span>
+            <span th:text="'· ' + ${contract.legalForm()}">—</span>
+        </p>
+    </div>
+
+    <div class="pagebar__actions">
+        <div th:replace="~{components :: btn(href=@{/tenancies/{id}/timeline(id=${contract.tenancyId()})}, text='Oś czasu', kind='secondary')}"></div>
+        <!--/* Drawn and unbuilt: neither an aneks nor a wypowiedzenie is a route this application
+               has. Never turned into a live link — the same convention the sidebar's
+               nav__item--unbuilt and the unit header's two actions follow. */-->
+        <span class="btn btn--unbuilt">Aneks</span>
+        <span class="btn btn--unbuilt">Wypowiedz</span>
+    </div>
+</header>
+
+<main>
+    <!--/*
+      Four KPIs, the prototype's own set: how long it runs, how much of it is left, what it costs a
+      month, and what it owes. All four are real.
+    */-->
+    <div class="kpi-row">
+        <div th:replace="~{components :: kpi(label='Okres', value=${contract.startDate()}, caption=${contract.openEnded()} ? 'bezterminowa' : 'do ' + ${contract.endDate()}, tone=null)}"></div>
+        <!--/* The caption ADDS to the value rather than restating it. An open-ended tenancy read
+               "bezterminowa / bez terminu końcowego", which is the same fact twice — the thing a
+               manager actually needs to know in that case is that the notice period is what ends
+               it, since there is no date to count down to. */-->
+        <div th:replace="~{components :: kpi(label='Pozostało', value=${contract.monthsLeft()}, caption=${contract.noticeDate()} != null ? 'wypowiedzenie do ' + ${contract.noticeDate()} : 'kończy się wypowiedzeniem', tone=null)}"></div>
+        <div th:replace="~{components :: kpi(label='Miesięcznie', value=${#numbers.formatDecimal(contract.monthlyTotal(), 1, 'WHITESPACE', 2, 'COMMA')}, caption=${contract.rentDay()}, tone=null)}"></div>
+        <!--/* Saldo is SIGNED and negative is what owing looks like — the register's rule, decided
+               on the sign alone and never on the arrears colour. Two sources for one figure is how
+               they end up disagreeing about the same tenancy. */-->
+        <div th:replace="~{components :: kpi(label='Saldo', value=${#numbers.formatDecimal(contract.balance(), 1, 'WHITESPACE', 2, 'COMMA')}, caption=${contract.balance().signum() < 0} ? 'do zapłaty' : 'bez zaległości', tone=${contract.balance().signum() < 0} ? 'danger' : null)}"></div>
+    </div>
+
+    <div class="settings-grid">
+        <!--/* ── Strony umowy: tenants and guarantors real, the landlord's side not ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Strony umowy</h2>
+            </header>
+            <div class="card__body">
+                <span th:replace="~{components :: microLabel(text='Najemcy')}"></span>
+                <div th:if="${contract.tenants().isEmpty()}" class="party">
+                    <span class="faint-note">Ten najem nie ma zapisanych stron.</span>
+                </div>
+                <div th:each="p : ${contract.tenants()}" class="party">
+                    <div th:replace="~{components :: avatar(initials=${p.initials()}, size='36')}"></div>
+                    <div class="party__who">
+                        <span class="party__name" th:text="${p.name()}">—</span>
+                        <span class="party__contact" th:text="${p.email()}">—</span>
+                        <span class="party__contact" th:text="${p.phone()}">—</span>
+                    </div>
+                </div>
+
+                <!--/* Usually empty, and rendered only when it is not: an empty "Poręczyciele"
+                       heading suggests a guarantor is missing rather than that none was required. */-->
+                <div th:unless="${contract.guarantors().isEmpty()}">
+                    <span th:replace="~{components :: microLabel(text='Poręczyciele')}"></span>
+                    <div th:each="p : ${contract.guarantors()}" class="party">
+                        <div th:replace="~{components :: avatar(initials=${p.initials()}, size='36')}"></div>
+                        <div class="party__who">
+                            <span class="party__name" th:text="${p.name()}">—</span>
+                            <span class="party__contact" th:text="${p.email()}">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!--/*
+                  The landlord's side. The AGENCY is real — it is the workspace this request acts in
+                  — but which owner it lets on behalf of is not: property management records owners
+                  and never links them to a tenancy, so there is no read that answers it. The
+                  prototype draws a named person here; naming one would be this screen inventing a
+                  party to a contract, which is the single worst thing to invent on this screen.
+                */-->
+                <span th:replace="~{components :: microLabel(text='Wynajmujący')}"></span>
+                <div class="party">
+                    <div th:replace="~{components :: avatar(initials='', size='36')}"></div>
+                    <div class="party__who">
+                        <span class="party__name" th:text="${landlord}">—</span>
+                        <span class="party__contact faint-note">Właściciel nieruchomości nie jest jeszcze powiązany z umową</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!--/* ── Warunki finansowe: every value real, from PM ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Warunki finansowe</h2>
+            </header>
+            <div class="card__body">
+                <div class="keyvalue-list">
+                    <div th:replace="~{components :: keyvalue(label='Rodzaj umowy', value=${contract.legalForm()}, tone=null, mono=false)}"></div>
+                    <div th:replace="~{components :: keyvalue(label='Okres', value=${contract.term()}, tone=null, mono=true)}"></div>
+                    <!--/*
+                      The three components render ONLY when the contract declares a split. V22
+                      records that "no split" and "a split with a zero admin fee" are legally
+                      different, so a zero shown here for an undivided contract would state a term
+                      nobody agreed.
+                    */-->
+                    <div th:if="${contract.split()}">
+                        <div th:replace="~{components :: keyvalue(label='Czynsz bazowy', value=${#numbers.formatDecimal(contract.rent(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                        <div th:replace="~{components :: keyvalue(label='Opłata administracyjna', value=${#numbers.formatDecimal(contract.adminFee(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                        <div th:replace="~{components :: keyvalue(label='Zaliczka na media', value=${#numbers.formatDecimal(contract.mediaAdvance(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                    </div>
+                    <div th:unless="${contract.split()}">
+                        <div th:replace="~{components :: keyvalue(label='Czynsz', value='bez podziału na składniki', tone=null, mono=false)}"></div>
+                    </div>
+                    <div th:replace="~{components :: keyvalue(label='Razem miesięcznie', value=${#numbers.formatDecimal(contract.monthlyTotal(), 1, 'WHITESPACE', 2, 'COMMA')}, tone='total', mono=true)}"></div>
+                    <div th:replace="~{components :: keyvalue(label='Dzień płatności', value=${contract.rentDay()}, tone=null, mono=false)}"></div>
+                    <div th:replace="~{components :: keyvalue(label='Tytuł przelewu', value=${contract.paymentReference()}, tone=null, mono=true)}"></div>
+                    <div th:replace="~{components :: keyvalue(label='Saldo', value=${#numbers.formatDecimal(contract.balance(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=${contract.balance().signum() < 0} ? 'danger' : null, mono=true)}"></div>
+                </div>
+
+                <a class="card__link" th:href="@{/units/{id}(id=${contract.unitId()}, tab='konto')}">Otwórz pełne konto ›</a>
+            </div>
+        </div>
+
+        <!--/* ── Kaucja: real, including the shortfall ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Kaucja</h2>
+                <span th:if="${deposit != null and deposit.settled()}">
+                    <span th:replace="~{components :: pill(tone='neutral', text='Rozliczona')}"></span>
+                </span>
+                <span th:if="${deposit != null and !deposit.settled() and deposit.full()}">
+                    <span th:replace="~{components :: pill(tone='paid', text='Pełna')}"></span>
+                </span>
+                <span th:if="${deposit != null and !deposit.settled() and !deposit.full()}">
+                    <span th:replace="~{components :: pill(tone='warn', text='Niedobór')}"></span>
+                </span>
+            </header>
+            <div class="card__body">
+                <!--/*
+                  A tenancy signed without a deposit and a deposit of zero złoty are different, and
+                  a bar drawn at 0% for the first would claim money is missing — so the absence is
+                  rendered as itself rather than as an empty bar.
+                */-->
+                <div th:if="${deposit == null}">
+                    <div th:replace="~{components :: emptyState(text='Ta umowa nie ma zarejestrowanej kaucji.')}"></div>
+                </div>
+
+                <div th:if="${deposit != null}">
+                    <div th:replace="~{components :: progressBar(segments=${depositSegments})}"></div>
+                    <div class="keyvalue-list">
+                        <div th:replace="~{components :: keyvalue(label='Z umowy', value=${#numbers.formatDecimal(deposit.agreed(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                        <div th:replace="~{components :: keyvalue(label='Wpłacone', value=${#numbers.formatDecimal(deposit.held(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                        <!--/* Only when something is missing. A "Niedobór 0,00" row would make a
+                               full deposit read as a deficiency of nothing rather than as full. */-->
+                        <div th:if="${!deposit.full()}">
+                            <div th:replace="~{components :: keyvalue(label='Niedobór', value=${#numbers.formatDecimal(deposit.shortfall(), 1, 'WHITESPACE', 2, 'COMMA')}, tone='danger', mono=true)}"></div>
+                        </div>
+                    </div>
+                    <p class="inset-note" th:if="${deposit.full()}">
+                        Kaucja rozlicza się w ciągu 30 dni od zdania lokalu, po protokole
+                        i odczytach liczników.
+                    </p>
+                    <p class="inset-note" th:unless="${deposit.full()}">
+                        Brakującą część można uzupełnić przy najbliższej płatności albo aneksem.
+                        Do tego czasu zabezpieczenie umowy jest niższe, niż strony ustaliły.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!--/* ── Indeksacja: the projection, and it says what it is ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Indeksacja</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta" th:text="'CPI ' + ${indexation.index()} + ' · limit ' + ${indexation.cap()}">—</span>
+            </header>
+            <div class="card__body">
+                <div class="projection">
+                    <span class="projection__from">
+                        <span class="projection__label">dziś</span>
+                        <span class="projection__amount mono"
+                              th:text="${#numbers.formatDecimal(indexation.base(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                    </span>
+                    <span class="projection__arrow">→</span>
+                    <span class="projection__to">
+                        <span class="projection__label">po indeksacji</span>
+                        <span class="projection__amount mono"
+                              th:text="${#numbers.formatDecimal(indexation.next(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                    </span>
+                </div>
+                <div class="keyvalue-list">
+                    <div th:replace="~{components :: keyvalue(label='Różnica miesięcznie', value='+' + ${#numbers.formatDecimal(indexation.delta(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                    <div th:replace="~{components :: keyvalue(label='Różnica rocznie', value='+' + ${#numbers.formatDecimal(indexation.perYear(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=null, mono=true)}"></div>
+                </div>
+                <p class="inset-note" th:text="${indexation.basis()}">—</p>
+            </div>
+            <footer class="card__foot" th:text="${indexation.note()}">—</footer>
+        </div>
+    </div>
+
+    <div class="settings-grid">
+        <!--/* ── Cykl życia umowy: first and last real, the middle invented ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Cykl życia umowy</h2>
+            </header>
+            <div class="card__body">
+                <!--/*
+                  Wrapper for the loop, replace on the child — th:each resolves at 200 and
+                  th:replace at 100, so the element is substituted before the loop variable exists
+                  and every expression in the fragment call throws on an unbound name. unit.html
+                  and home.html carry the same note.
+
+                  A milestone with no date is one this application does not record, and it renders
+                  without one: railItem's `date` is optional and an absent third column collapses
+                  rather than needing a second layout. That is what keeps the two real dates from
+                  reading as invented alongside the three that are.
+                */-->
+                <div th:each="m : ${lifecycle}">
+                    <div th:replace="~{components :: railItem(title=${m.title()}, subline=${m.subline()}, date=${m.date()}, tone=${m.tone()}, filled=${m.passed()})}"></div>
+                </div>
+            </div>
+            <footer class="card__foot">
+                Data podpisania i koniec umowy pochodzą z rejestru. Protokół, oświadczenia
+                i zawiadomienie o indeksacji nie mają jeszcze dat — aplikacja ich nie zapisuje.
+            </footer>
+        </div>
+
+        <!--/* ── Dokumenty: invented, but the LIST depends on the real legal form ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Dokumenty</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta" th:text="'(' + ${documents.size()} + ')'">—</span>
+            </header>
+            <div class="card__body">
+                <div th:each="d : ${documents}" class="integration">
+                    <span class="integration__text">
+                        <span class="integration__name" th:text="${d.name()}">—</span>
+                        <span class="integration__detail" th:text="${d.kind()}">—</span>
+                    </span>
+                    <span th:replace="~{components :: pill(tone=${d.tone()}, text=${d.state()})}"></span>
+                </div>
+            </div>
+            <!--/*
+              The clause the legal form actually decides. Rendered only for a najem okazjonalny,
+              because telling a manager on a najem zwykły to chase a notarial submission is telling
+              them to chase paperwork the law does not ask for — prototype v2 makes this exact
+              distinction and it is the one part of this card that is not invented.
+            */-->
+            <footer class="card__foot" th:if="${contract.occasional()}">
+                Najem okazjonalny wymaga aktu notarialnego o poddaniu się egzekucji i wskazania
+                lokalu zastępczego. Bez nich umowa jest zwykłym najmem ze wszystkimi jego skutkami.
+            </footer>
+            <footer class="card__foot" th:unless="${contract.occasional()}">
+                Lista dokumentów zależy od rodzaju umowy. Ta jest umową zwykłą, więc nie wymaga
+                notariusza ani wskazania lokalu zastępczego.
+            </footer>
+        </div>
+    </div>
+</main>
+</body>
+</html>

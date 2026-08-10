@@ -45,6 +45,17 @@ public class InMemoryUsers implements UserProjection {
         return Optional.ofNullable(rows.get(userId)).map(Row::keycloakSubject);
     }
 
+    /**
+     * Mirrors the statement's mechanism rather than its outcome (refactoring.md rule 14): the SQL
+     * selects the column and drops a null, so an unlinked row and a missing row are the same empty
+     * answer here too. Reading {@code rows.containsKey} first and reporting a different absence
+     * would make this fake capable of distinguishing something the real one cannot.
+     */
+    @Override
+    public Optional<UUID> contactOf(UUID userId) {
+        return Optional.ofNullable(rows.get(userId)).map(Row::contactId);
+    }
+
     @Override
     public boolean exists(UUID userId) {
         return rows.containsKey(userId);

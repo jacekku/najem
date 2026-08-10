@@ -102,12 +102,16 @@ class TenanciesScreenTest extends SharedDatabase {
         assertThat(html).as("initials for the avatar").contains(">AK<");
         assertThat(html).contains("Marszałkowska 12 · m. 1");
         assertThat(html).contains("01.09.2026 – 31.08.2027");
-        // → the unit, which is where the prototype sends a tenancy row and where the whole contract
-        // now lives. The tenancy's own timeline is one link inside that screen; sending the register
-        // straight at it would open the narrowest of the five views the unit page carries.
-        assertThat(html).as("the row links to the unit detail")
-            .contains("href=\"/units/" + UNIT + "\"");
-        assertThat(html).as("and no longer straight at the timeline")
+        // → the CONTRACT, which is what a register row is a row OF. It used to open /units/{id},
+        // because that screen was the only place a tenancy's term, parties and deposit could be
+        // seen; prototype v2 splits the contract out and this follows it. The reason is not layout:
+        // a unit has many tenancies over its life, so opening the unit answers a different question
+        // than the one the row was clicked to ask, and an ended tenancy opened that way shows the
+        // tenancy that replaced it.
+        assertThat(html).as("the row links to the contract")
+            .contains("href=\"/tenancies/" + tenancyId + "\"");
+        assertThat(html).as("and neither at the unit nor straight at the timeline")
+            .doesNotContain("href=\"/units/" + UNIT + "\"")
             .doesNotContain("/tenancies/" + tenancyId + "/timeline");
     }
 

@@ -22,6 +22,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 /**
  * Application-wide security posture.
@@ -127,11 +128,42 @@ public class SecurityConfig {
      * <p>CSRF is left on for the screens even here, so the protection is exercised by the local
      * runs and the test suite rather than only existing in the posture nobody develops against.
      */
+
+    /**
+     * The CSRF token is resolved on EVERY request instead of being deferred to first use.
+     *
+     * <p><b>This is a bug fix, not a tuning knob, and it is invisible to MockMvc.</b> Since Spring
+     * Security 5.8 the token is looked up lazily — the session that stores it is created at the
+     * moment a template first renders it. Thymeleaf renders it at the first {@code th:action} on
+     * the page, and Tomcat commits the response as soon as its 8 kB output buffer fills. On any
+     * page long enough that those two happen in that order, the render dies with
+     * {@code IllegalStateException: Cannot create a session after the response has been committed},
+     * mid-stream: the browser gets a 200 and half a page, and the error handler cannot even replace
+     * it because the status line is already gone.
+     *
+     * <p>It was found by loading the unit screen's Najmy tab in a browser. Every MockMvc test of
+     * that page was green and still is — {@code MockHttpServletResponse} has no buffer to fill, so
+     * it never commits and the session is created happily at any point. The class of defect only
+     * exists in front of a real servlet container.
+     *
+     * <p>Setting the request-attribute name to {@code null} is Spring Security's own documented way
+     * to opt out of deferred loading. The cost is a session for every visitor who reaches a screen,
+     * which the browser chain was going to create at sign-in anyway; the API chains do not use this
+     * handler at all, and stay stateless.
+     */
+    private static CsrfTokenRequestAttributeHandler eagerCsrfToken() {
+        var handler = new CsrfTokenRequestAttributeHandler();
+        handler.setCsrfRequestAttributeName(null);
+        return handler;
+    }
+
     @Bean
     @Conditional(IssuerNotConfigured.class)
     SecurityFilterChain permitAllFilterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
+            .csrf(csrf -> csrf
+                .csrfTokenRequestHandler(eagerCsrfToken())
+                .ignoringRequestMatchers("/api/**"))
             .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         return http.build();
     }
@@ -194,6 +226,9 @@ public class SecurityConfig {
                     + "actually log in.");
         }
         http
+            // See eagerCsrfToken(): deferred token resolution dies mid-render on a long page,
+            // because the session it needs cannot be created once the response has committed.
+            .csrf(csrf -> csrf.csrfTokenRequestHandler(eagerCsrfToken()))
             .authorizeHttpRequests(auth -> auth
                 // The sign-in page itself, and the static assets it needs to render. A login page
                 // that requires being logged in is a redirect loop.

@@ -64,8 +64,20 @@
           own padding. `report-table` is on the card because it defines --cols and both the head
           and the rows have to inherit it.
         */-->
-        <div class="card report-table">
-            <div th:replace="~{components :: tableHead(columns=${ {'Najem','Status'} }, gridClass='report-table')}"></div>
+        <!--/*
+          `report-table--cards` is the responsive treatment prototype v2 asks for: below 1180 each
+          row becomes a card rather than a grid line. The app's own `table--stacks` does the same
+          thing at 1023, and this board goes earlier because it is the one table where the name and
+          the pill must not share a line — a surname clipped mid-word next to a legal status is the
+          exact reading failure v2 calls out ("bez ucinania nazwisk"). See screens.css.
+
+          Column names declared ONCE and read twice — by `tableHead` and by each cell's
+          `data-label`, which is what labels the fields once the head is hidden. Two lists of four
+          names drift apart; one cannot.
+        */-->
+        <div class="card report-table report-table--cards"
+             th:with="cols=${ {'Najemca','Lokal','Zaległość','Status'} }">
+            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='report-table')}"></div>
 
             <!--/* th:if + th:replace on one element never fire together (see properties.html's note). */-->
             <div th:if="${rows.isEmpty()}">
@@ -74,17 +86,39 @@
 
             <div class="table__row" th:each="row : ${rows}">
                 <!--/*
-                  The unit and address, not the tenancy's identifier. The board is keyed by tenancy
-                  and carries only a colour, so rendering it as given is a column of UUIDs — the
-                  same "internals presented as facts" the agency screen was told to stop doing.
+                  Who owes, on its own line. The board is keyed by tenancy and carries only a
+                  colour; the name comes from Contacts through PM's party list — composition, not
+                  recomputation, the same division TenancyLabels documents for the unit label.
 
-                  A tenancy the occupancy projection does not place falls back to its id rather
-                  than to a blank or an invented name: the row is still true, and its colour is the
-                  point.
+                  The name is the link, following the register rather than a whole-row click
+                  target: a row that is one big tap area gives the keyboard nothing to focus and a
+                  screen reader nothing to announce. It opens the CONTRACT, which is where a manager
+                  chasing a debt goes next — the term, the deposit and the account are all one click
+                  from there.
                 */-->
-                <a th:href="@{/tenancies/{id}/timeline(id=${row.tenancyId()})}"
-                   th:text="${labels.containsKey(row.tenancyId())
-                             ? labels.get(row.tenancyId()) : row.tenancyId()}">—</a>
+                <span class="report__who" th:attr="data-label=${cols[0]}">
+                    <a th:href="@{/tenancies/{id}(id=${row.tenancyId()})}"
+                       th:text="${#strings.isEmpty(row.tenant())} ? 'Bez najemcy' : ${row.tenant()}">—</a>
+                </span>
+                <!--/*
+                  A tenancy the occupancy projection does not place — an ended one, or one not yet
+                  started — has no label, and renders as a dash rather than as its id. The row is
+                  still true and its colour is still the point; a UUID in this column is the
+                  "internals presented as facts" the agency screen was told to stop doing.
+                */-->
+                <span class="report__where" th:attr="data-label=${cols[1]}">
+                    <span th:if="${row.where() != null}" th:text="${row.where()}">—</span>
+                    <span th:if="${row.where() == null}" class="faint-note">—</span>
+                </span>
+                <!--/*
+                  POSITIVE, because the column is headed "Zaległość" and not "Saldo" — see the Row
+                  record. Toned only when there is something to owe: a zero here is a tenancy the
+                  board still lists (a GOLDEN or GREEN one) and colouring it red would contradict
+                  the pill beside it.
+                */-->
+                <span class="mono" th:attr="data-label=${cols[2]}"
+                      th:classappend="${row.owed().signum() > 0} ? 'amount--owed' : 'amount--settled'"
+                      th:text="${#numbers.formatDecimal(row.owed(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
                 <!--/*
                   The colour comes from accounting verbatim and is only ever handed to arrearsPill
                   — never recomputed here, see ReportsScreenController's javadoc. The title tooltip
@@ -92,7 +126,7 @@
                   additional detail (the art. 11 reference), not a second copy of the pill's own
                   words, so it stays here rather than moving into the shared fragment.
                 */-->
-                <span th:switch="${row.colour().name()}">
+                <span th:attr="data-label=${cols[3]}" th:switch="${row.colour().name()}">
                     <span th:case="'BRIGHT_RED'"
                           title="Zaległość obejmuje cały okres płatności — biegnie termin z art. 11">
                         <span th:replace="~{components :: arrearsPill(colour='BRIGHT_RED')}"></span>

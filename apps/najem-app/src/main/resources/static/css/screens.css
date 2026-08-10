@@ -167,10 +167,106 @@
   */
   .choice-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 
-  /* reports.html's arrears board. Two columns only — the tenancy and its colour — so the tenancy
-     name gets most of the row. The class sits on the `.card` that wraps BOTH the tableHead and the
-     rows, never on the head alone: `--cols` reaches descendants, never siblings. */
-  .report-table { --cols: 2fr 1fr; }
+  /*
+    reports.html's arrears board — who owes, where, how much, and how bad it is.
+
+    It was two columns (a unit label and a colour) because the projection carries only those; the
+    name, the unit and the amount were all answerable and none was being asked. Najemca gets the
+    most room because a surname is what a manager scans down, and Zaległość the least because a
+    formatted amount has a known width. The class sits on the `.card` that wraps BOTH the tableHead
+    and the rows, never on the head alone: `--cols` reaches descendants, never siblings.
+  */
+  .report-table { --cols: 1.6fr 1.6fr .9fr 1.3fr; }
+  /* The amount is numeric, so it is right-aligned by column POSITION rather than by a class each
+     head and row cell has to remember — properties-table's mechanism. Status takes 1.3fr rather
+     than the .9fr the amount gets: it is the last column and its pill sits at the row's right
+     edge, and at 1.1fr the "ZALEGŁOŚĆ" head ran straight into "STATUS" with no gap between them. */
+  .report-table .table__head > :nth-child(3),
+  .report-table .table__row > :nth-child(3) { text-align: right; }
+
+  /* A surname must not be clipped mid-word — the reason this board stacks earlier than the rest
+     (see below). Ellipsis on the link, so a long name ends visibly rather than colliding with the
+     unit beside it while the grid track holds. */
+  .report__who { min-width: 0; }
+  .report__who > a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .report__where { color: var(--text-secondary); min-width: 0; }
+
+  /*
+    ── the arrears board becomes cards at 1180, not 1023 ──
+
+    Every other table here stacks at 1023 via `table--stacks` (components.css). This one goes a
+    breakpoint earlier because prototype v2 says so, and the reason it gives is specific: below 1180
+    the sidebar is a 56px rail but the content area is still narrow, and four columns carrying a
+    name, an address, an amount and a legal-status pill put a clipped surname next to a statutory
+    consequence. "Bez ucinania nazwisk" is the requirement, and the name-on-its-own-line card is
+    what meets it.
+
+    The declarations below repeat `table--stacks`'s rather than reusing it, and that is deliberate
+    rather than lazy: the two differ only in the width they fire at, CSS has no way to parameterise
+    a media query, and adding BOTH classes to this table would apply two overlapping rule sets below
+    1023 with the later layer winning by position. One block, one table, one breakpoint. If a third
+    table ever wants 1180, that is the moment to promote a shared modifier — not before.
+  */
+  @media (max-width: 1179px) {
+    .report-table--cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* The head is what the per-cell labels replace; an empty state spans the pair rather than
+       sitting in the left column as if it were a card. */
+    .report-table--cards .table__head { display: none; }
+    .report-table--cards > :not(.table__row) { grid-column: 1 / -1; }
+
+    /*
+      `align-items: stretch` is load-bearing, not tidiness — `.table__row` sets `align-items:
+      center` to centre cells while it is a grid ROW, and turning it into a flex COLUMN swaps the
+      axes so that same declaration starts centring them HORIZONTALLY. components.css's own note on
+      this records what it looked like: a ragged block in the middle of the card instead of a
+      label/value list down its left edge.
+    */
+    .report-table--cards .table__row {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 5px;
+      min-width: 0;
+      border: 1px solid var(--border-default);
+      border-radius: var(--r-card);
+      padding: 12px 14px;
+    }
+    .report-table--cards .table__row:hover { background: var(--bg-surface); }
+    .report-table--cards .table__row > * { display: block; min-width: 0; }
+    /*
+      The amount goes back to the left inside a card, and this selector has to out-specify the
+      positional right-align above rather than merely follow it — both live in @layer screens, so
+      the cascade falls through to specificity and `.report-table .table__row > :nth-child(3)`
+      (0,2,1) beats a plain `.report-table--cards .table__row > *` (0,2,0). It did, and the figure
+      floated against the right edge of a card whose every other field started at the left.
+    */
+    .report-table--cards .table__row > :nth-child(3) { text-align: left; }
+
+    /* The name has the whole card width now, so it no longer needs to end in an ellipsis — which
+       is the entire point of stacking this table early. */
+    .report-table--cards .report__who > a { white-space: normal; overflow: visible; }
+
+    /* Each cell gets its column's name back from `data-label`, in the table head's own type. */
+    .report-table--cards .table__row > [data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 2px;
+      font: 600 10px/1 var(--font-micro);
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--text-table-head);
+    }
+  }
+
+  /* One column at 1023, where two cards side by side leave neither enough width. */
+  @media (max-width: 1023px) {
+    .report-table--cards { grid-template-columns: 1fr; }
+  }
 
   /*
     reports.html's tab strip. `.tabs` (components.css) carries no outer spacing of its own — it is
@@ -828,6 +924,109 @@
   .party__who { display: flex; flex-direction: column; min-width: 0; }
   .party__name { font-size: 13.5px; font-weight: 600; }
   .party__contact { font-size: 11px; color: var(--text-faint); }
+  /* Trailing pills on a party row — the team list's "Ty" and role. `margin-left: auto` rather than
+     a spacer, so the row's own flex does the work whether there are one or two of them. */
+  .party__aside { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; }
+
+  /* ── konto: mój profil and ustawienia agencji ── */
+
+  /*
+    Two columns of cards that become one below 1024 — the prototype's own `setCols`, verbatim.
+
+    This was `repeat(auto-fit, minmax(320px, 1fr))`, which is a different thing wearing the same
+    intent: at 1440 the content area fits THREE 320px tracks, so the contract screen's four cards
+    laid out 3 + 1 and the fourth sat alone with two thirds of a row empty beside it. Caught by
+    looking at the running page rather than by any test — every one of them asserts content, and
+    the content was all present and correct.
+
+    A fixed pair also means the two cards in a row are the same width whatever they contain, which
+    is what makes Strony umowy and Warunki finansowe read as a pair rather than as whatever the
+    grid had left over.
+  */
+  .settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 1023px) {
+    .settings-grid { grid-template-columns: 1fr; }
+  }
+
+  /* One agency the person belongs to. */
+  .membership {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .membership:last-child { border-bottom: none; }
+  .membership__who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .membership__name { font-size: 13px; font-weight: 600; }
+  .membership__role { font-size: 11px; color: var(--text-faint); }
+  /* The agency being acted in, marked by weight as well as by the pill beside it — a colour alone
+     must never be what carries a state (the .nav__item--active rule makes the same argument). */
+  .membership--active .membership__name { color: var(--accent-green); }
+  .membership__switch { font-size: 11.5px; flex: none; }
+
+  /* A notification preference. The box is disabled — nothing stores a preference yet — so it is
+     styled to read as a stated setting rather than as a control somebody failed to enable. */
+  .preference {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .preference:last-child { border-bottom: none; }
+  .preference__box { margin-top: 2px; flex: none; accent-color: var(--accent-green); }
+  .preference__text { display: flex; flex-direction: column; min-width: 0; }
+  .preference__label { font-size: 12.5px; font-weight: 500; }
+  .preference__detail { font-size: 11px; color: var(--text-faint); }
+
+  /* ── umowa: the contract screen ── */
+
+  /*
+    What the rent is now and what the indexation clause would make it. Two figures and an arrow
+    rather than a bar: the change is a few percent, and a bar chart of 4 200 against 4 372 draws two
+    columns a reader cannot tell apart — which would hide the one thing the card exists to show.
+  */
+  .projection {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--r-card);
+  }
+  .projection__from, .projection__to { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .projection__label {
+    font-family: var(--font-micro);
+    font-size: 9.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--text-label);
+  }
+  .projection__amount { font-size: 17px; font-weight: 600; }
+  /* The projected figure is the one being weighed, so it carries the weight. Never colour alone. */
+  .projection__to .projection__amount { color: var(--accent-green); }
+  .projection__arrow { color: var(--text-disabled); flex: none; }
+
+  /* One outbound integration and whether it is on. */
+  .integration {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .integration:last-child { border-bottom: none; }
+  .integration__text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .integration__name { font-size: 12.5px; font-weight: 500; }
+  .integration__detail { font-size: 11px; color: var(--text-faint); }
 
   /* A run of keyvalue rows. The fragment styles a row; this is what puts space between them. */
   .keyvalue-list { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
@@ -878,6 +1077,35 @@
     right-aligned by POSITION rather than by a class each head and value cell has to remember —
     the same mechanism the portfolio table uses, and for the same reason.
   */
+  /*
+    Whose account the ledger below belongs to. A band rather than a card: it introduces the card
+    under it, and wrapping it in one would put a border between a heading and the thing it heads.
+  */
+  .ledger-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 2px 2px 0;
+  }
+  .ledger-head__who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ledger-head__label {
+    font-family: var(--font-micro);
+    font-size: 9.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--text-label);
+  }
+  .ledger-head__name { font-size: 15px; font-weight: 600; }
+  .ledger-head__term { font-size: 11.5px; color: var(--text-faint); }
+  .ledger-head__link { margin-left: auto; font-size: 11.5px; flex: none; }
+
+  /* The unit's own tenancy history. Four short columns and a name, so it fits without stacking —
+     measured the way THE TABLE RULE (components.css) measures the others, and the widest cell is
+     the term at 190px. */
+  .unit-spells-table { --cols: 1.6fr 1.4fr .8fr .9fr 1fr; }
+  .unit-spells-table .table__head > :nth-child(4),
+  .unit-spells-table .table__row > :nth-child(4) { text-align: right; }
+
   .ledger-table { --cols: .8fr 2fr .9fr .9fr .9fr; }
   .ledger-table .table__head > :nth-child(n+3),
   .ledger-table .table__row > :nth-child(n+3) { text-align: right; }
@@ -891,27 +1119,95 @@
 
   /* Liczniki. Kind identifies the row; the serial is the widest and the least interesting, which
      is why it is muted rather than given room. */
-  .meters-table { --cols: 1.1fr 1fr .9fr .8fr .9fr; }
-  .meters-table .table__head > :nth-child(n+3),
-  .meters-table .table__row > :nth-child(n+3) { text-align: right; }
+  /*
+    ── the occupancy band's event ticks ──
 
-  /* One filed (or missing) document. */
-  .document {
+    A zero-height strip the ticks hang off, so it adds no space of its own between the band and the
+    axis and the labels are free to overflow it. `position: relative` is what the percentages
+    resolve against — without it each tick would place itself against the page.
+  */
+  .band-ticks { position: relative; height: 0; }
+  .band-tick {
+    position: absolute;
+    top: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 12px;
-    padding: 11px 0;
-    border-bottom: 1px solid var(--border-hairline);
+    /* Centred on its own position rather than starting at it: a tick marks a moment, and a label
+       whose left edge sits on the boundary points a character-width past it. */
+    transform: translateX(-50%);
+    white-space: nowrap;
   }
-  .document:last-child { border-bottom: none; }
-  .document__mark { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--neutral-icon); }
-  .document--green .document__mark { background: var(--accent-green); }
-  /* Not filed. An outline rather than a fill, so "missing" is a hole and not another colour. */
-  .document--warn .document__mark { background: var(--warn-bg); border: 2px solid var(--warn-soft); }
-  .document__text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-  .document__name { font-size: 12.5px; font-weight: 500; }
-  .document__meta { font-size: 11px; color: var(--text-faint); }
-  .document__filed { font-size: 11.5px; color: var(--text-body); }
+  .band-tick__mark {
+    width: 1px;
+    height: 7px;
+    background: var(--neutral-icon);
+  }
+  .band-tick__label {
+    margin-top: 3px;
+    font-size: 9.5px;
+    color: var(--text-faint);
+  }
+  .band-tick--green .band-tick__mark { background: var(--accent-green); }
+  .band-tick--green .band-tick__label { color: var(--accent-green); font-weight: 600; }
+  .band-tick--warn .band-tick__mark { background: var(--warn-soft); }
+  /* The first and last ticks sit on the band's own edges, where a centred label would hang off the
+     card. Pinned to the edge instead — the same correction the prototype makes with its own tx/al
+     pair, expressed once here rather than per tick. */
+  .band-tick:first-child { transform: translateX(0); align-items: flex-start; }
+  .band-tick:last-child { transform: translateX(-100%); align-items: flex-end; }
+
+  /* ── liczniki ── */
+
+  /* One card per meter, two or three across depending on the room. `auto-fill` rather than
+     `auto-fit`: with three meters and space for four, auto-fit stretches them to fill the row and
+     a five-meter unit's cards would be a different width from a three-meter unit's. */
+  .meter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+  }
+  .meter {
+    padding: 13px 14px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-card);
+    background: var(--bg-subtle);
+  }
+  .meter__head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .meter__kind { font-size: 12.5px; font-weight: 600; flex: 1; min-width: 0; }
+  .meter__reading { display: flex; align-items: baseline; gap: 5px; margin-bottom: 10px; }
+  .meter__value { font-size: 21px; font-weight: 600; }
+  .meter__unit { font-size: 11.5px; color: var(--text-faint); }
+  /* A definition list laid out as two columns, which is what a spec sheet is. `dt`/`dd` rather
+     than the keyvalue fragment: that fragment is a flex row sized for a card body, and five of
+     them inside a 230px tile wrap every label. */
+  .meter__facts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3px 10px;
+    margin: 0;
+    font-size: 11px;
+  }
+  .meter__facts dt { color: var(--text-faint); }
+  .meter__facts dd { margin: 0; text-align: right; color: var(--text-body); }
+
+  .readings-table { --cols: .8fr 1fr .9fr .8fr 1.1fr .7fr; }
+  .readings-table .table__head > :nth-child(3),
+  .readings-table .table__row > :nth-child(3),
+  .readings-table .table__head > :nth-child(4),
+  .readings-table .table__row > :nth-child(4) { text-align: right; }
+
+  .documents-table { --cols: 2.2fr .9fr .9fr .9fr .9fr; }
+
+
+  /*
+    A document's name and its one-line description, stacked inside the first cell of the documents
+    table. What was here before was a whole flex ROW per document — a dot, a name and a filed date —
+    which prototype v2 replaces with a table carrying an issue date, a validity date and a status
+    the dot used to stand for. The two surviving classes are the ones that still describe a cell.
+  */
+  .document__name { display: block; font-size: 12.5px; font-weight: 500; }
+  .document__meta { display: block; font-size: 11px; color: var(--text-faint); }
 
   /*
     ── which of the two new tables survive 768 ──

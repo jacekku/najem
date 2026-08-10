@@ -141,6 +141,29 @@
                               th:classappend="'occupancy-band__span--' + ${b.tone()}"
                               th:style="'width:' + ${b.pct()} + '%'" th:text="${b.label()}">—</span>
                     </div>
+                    <!--/*
+                      Event ticks under the band — starts, ends, the reservation and the contract's
+                      end. Prototype v2 adds them and makes the point that the band, the ticks and
+                      the axis must all come from ONE time window, or they agree on one unit and
+                      disagree on every other. Here the whole card is invented, so the one window is
+                      one set of literals: each tick's `pct` is a running total of the band widths
+                      above it (UnitDetailFake.BAND_EVENTS).
+
+                      Position is runtime data, which is the one thing a th:style may carry
+                      (TemplateHygieneTest); the tone is a class, as everything else is. The `title`
+                      is what a bare, unlabelled tick says on hover — two ticks close together
+                      cannot both carry text without colliding, so only the boundary that matters
+                      is labelled.
+                    */-->
+                    <div class="band-ticks">
+                        <span th:each="t : ${fake.bandEvents()}" class="band-tick"
+                              th:classappend="'band-tick--' + ${t.tone()}"
+                              th:style="'left:' + ${t.pct()} + '%'" th:title="${t.title()}">
+                            <span class="band-tick__mark"></span>
+                            <span class="band-tick__label" th:text="${t.label()}">—</span>
+                        </span>
+                    </div>
+
                     <div class="occupancy-band__axis">
                         <span class="mono" th:each="a : ${fake.bandAxis()}" th:text="${a}">—</span>
                     </div>
@@ -293,6 +316,14 @@
                             <div th:replace="~{components :: keyvalue(label='Saldo', value=${#numbers.formatDecimal(contract.balance(), 1, 'WHITESPACE', 2, 'COMMA')}, tone=${contract.balance().signum() < 0} ? 'danger' : null, mono=true)}"></div>
                         </div>
 
+                        <!--/*
+                          Two ways on from the card, and they answer different questions. The
+                          contract screen is what was signed — parties, deposit, indexation, the
+                          documents the legal form requires — and it survives the tenant moving
+                          out, which this card does not. The account is what has been charged and
+                          paid. Prototype v2 adds the first and keeps the second.
+                        */-->
+                        <a class="card__link" th:href="@{/tenancies/{id}(id=${contract.tenancyId()})}">Szczegóły umowy ›</a>
                         <a class="card__link" th:href="@{/units/{id}(id=${unit.unitId()}, tab='konto')}">Otwórz pełne konto ›</a>
                     </div>
                 </div>
@@ -304,7 +335,10 @@
                     <header class="card__head">
                         <h2 class="card__title">Wymaga uwagi</h2>
                 <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
-                        <span th:replace="~{components :: pill(tone='danger', text=${fake.attention().size()} + ' otwarte')}"></span>
+                        <!--/* Declined in the controller, not concatenated here: "2 otwarte" was
+                               right for two and wrong for one and for five. Polish has three plural
+                               forms and the rule is on the last two digits — PolishPlural. */-->
+                        <span th:replace="~{components :: pill(tone='danger', text=${attentionCount})}"></span>
                     </header>
                     <div class="card__body">
                         <div th:each="a : ${fake.attention()}" class="attention"
@@ -342,6 +376,27 @@
 
     <!--/* ══════════════════════════ Konto ══════════════════════════ */-->
     <div th:if="${tab == 'konto'}" class="unit-tab">
+        <!--/*
+          WHOSE account this is, before the ledger that shows it. The table underneath used to open
+          with "Konto najemcy" and five columns of figures, and nothing on the screen said which
+          tenancy those figures belonged to — on a unit that has had three, that is a page of money
+          attached to nobody. Prototype v2 adds this band and it is the fix for a real ambiguity
+          rather than decoration.
+        */-->
+        <div th:if="${contract != null}" class="ledger-head">
+            <div class="ledger-head__who">
+                <span class="ledger-head__label">Konto najmu</span>
+                <!--/* Every tenant, not the first: a tenancy legally may have several, and naming
+                       one quietly makes a co-tenant disappear from the account they are jointly
+                       liable for. `.![name()]` is SpEL's projection over the list. */-->
+                <span class="ledger-head__name"
+                      th:text="${contract.tenants().isEmpty()} ? 'Bez najemcy' : ${#strings.listJoin(contract.tenants().![name()], ', ')}">—</span>
+                <span class="ledger-head__term mono"
+                      th:text="${contract.reference()} + ' · ' + ${contract.term()}">—</span>
+            </div>
+            <a class="ledger-head__link" th:href="@{/tenancies/{id}(id=${contract.tenancyId()})}">Szczegóły umowy ›</a>
+        </div>
+
         <div class="card ledger-table"
              th:with="cols=${ {'Data','Opis','Obciążenie','Wpłata','Saldo'} }">
             <header class="card__head">
@@ -376,17 +431,93 @@
 
             <footer class="card__foot" th:text="${fake.ledgerAccounts()}">—</footer>
         </div>
+
+        <!--/*
+          Archiwalne najmy. Rendered only when there ARE any — a heading over an empty list on a
+          unit with one tenancy suggests history is missing rather than that there is none.
+
+          Every row here is real: the register knows every tenancy of this unit. What each one's
+          CLOSING balance was is a different question and this application cannot answer it — the
+          arrears board reports what is outstanding now, not what a settled contract finished at —
+          so the row links to that tenancy's own account rather than restating a figure from
+          nowhere. The prototype prints a charged/paid/settlement triple; three invented figures
+          under a real ledger is the mixing UnitDetailFake's javadoc refuses.
+        */-->
+        <div class="card" th:unless="${endedSpells.isEmpty()}">
+            <header class="card__head">
+                <h2 class="card__title">Archiwalne najmy</h2>
+                <span class="card__meta" th:text="'(' + ${endedSpells.size()} + ')'">—</span>
+            </header>
+            <div class="card__body">
+                <div th:each="s : ${endedSpells}" class="integration">
+                    <span class="integration__text">
+                        <span class="integration__name"
+                              th:text="${#strings.isEmpty(s.tenant())} ? 'Bez najemcy' : ${s.tenant()}">—</span>
+                        <span class="integration__detail mono"
+                              th:text="${s.term()} + ' · ' + ${s.length()}">—</span>
+                    </span>
+                    <a class="membership__switch"
+                       th:href="@{/tenancies/{id}(id=${s.tenancyId()})}">Umowa ›</a>
+                </div>
+            </div>
+            <footer class="card__foot">
+                Saldo zamknięte na koniec każdej z tych umów nie jest jeszcze nigdzie zapisywane —
+                rejestr zaległości mówi, co jest niezapłacone dzisiaj, a nie na czym skończyła się
+                zakończona umowa.
+            </footer>
+        </div>
     </div>
 
-    <!--/* ══════════════════════════ Najemca ══════════════════════════ */-->
+    <!--/* ══════════════════════════ Najmy ══════════════════════════ */-->
     <!--/*
-      The tenant, whoever stands behind them, and — for a unit nobody is in — everyone who has
-      asked about it. The interest list moved here from Przegląd when the tabs arrived: it is the
-      answer to "who is in this unit, or who might be", which is what this tab asks. Both write
-      paths redirect back here rather than to the default tab, so a manager who adds somebody sees
-      the list they just changed.
+      Every tenancy this unit has had, then the current one's parties, then — for a unit nobody is
+      in — everyone who has asked about it. Renamed from "Najemca" by prototype v2, and the rename
+      is a change of subject: the tab used to answer "who is in here now", which is one row of what
+      it answers now. Both write paths redirect back here rather than to the default tab, so a
+      manager who adds somebody sees the list they just changed.
     */-->
-    <div th:if="${tab == 'najemca'}" class="unit-tab">
+    <div th:if="${tab == 'najmy'}" class="unit-tab">
+        <!--/*
+          The unit's own history, newest first, and REAL — the register knows every tenancy of every
+          unit and nothing had been asking it. This is the list the prototype draws under the
+          occupancy band; the band itself stays invented (its proportions need a continuous timeline
+          the register does not model) and is flagged on Przegląd accordingly.
+        */-->
+        <div class="card unit-spells-table"
+             th:with="cols=${ {'Najemca','Okres','Długość','Czynsz','Status'} }">
+            <header class="card__head">
+                <h2 class="card__title">Najmy tego lokalu</h2>
+                <span class="card__meta" th:text="${spellsSummary} + ' · najnowsze u góry'">—</span>
+            </header>
+
+            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='unit-spells-table')}"></div>
+
+            <div th:if="${spells.isEmpty()}">
+                <div th:replace="~{components :: emptyState(text='Ten lokal nie miał jeszcze żadnego najmu.')}"></div>
+            </div>
+
+            <div class="table__row" th:each="s : ${spells}"
+                 th:classappend="${s.current()} ? 'table__row--flagged' : ''">
+                <!--/* The name is the link, following the register rather than a whole-row click
+                       target: a row that is one big tap area gives the keyboard nothing to focus
+                       and a screen reader nothing to announce. */-->
+                <span th:attr="data-label=${cols[0]}">
+                    <a th:href="@{/tenancies/{id}(id=${s.tenancyId()})}"
+                       th:text="${#strings.isEmpty(s.tenant())} ? 'Bez najemcy' : ${s.tenant()}">—</a>
+                </span>
+                <!--/* The full end date or "bezterminowa" — never the register's ∞, which is right
+                       for a narrow column across a whole agency and reads as a symbol to decode
+                       here, where there is room for the word. */-->
+                <span class="mono" th:attr="data-label=${cols[1]}" th:text="${s.term()}">—</span>
+                <span th:attr="data-label=${cols[2]}" th:text="${s.length()}">—</span>
+                <span class="mono" th:attr="data-label=${cols[3]}"
+                      th:text="${#numbers.formatDecimal(s.rent(), 1, 'WHITESPACE', 2, 'COMMA')}">—</span>
+                <span th:attr="data-label=${cols[4]}">
+                    <span th:replace="~{components :: pill(tone=${s.stateTone()}, text=${s.state()})}"></span>
+                </span>
+            </div>
+        </div>
+
         <div class="card">
             <header class="card__head">
                 <h2 class="card__title">Strony umowy</h2>
@@ -520,7 +651,7 @@
                   shape as the header bar's own search.
                 */-->
                 <form class="lead-search" th:action="@{/units/{id}(id=${unit.unitId()})}" method="get">
-                    <input type="hidden" name="tab" value="najemca">
+                    <input type="hidden" name="tab" value="najmy">
                     <input class="field__input" type="search" name="q" th:value="${term}" placeholder="Nazwisko albo imię">
                     <div th:replace="~{components :: btn(href=null, text='Szukaj', kind='secondary')}"></div>
                 </form>
@@ -531,7 +662,7 @@
 
                 <ul class="lead-hits" th:unless="${hits.isEmpty()}">
                     <li th:each="hit : ${hits}">
-                        <a th:href="@{/units/{id}(id=${unit.unitId()}, tab='najemca', contactId=${hit.contactId()})}"
+                        <a th:href="@{/units/{id}(id=${unit.unitId()}, tab='najmy', contactId=${hit.contactId()})}"
                            th:text="${hit.givenName()} + ' ' + ${hit.surname()} + ' — ' + ${hit.email()}">—</a>
                     </li>
                 </ul>
@@ -548,7 +679,7 @@
                         <p>
                             <strong th:text="${chosen.givenName()} + ' ' + ${chosen.surname()}">—</strong>
                             <span class="muted" th:text="${chosen.email()}">—</span>
-                            <a th:href="@{/units/{id}(id=${unit.unitId()}, tab='najemca')}">zmień</a>
+                            <a th:href="@{/units/{id}(id=${unit.unitId()}, tab='najmy')}">zmień</a>
                         </p>
                     </div>
 
@@ -584,53 +715,166 @@
 
     <!--/* ══════════════════════════ Liczniki ══════════════════════════ */-->
     <div th:if="${tab == 'liczniki'}" class="unit-tab">
-        <div class="card meters-table"
-             th:with="cols=${ {'Licznik','Numer','Ostatni odczyt','Stan','Następny odczyt'} }">
+        <!--/*
+          What is coming, before what is installed. A meter tab opened by a manager is nearly always
+          opened because something is due — an odczyt, a przegląd, a legalizacja — and prototype v2
+          puts that rail at the top for exactly that reason. Sorted by date, nearest first.
+        */-->
+        <div class="card">
             <header class="card__head">
-                <h2 class="card__title">Liczniki</h2>
+                <h2 class="card__title">Najbliższe terminy</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta">od najbliższej daty</span>
+            </header>
+            <div class="card__body">
+                <!--/* Wrapper for the loop, replace on the child — th:each resolves at 200 and
+                       th:replace at 100, so the element would be substituted before the loop
+                       variable exists (TemplateHygieneTest). */-->
+                <div th:each="d : ${fake.meterDue()}">
+                    <div th:replace="~{components :: railItem(title=${d.title()}, subline=${d.subline()}, date=${d.date()}, tone=${d.tone()}, filled=false)}"></div>
+                </div>
+            </div>
+        </div>
+
+        <!--/*
+          A card per meter rather than a row per meter. The table this replaces gave each meter five
+          cells; a meter actually carries a current reading, a monthly consumption, a serial and a
+          legalisation date, which is more than a row can hold without becoming a thing nobody reads
+          across.
+        */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Liczniki w lokalu</h2>
                 <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
                 <span class="card__meta" th:text="'(' + ${fake.meters().size()} + ')'">—</span>
             </header>
-
-            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='meters-table')}"></div>
-
-            <div class="table__row" th:each="m : ${fake.meters()}">
-                <span th:attr="data-label=${cols[0]}" th:text="${m.kind()}">—</span>
-                <span class="mono muted" th:attr="data-label=${cols[1]}" th:text="${m.serial()}">—</span>
-                <span class="mono" th:attr="data-label=${cols[2]}" th:text="${m.readOn()}">—</span>
-                <span class="mono" th:attr="data-label=${cols[3]}"
-                      th:text="${m.reading()} + ' ' + ${m.unit()}">—</span>
-                <span class="mono" th:attr="data-label=${cols[4]}" th:text="${m.dueOn()}">—</span>
+            <div class="card__body">
+                <div class="meter-grid">
+                    <article th:each="m : ${fake.meters()}" class="meter">
+                        <header class="meter__head">
+                            <span class="meter__kind" th:text="${m.kind()}">—</span>
+                            <span th:replace="~{components :: pill(tone=${m.stateTone()}, text=${m.state()})}"></span>
+                        </header>
+                        <div class="meter__reading">
+                            <span class="meter__value mono" th:text="${m.reading()}">—</span>
+                            <span class="meter__unit" th:text="${m.unit()}">—</span>
+                        </div>
+                        <dl class="meter__facts">
+                            <dt>Zużycie miesięczne</dt>
+                            <dd class="mono" th:text="${m.monthly()}">—</dd>
+                            <dt>Ostatni odczyt</dt>
+                            <dd class="mono" th:text="${m.readOn()}">—</dd>
+                            <dt>Numer fabryczny</dt>
+                            <dd class="mono" th:text="${m.serial()}">—</dd>
+                            <dt>Legalizacja do</dt>
+                            <!--/* Toned only when it is running out. A date in 2031 in the same
+                                   colour as one in 2026 is a date nobody looks at twice. */-->
+                            <dd class="mono" th:classappend="${m.legalisationDue()} ? 'amount--owed' : ''"
+                                th:text="${m.legalisedUntil()}">—</dd>
+                        </dl>
+                    </article>
+                </div>
             </div>
-
             <footer class="card__foot" th:text="${fake.metersNote()}">—</footer>
+        </div>
+
+        <!--/*
+          The history, newest first, with the SOURCE of every reading. That column is the reason the
+          table exists: a reading a tenant photographed, one a radio module reported and one taken
+          off a handover protocol carry different weight in a dispute, and a settlement built on the
+          first has to be traceable to the photograph.
+        */-->
+        <div class="card readings-table"
+             th:with="cols=${ {'Data','Licznik','Odczyt','Zużycie','Źródło','Zdjęcie'} }">
+            <header class="card__head">
+                <h2 class="card__title">Historia odczytów</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta">najnowsze u góry</span>
+            </header>
+
+            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='readings-table')}"></div>
+
+            <div class="table__row" th:each="r : ${fake.meterReadings()}">
+                <span class="mono" th:attr="data-label=${cols[0]}" th:text="${r.date()}">—</span>
+                <span th:attr="data-label=${cols[1]}" th:text="${r.meter()}">—</span>
+                <span class="mono" th:attr="data-label=${cols[2]}" th:text="${r.value()}">—</span>
+                <span class="mono muted" th:attr="data-label=${cols[3]}" th:text="${r.consumption()}">—</span>
+                <span th:attr="data-label=${cols[4]}" th:text="${r.source()}">—</span>
+                <!--/* Drawn, never linked: there is no route that serves a reading photograph, and
+                       this application does not turn an unbuilt destination into a link that would
+                       404 — the convention the sidebar's nav__item--unbuilt sets. A reading with no
+                       photograph says so rather than showing a control that does nothing. */-->
+                <span th:attr="data-label=${cols[5]}">
+                    <span th:if="${r.photo()}" class="btn btn--unbuilt">Zobacz</span>
+                    <span th:unless="${r.photo()}" class="faint-note">—</span>
+                </span>
+            </div>
         </div>
     </div>
 
     <!--/* ══════════════════════════ Dokumenty ══════════════════════════ */-->
     <div th:if="${tab == 'dokumenty'}" class="unit-tab">
+        <!--/*
+          Where the contract's papers are. Prototype v2 splits the two, and the split is real rather
+          than a filing convention: an umowa, a protokół and an aneks name parties and expire with
+          the contract, while a przegląd and a świadectwo survive every tenant. This bar is what
+          stops a manager concluding the umowa has gone missing.
+        */-->
+        <div class="ledger-head" th:if="${contract != null}">
+            <div class="ledger-head__who">
+                <span class="ledger-head__label">Dokumenty umowy</span>
+                <span class="ledger-head__term">Umowa, protokoły i aneksy należą do najmu, nie do lokalu.</span>
+            </div>
+            <a class="ledger-head__link" th:href="@{/tenancies/{id}(id=${contract.tenancyId()})}">Otwórz umowę ›</a>
+        </div>
+
+        <!--/*
+          Deadlines first. An expiry buried in a seven-row table sorted by ISSUE date is an expiry
+          nobody sees — which is how a świadectwo energetyczne comes to be six weeks out of date on
+          a unit being advertised.
+        */-->
         <div class="card">
             <header class="card__head">
-                <h2 class="card__title">Dokumenty</h2>
+                <h2 class="card__title">Terminy</h2>
                 <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
-                <span class="card__meta" th:text="'(' + ${fake.documents().size()} + ')'">—</span>
+                <span class="card__meta" th:text="'(' + ${fake.documentAlerts().size()} + ')'">—</span>
             </header>
             <div class="card__body">
-                <div th:each="d : ${fake.documents()}" class="document"
-                     th:classappend="'document--' + ${d.tone()}">
-                    <span class="document__mark"></span>
-                    <span class="document__text">
-                        <span class="document__name" th:text="${d.name()}">—</span>
-                        <span class="document__meta" th:text="${d.kind()}">—</span>
-                    </span>
-                    <!--/* A document that has not been filed has no date and no size, and renders
-                           as what it is: outstanding. A dash in both columns would read as a filed
-                           document whose metadata went missing. */-->
-                    <span class="document__filed mono" th:if="${d.added() != null}"
-                          th:text="${d.added()} + ' · ' + ${d.size()}">—</span>
-                    <span class="document__filed faint-note" th:if="${d.added() == null}">brakuje</span>
+                <div th:each="a : ${fake.documentAlerts()}">
+                    <div th:replace="~{components :: railItem(title=${a.title()}, subline=${a.subline()}, date=${a.date()}, tone=${a.tone()}, filled=true)}"></div>
                 </div>
             </div>
+        </div>
+
+        <div class="card documents-table"
+             th:with="cols=${ {'Dokument','Rodzaj','Wystawiony','Ważny do','Status'} }">
+            <header class="card__head">
+                <h2 class="card__title">Dokumenty lokalu</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+                <span class="card__meta" th:text="'(' + ${fake.documents().size()} + ') · najnowsze u góry'">—</span>
+            </header>
+
+            <div th:replace="~{components :: tableHead(columns=${cols}, gridClass='documents-table')}"></div>
+
+            <div class="table__row" th:each="d : ${fake.documents()}">
+                <span th:attr="data-label=${cols[0]}">
+                    <span class="document__name" th:text="${d.name()}">—</span>
+                    <span class="document__meta" th:text="${d.detail()}">—</span>
+                </span>
+                <span th:attr="data-label=${cols[1]}" th:text="${d.kind()}">—</span>
+                <span class="mono" th:attr="data-label=${cols[2]}" th:text="${d.issued()}">—</span>
+                <!--/* A document with no expiry renders a dash rather than a date. A rzut lokalu
+                       does not go out of date, and a far-future date invented to fill the cell
+                       would put it in a list of things to renew. */-->
+                <span class="mono" th:attr="data-label=${cols[3]}">
+                    <span th:if="${d.validUntil() != null}" th:text="${d.validUntil()}">—</span>
+                    <span th:if="${d.validUntil() == null}" class="faint-note">—</span>
+                </span>
+                <span th:attr="data-label=${cols[4]}">
+                    <span th:replace="~{components :: pill(tone=${d.tone()}, text=${d.state()})}"></span>
+                </span>
+            </div>
+
             <footer class="card__foot" th:text="${fake.documentsNote()}">—</footer>
         </div>
     </div>

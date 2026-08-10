@@ -71,6 +71,40 @@ final class UnitDetailFake {
     static final List<String> BAND_AXIS =
         List.of("01.2023", "01.2024", "01.2025", "01.2026", "05.2027");
 
+    /**
+     * One tick under the band: a dated event, positioned as a percentage of the same window.
+     *
+     * <p><b>The window is what makes this work.</b> Prototype v2's own note says the band, the ticks
+     * and the axis are all computed from one time window derived from the tenancy's real dates —
+     * before that they were three independent drawings that agreed on one unit and disagreed on
+     * every other. Here the whole card is invented, so "one window" means one set of literals: the
+     * percentages below are cumulative sums of {@link #BAND}'s own widths, which is what keeps a
+     * tick under the segment boundary it marks.
+     *
+     * @param pct   distance from the left edge, 0–100, on the same scale as {@link Band#pct()}.
+     * @param label empty for the closing half of a pair. Two ticks two months apart on a
+     *              four-year window cannot both carry text without colliding, so the boundary that
+     *              matters is labelled and its partner is a bare tick with a {@code title}.
+     */
+    record Tick(double pct, String label, String title, String tone) {
+    }
+
+    /**
+     * The five boundaries of {@link #BAND}, and the reservation before the current tenancy.
+     *
+     * <p>Positions are the running totals of the band's own widths — 22, 28, 62, 66 — so a tick sits
+     * exactly where the segment it names begins or ends. Written as literals rather than summed in
+     * Java on purpose: this is a drawing, and a reader checking it against the band above should be
+     * able to add four numbers rather than run the code.
+     */
+    static final List<Tick> BAND_EVENTS = List.of(
+        new Tick(0, "Start Mazur", "Start najmu — Robert Mazur", "neutral"),
+        new Tick(22, "", "Koniec najmu — Robert Mazur", "neutral"),
+        new Tick(28, "Start Nowak", "Start najmu — Katarzyna Nowak", "neutral"),
+        new Tick(62, "", "Koniec najmu — Katarzyna Nowak", "neutral"),
+        new Tick(66, "Start obecnego", "Start bieżącego najmu", "green"),
+        new Tick(100, "Koniec umowy", "Koniec bieżącej umowy", "warn"));
+
     static final List<Spell> SPELLS = List.of(
         new Spell("Robert Mazur", "01.2023 – 05.2024", "3 300 zł", "16 miesięcy",
             "1 płatność po terminie",
@@ -196,41 +230,142 @@ final class UnitDetailFake {
     // ----------------------------------------------------------------------------------------
 
     /**
-     * One meter. The prototype draws this tab as "poza zakresem prototypu"; the structure below is
-     * this application's own reading of what a meters tab is — a serial, the last reading and when
-     * the next one is due, which is what the Przegląd rail's "Termin odczytu liczników" implies
-     * must exist somewhere.
+     * One reading that is coming, on the rail above the meter cards.
+     *
+     * <p>Sorted by date here, in the literal, rather than at render time: the list is a drawing and
+     * a sort in Java over invented dates is machinery that proves nothing. Prototype v2 asks for
+     * "sortowany od najbliższej daty" and this is that order, written down.
      */
-    record Meter(String kind, String serial, String reading, String unit, String readOn,
-                 String dueOn) {
+    record Due(String title, String subline, String date, String tone) {
+    }
+
+    static final List<Due> METER_DUE = List.of(
+        new Due("Woda — odczyt radiowy", "MPWiK, zdalnie · bez udziału najemcy", "15.09.2026",
+            "neutral"),
+        new Due("Prąd — odczyt rozliczeniowy", "Tauron, cykl dwumiesięczny", "30.09.2026", "warn"),
+        new Due("Gaz — przegląd instalacji", "Wymóg roczny", "12.11.2026", "neutral"),
+        new Due("Ciepłomierz — legalizacja", "Wymiana modułu przed upływem terminu", "31.12.2026",
+            "danger"));
+
+    /**
+     * One meter, as its own card.
+     *
+     * <p>Prototype v2 turns the flat table into a card per meter, and the reason is the content
+     * rather than the layout: a meter carries a current reading, a monthly consumption, a serial and
+     * a legalisation date, and five columns of that is a table nobody reads across. The
+     * {@code state} is what a manager acts on and it is the only thing on the card with a tone.
+     *
+     * @param legalisedUntil when the meter's legalisation expires. A meter past it may not be used
+     *                       to settle anything, which is why it is on the card rather than in a
+     *                       register somewhere — {@code Ciepłomierz} below is the case that shows
+     *                       why the date needs a tone of its own.
+     */
+    record Meter(String kind, String serial, String reading, String unit, String monthly,
+                 String readOn, String legalisedUntil, boolean legalisationDue,
+                 String state, String stateTone) {
     }
 
     static final List<Meter> METERS = List.of(
-        new Meter("Woda zimna", "WZ-4471-092", "182,4", "m³", "30.06.2026", "31.08.2026"),
-        new Meter("Woda ciepła", "WC-4471-093", "96,1", "m³", "30.06.2026", "31.08.2026"),
-        new Meter("Gaz", "G-88213-04", "1 204", "m³", "30.06.2026", "31.08.2026"),
-        new Meter("Energia elektryczna", "E-55190-11", "8 431", "kWh", "30.06.2026", "30.09.2026"),
-        new Meter("Ciepło", "C-2201-77", "14,8", "GJ", "31.05.2026", "31.10.2026"));
+        new Meter("Prąd", "EL-88214773", "14 208", "kWh", "312 kWh", "01.08.2026", "05.2031",
+            false, "Aktualny", "paid"),
+        new Meter("Woda zimna", "WZ-40021188", "286,4", "m³", "4,1 m³", "01.08.2026", "11.2029",
+            false, "Aktualny", "paid"),
+        new Meter("Woda ciepła", "WC-40021189", "141,8", "m³", "2,6 m³", "01.08.2026", "11.2029",
+            false, "Aktualny", "paid"),
+        new Meter("Gaz", "GZ-77310042", "1 942", "m³", "18 m³", "01.07.2026", "08.2030",
+            false, "Odczyt zaległy", "warn"),
+        new Meter("Ciepłomierz", "CP-19022204", "38,42", "GJ", "0,9 GJ", "01.08.2026", "12.2026",
+            true, "Legalizacja wygasa", "danger"));
 
-    static final String METERS_NOTE = "Odczyt najemcy potwierdza zarządca przy rozliczeniu "
-        + "kwartalnym. Różnica powyżej 20% wobec poprzedniego okresu wymaga sprawdzenia.";
-
-    /** One document. `tone` marks a document that is missing rather than filed. */
-    record Document(String name, String kind, String added, String size, String tone) {
+    /**
+     * One historical reading. Newest first, and the source is on every row.
+     *
+     * <p><b>The source is the point of this table, not the number.</b> A reading a tenant
+     * photographed, a reading a radio module reported and a reading taken off a handover protocol
+     * carry different weight in a dispute, and a settlement built on the first of those has to be
+     * traceable to the photograph. That is why {@code photo} is a flag rather than a decoration.
+     */
+    record Reading(String date, String meter, String value, String consumption, String source,
+                   boolean photo) {
     }
 
-    static final List<Document> DOCUMENTS = List.of(
-        new Document("Umowa najmu okazjonalnego", "Umowa", "01.06.2026", "412 kB", "green"),
-        new Document("Oświadczenie o poddaniu się egzekucji", "Akt notarialny", "01.06.2026",
-            "1,1 MB", "green"),
-        new Document("Wskazanie lokalu zastępczego", "Oświadczenie", "01.06.2026", "208 kB",
-            "green"),
-        new Document("Protokół zdawczo-odbiorczy", "Protokół", "01.06.2026", "3,4 MB", "green"),
-        new Document("Potwierdzenie wpłaty kaucji", "Bankowy", "01.06.2026", "96 kB", "green"),
-        new Document("Aneks indeksacyjny 2027", "Aneks", null, null, "warn"));
+    static final List<Reading> METER_READINGS = List.of(
+        new Reading("01.08.2026", "Prąd", "14 208 kWh", "+312 kWh", "zdjęcie najemcy", true),
+        new Reading("01.08.2026", "Woda zimna", "286,4 m³", "+4,1 m³", "odczyt radiowy", false),
+        new Reading("01.08.2026", "Woda ciepła", "141,8 m³", "+2,6 m³", "odczyt radiowy", false),
+        new Reading("01.08.2026", "Ciepłomierz", "38,42 GJ", "+0,9 GJ", "odczyt radiowy", false),
+        new Reading("01.07.2026", "Prąd", "13 896 kWh", "+298 kWh", "zdjęcie najemcy", true),
+        new Reading("01.07.2026", "Gaz", "1 942 m³", "+18 m³", "odczyt zarządcy", true),
+        new Reading("01.07.2026", "Woda zimna", "282,3 m³", "+3,8 m³", "odczyt radiowy", false),
+        new Reading("01.06.2026", "Prąd", "13 598 kWh", "+341 kWh", "protokół zdawczy", true),
+        new Reading("01.06.2026", "Woda zimna", "278,5 m³", "+4,4 m³", "protokół zdawczy", true));
 
-    static final String DOCUMENTS_NOTE = "Aneks indeksacyjny musi zostać podpisany i dołączony "
-        + "przed 30.11.2026, żeby indeksacja od 01.01.2027 była skuteczna.";
+    static final String METERS_NOTE = "Liczniki konfiguruje się per lokal — prąd i woda domyślnie, "
+        + "gaz i ciepło, gdy jest instalacja, dowolny podlicznik dodatkowo. Odczyt najemcy "
+        + "potwierdza zarządca przy rozliczeniu; różnica powyżej 20% wobec poprzedniego okresu "
+        + "wymaga sprawdzenia.";
+
+    // ----------------------------------------------------------------------------------------
+    // Dokumenty — the unit's own papers, which are not the contract's
+    // ----------------------------------------------------------------------------------------
+
+    /**
+     * One document belonging to the UNIT.
+     *
+     * <p><b>The split from the contract's documents is the change prototype v2 makes here, and it is
+     * a real distinction rather than a filing convention.</b> An umowa, a protokół zdawczo-odbiorczy
+     * and an aneks belong to a tenancy: they name parties, they expire with the contract, and a new
+     * tenant gets new ones. A przegląd kominiarski, a świadectwo energetyczne and a rzut belong to
+     * the unit: they survive every tenant, and a manager chasing an expiring one is not thinking
+     * about who lives there. This tab now holds the second kind and points at the first.
+     *
+     * @param validUntil null for a document with no expiry — a floor plan does not go out of date.
+     *                   Null rather than a far-future date, so "no deadline" and "a deadline in
+     *                   2099" stay different answers.
+     * @param state      Aktualny / Wygasa / Wygasł / Bez terminu, with the tone that goes with it.
+     */
+    record Document(String name, String detail, String kind, String issued, String validUntil,
+                    String state, String tone) {
+    }
+
+    /**
+     * Newest issue date first, which is the order prototype v2 asks for and the order a filing
+     * cabinet is read in. Written in that order rather than sorted at render time, for the reason
+     * {@link #METER_DUE} gives: sorting invented dates in Java is machinery that proves nothing.
+     */
+    static final List<Document> DOCUMENTS = List.of(
+        new Document("Przegląd instalacji gazowej", "Gaz-Serwis Warszawa · bez uwag", "Przeglądy",
+            "12.11.2025", "12.11.2026", "Aktualny", "paid"),
+        new Document("Przegląd kominiarski", "Kominy Mazowsze · przewód spalinowy sprawny",
+            "Przeglądy", "24.09.2025", "24.09.2026", "Wygasa", "warn"),
+        new Document("Protokół pomiarów elektrycznych", "Pomiary rezystancji izolacji", "Przeglądy",
+            "18.05.2024", "18.05.2029", "Aktualny", "paid"),
+        new Document("Gwarancja kotła Vaillant", "Nr seryjny 21-4408812", "Gwarancje",
+            "02.02.2024", "02.02.2029", "Aktualny", "paid"),
+        new Document("Zdjęcia lokalu po remoncie", "24 zdjęcia · stan zerowy", "Zdjęcia",
+            "20.03.2023", null, "Bez terminu", "neutral"),
+        new Document("Rzut lokalu po remoncie", "Układ ścian i instalacji, 2023", "Plany",
+            "14.03.2023", null, "Bez terminu", "neutral"),
+        new Document("Świadectwo energetyczne", "Klasa D · 168 kWh/m² rocznie", "Świadectwa",
+            "30.06.2016", "30.06.2026", "Wygasł", "danger"));
+
+    /** The two documents whose dates a manager has to act on, called out above the list — an expiry
+     *  buried in a seven-row table sorted by ISSUE date is an expiry nobody sees. */
+    static final List<Due> DOCUMENT_ALERTS = List.of(
+        new Due("Świadectwo energetyczne", "Wygasło — wymagane przy zawarciu najmu", "30.06.2026",
+            "danger"),
+        new Due("Przegląd kominiarski", "Wygasa za 41 dni", "24.09.2026", "warn"));
+
+    /**
+     * Deliberately NOT a second copy of the bar above the list.
+     *
+     * <p>Both said "umowa, protokoły i aneksy należą do najmu" — the same sentence twice on one
+     * screen, which was obvious the moment the tab was loaded in a browser and invisible in the
+     * test that asserts each string is present. The bar carries the split and the link to the
+     * contract; this says the thing the LIST needs saying about it.
+     */
+    static final String DOCUMENTS_NOTE = "Termin ważności liczy się od daty wystawienia. Dokument "
+        + "bez terminu — rzut, zdjęcia — zostaje przy lokalu, dopóki nie zmieni się jego stan.";
 
     /**
      * The whole invented half of the screen, as one model attribute.
@@ -241,15 +376,17 @@ final class UnitDetailFake {
      * in the type — the day the ledger is real, {@code ledger} comes off this record and the
      * template's loop does not change.
      */
-    record View(List<Band> band, List<String> bandAxis, List<Spell> spells, List<String> bandStats,
-                List<PayMonth> payMonths, String payAverage, List<RentStep> rentSteps,
-                String rentNote, List<Event> maintenance, List<Attention> attention,
-                List<Event> upcoming, List<LedgerRow> ledger, String ledgerAccounts,
-                List<Meter> meters, String metersNote, List<Document> documents,
-                String documentsNote) {
+    record View(List<Band> band, List<String> bandAxis, List<Tick> bandEvents, List<Spell> spells,
+                List<String> bandStats, List<PayMonth> payMonths, String payAverage,
+                List<RentStep> rentSteps, String rentNote, List<Event> maintenance,
+                List<Attention> attention, List<Event> upcoming, List<LedgerRow> ledger,
+                String ledgerAccounts, List<Due> meterDue, List<Meter> meters,
+                List<Reading> meterReadings, String metersNote, List<Due> documentAlerts,
+                List<Document> documents, String documentsNote) {
     }
 
-    static final View VIEW = new View(BAND, BAND_AXIS, SPELLS, BAND_STATS, PAY_MONTHS, PAY_AVERAGE,
-        RENT_STEPS, RENT_NOTE, MAINTENANCE, ATTENTION, UPCOMING, LEDGER, LEDGER_ACCOUNTS,
-        METERS, METERS_NOTE, DOCUMENTS, DOCUMENTS_NOTE);
+    static final View VIEW = new View(BAND, BAND_AXIS, BAND_EVENTS, SPELLS, BAND_STATS, PAY_MONTHS,
+        PAY_AVERAGE, RENT_STEPS, RENT_NOTE, MAINTENANCE, ATTENTION, UPCOMING, LEDGER,
+        LEDGER_ACCOUNTS, METER_DUE, METERS, METER_READINGS, METERS_NOTE, DOCUMENT_ALERTS, DOCUMENTS,
+        DOCUMENTS_NOTE);
 }

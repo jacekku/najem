@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl"
+      th:replace="~{layout :: page('Ustawienia agencji — NAJEM', ~{::header.pagebar__content}, ~{::main})}">
+<body>
+<header class="pagebar__content">
+    <div class="pagebar__titles">
+        <nav class="breadcrumb">
+            <span>Konto /</span>
+        </nav>
+        <div class="screen-head__title-row">
+            <h1 th:text="${agency}">—</h1>
+            <span th:replace="~{components :: pill(tone='neutral', text=${role})}"></span>
+        </div>
+        <p class="pagebar__subtitle" th:text="${teamSummary} + ' w agencji'">—</p>
+    </div>
+</header>
+
+<main>
+    <!--/*
+      The team first, and alone in its own full-width block, because it is the only card on this
+      screen that is real — and it is the one thing the application could enforce but never show.
+      An access list nobody can read is an access list nobody audits.
+    */-->
+    <div class="card">
+        <header class="card__head">
+            <h2 class="card__title">Zespół</h2>
+            <span class="card__meta" th:text="${teamSummary}">—</span>
+        </header>
+        <div class="card__body">
+            <!--/* Cannot be empty in practice — the person reading it is a member — but an empty
+                   list would render as a card with nothing in it and no way to tell that from a
+                   broken read, which is exactly what emptyState exists to distinguish. */-->
+            <div th:if="${team.isEmpty()}">
+                <div th:replace="~{components :: emptyState(text='Ta agencja nie ma jeszcze żadnych członków.')}"></div>
+            </div>
+
+            <div th:each="m : ${team}" class="party">
+                <div th:replace="~{components :: avatar(initials=${m.initials()}, size='36')}"></div>
+                <div class="party__who">
+                    <!--/*
+                      A member whose account has no linked contact keeps their row and renders
+                      unnamed. Dropping them would under-report who has access to the agency, which
+                      is the one direction this list must never be wrong in — see the controller.
+                    */-->
+                    <span class="party__name" th:if="${m.name() != null}" th:text="${m.name()}">—</span>
+                    <span class="party__name faint-note" th:if="${m.name() == null}">Konto bez powiązanej osoby</span>
+                    <span class="party__contact" th:if="${m.email() != null}" th:text="${m.email()}">—</span>
+                </div>
+                <span class="party__aside">
+                    <span th:if="${m.you()}">
+                        <span th:replace="~{components :: pill(tone='paid', text='Ty')}"></span>
+                    </span>
+                    <span th:replace="~{components :: pill(tone='neutral', text=${m.role()})}"></span>
+                </span>
+            </div>
+        </div>
+        <footer class="card__foot">
+            Role decydują o dostępie przy każdym żądaniu. Administrator zaprasza i usuwa członków;
+            zarządca prowadzi nieruchomości, najmy i rozliczenia.
+        </footer>
+    </div>
+
+    <div class="settings-grid">
+        <!--/* ── Dane agencji: invented, and flagged ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Dane agencji</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+            </header>
+            <div class="card__body">
+                <div class="keyvalue-list">
+                    <!--/*
+                      The NAME is real and comes from the header above; everything in this card is
+                      not. They are kept apart on purpose — a fake NIP sitting in a list beside a
+                      real agency name reads as a real NIP, and somebody puts it on an invoice.
+                    */-->
+                    <div th:each="e : ${identity}">
+                        <div th:replace="~{components :: keyvalue(label=${e.label()}, value=${e.value()}, tone=null, mono=${e.mono()})}"></div>
+                    </div>
+                </div>
+            </div>
+            <footer class="card__foot">
+                NIP, REGON, adres i rachunek nie są jeszcze nigdzie przechowywane — nie używaj tych
+                wartości na dokumentach.
+            </footer>
+        </div>
+
+        <!--/* ── Domyślne zasady rozliczeń: invented, and flagged ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Domyślne zasady rozliczeń</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+            </header>
+            <div class="card__body">
+                <div class="keyvalue-list">
+                    <div th:each="e : ${billing}">
+                        <div th:replace="~{components :: keyvalue(label=${e.label()}, value=${e.value()}, tone=null, mono=${e.mono()})}"></div>
+                    </div>
+                </div>
+            </div>
+            <footer class="card__foot">
+                Nowy najem nie dziedziczy jeszcze tych wartości — każdą ustawia się osobno na
+                formularzu rezerwacji.
+            </footer>
+        </div>
+
+        <!--/* ── Integracje: invented, and flagged ── */-->
+        <div class="card">
+            <header class="card__head">
+                <h2 class="card__title">Integracje</h2>
+                <span class="demo-flag" title="Widget bez źródła danych — treść jest wymyślona">dane poglądowe</span>
+            </header>
+            <div class="card__body">
+                <div th:each="i : ${integrations}" class="integration">
+                    <span class="integration__text">
+                        <span class="integration__name" th:text="${i.name()}">—</span>
+                        <span class="integration__detail" th:text="${i.detail()}">—</span>
+                    </span>
+                    <span th:replace="~{components :: pill(tone=${i.tone()}, text=${i.state()})}"></span>
+                </div>
+            </div>
+            <footer class="card__foot">
+                Import wyciągów jest prawdziwy i prowadzi go ekran Bank — ten kafelek pokazuje tylko
+                kształt panelu integracji.
+            </footer>
+        </div>
+    </div>
+</main>
+</body>
+</html>
